@@ -19,6 +19,7 @@ from app.api.routes import router
 from app.api.monitoring import router as monitoring_router
 from app.core.config import SERVER_HOST, SERVER_PORT, RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SECONDS
 from app.core.logging_config import configure_logging, get_logger, log_request_start, log_request_end
+from app.core.scan_queue import shutdown_scan_queue
 
 # Configure structured logging
 configure_logging(log_level="INFO", json_logs=False)
@@ -62,6 +63,7 @@ async def lifespan(app: FastAPI):
     logger.info("=" * 60)
     yield
     # Shutdown
+    shutdown_scan_queue()
     logger.info("Server in arresto.")
 
 

@@ -3,24 +3,24 @@ Router API principale per il Local Pseudonymization Tool.
 Espone gli endpoint RESTful per la gestione dei batch.
 """
 import logging
-import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import List
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, BackgroundTasks
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse
 
 from app.models.schemas import (
     Batch, BatchConfig, BatchMode, BatchStatus,
     BatchStatusResponse, FindingsResponse,
-    SubmitReviewRequest, CreateBatchRequest,
+    SubmitReviewRequest,
 )
 from app.core.batch_manager import (
     create_batch, get_batch, update_batch,
     get_batch_dir, store_passphrase, cleanup_batch,
 )
-from app.core.pipeline import run_scan_pipeline, apply_review_decisions, run_apply_pipeline
+from app.core.pipeline import apply_review_decisions, run_apply_pipeline
+from app.core.scan_queue import enqueue_scan, is_scan_inflight
 from app.core.config import SUPPORTED_EXTENSIONS, MAX_FILE_SIZE_BYTES
 
 router = APIRouter(prefix="/api")
@@ -130,18 +130,18 @@ async def scan_batch(batch_id: str):
             detail=f"Il batch è già in stato '{batch.status.value}'. Non è possibile avviare una nuova scansione."
         )
 
-    _batch_start_times[batch_id] = datetime.utcnow().isoformat()
+    started_at = datetime.utcnow().isoformat()
+    _batch_start_times[batch_id] = started_at
 
-    try:
-        batch = run_scan_pipeline(batch_id)
-    except Exception as e:
-        logger.error("Errore nella pipeline di scansione per batch %s: %s", batch_id, e)
-        batch = get_batch(batch_id)
-        if batch:
-            batch.status = BatchStatus.ERROR
-            batch.error_message = str(e)
-            update_batch(batch)
-        raise HTTPException(status_code=500, detail=f"Errore durante la scansione: {e}")
+    if is_scan_inflight(batch_id):
+        raise HTTPException(status_code=409, detail="Scansione già in coda o in esecuzione per questo batch.")
+
+    batch.status = BatchStatus.SCANNING
+    update_batch(batch)
+
+    enqueued = enqueue_scan(batch_id, started_at)
+    if not enqueued:
+        raise HTTPException(status_code=409, detail="Scansione già in coda o in esecuzione per questo batch.")
 
     return BatchStatusResponse(
         batch_id=batch.batch_id,
@@ -223,7 +223,7 @@ async def apply_batch(batch_id: str):
     started_at = _batch_start_times.get(batch_id, datetime.utcnow().isoformat())
 
     try:
-        zip_path = run_apply_pipeline(batch_id, started_at)
+        run_apply_pipeline(batch_id, started_at)
     except Exception as e:
         logger.error("Errore nella pipeline di applicazione per batch %s: %s", batch_id, e)
         raise HTTPException(status_code=500, detail=f"Errore durante l'applicazione: {e}")

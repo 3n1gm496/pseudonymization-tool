@@ -6,8 +6,9 @@ import shutil
 import logging
 from typing import Dict, Optional
 from pathlib import Path
+from threading import RLock
 
-from app.models.schemas import Batch, BatchStatus
+from app.models.schemas import Batch
 from app.core.config import TEMP_BASE_DIR
 
 logger = logging.getLogger(__name__)
@@ -16,36 +17,42 @@ logger = logging.getLogger(__name__)
 _batches: Dict[str, Batch] = {}
 # Store delle passphrase in memoria (mai su disco)
 _passphrases: Dict[str, str] = {}
+_store_lock = RLock()
 
 
 def create_batch(batch: Batch) -> Batch:
     """Registra un nuovo batch e crea la sua directory temporanea."""
     batch_dir = TEMP_BASE_DIR / batch.batch_id
     batch_dir.mkdir(parents=True, exist_ok=True)
-    _batches[batch.batch_id] = batch
+    with _store_lock:
+        _batches[batch.batch_id] = batch
     logger.info("Batch creato: id=%s", batch.batch_id)
     return batch
 
 
 def get_batch(batch_id: str) -> Optional[Batch]:
     """Recupera un batch per ID."""
-    return _batches.get(batch_id)
+    with _store_lock:
+        return _batches.get(batch_id)
 
 
 def update_batch(batch: Batch) -> Batch:
     """Aggiorna lo stato di un batch esistente."""
-    _batches[batch.batch_id] = batch
+    with _store_lock:
+        _batches[batch.batch_id] = batch
     return batch
 
 
 def store_passphrase(batch_id: str, passphrase: str) -> None:
     """Memorizza la passphrase in memoria (mai su disco)."""
-    _passphrases[batch_id] = passphrase
+    with _store_lock:
+        _passphrases[batch_id] = passphrase
 
 
 def get_passphrase(batch_id: str) -> Optional[str]:
     """Recupera la passphrase per un batch."""
-    return _passphrases.get(batch_id)
+    with _store_lock:
+        return _passphrases.get(batch_id)
 
 
 def get_batch_dir(batch_id: str) -> Path:
@@ -67,7 +74,9 @@ def cleanup_batch(batch_id: str) -> None:
             logger.error("Errore nella rimozione della directory del batch %s: %s", batch_id, e)
 
     # Rimuovi la passphrase dalla memoria
-    _passphrases.pop(batch_id, None)
+    with _store_lock:
+        _passphrases.pop(batch_id, None)
 
     # Rimuovi il batch dallo store
-    _batches.pop(batch_id, None)
+    with _store_lock:
+        _batches.pop(batch_id, None)
