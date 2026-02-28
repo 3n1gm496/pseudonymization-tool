@@ -2,7 +2,6 @@
 Punto di ingresso dell'applicazione Local Pseudonymization Tool.
 Il server è configurato per ascoltare SOLO su 127.0.0.1 (localhost).
 """
-import asyncio
 import time
 import uuid
 from collections import defaultdict, deque
@@ -25,7 +24,6 @@ from app.core.config import (
 )
 from app.core.logging_config import configure_logging, get_logger, log_request_start, log_request_end
 from app.core.scan_queue import shutdown_scan_queue
-from app.core.batch_manager import cleanup_inactive_batches
 
 # Configure structured logging
 configure_logging(log_level="INFO", json_logs=False)
@@ -59,56 +57,19 @@ def _is_rate_limited(client_id: str, now: float) -> bool:
 
 # ─── Lifespan (startup/shutdown moderno, compatibile FastAPI >= 0.93) ─────────
 
-# Global flag per il garbage collector
-_gc_task_running = False
-_gc_task = None
-
-
-async def _batch_garbage_collector():
-    """Background task che esegue periodicamente la pulizia dei batch inattivi."""
-    global _gc_task_running
-    logger.info("Batch garbage collector avviato (intervallo: %ds)", BATCH_CLEANUP_INTERVAL_SECONDS)
-    
-    while _gc_task_running:
-        try:
-            await asyncio.sleep(BATCH_CLEANUP_INTERVAL_SECONDS)
-            if _gc_task_running:  # Check again after sleep
-                cleaned_count = cleanup_inactive_batches()
-                if cleaned_count > 0:
-                    logger.info(f"Garbage collector: rimossi {cleaned_count} batch inattivi")
-        except asyncio.CancelledError:
-            logger.info("Garbage collector cancellato")
-            break
-        except Exception as e:
-            logger.error(f"Errore nel garbage collector: {e}")
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _gc_task_running, _gc_task
-    
     # Startup
     logger.info("=" * 60)
     logger.info("Local Pseudonymization Tool — MVP v1.0.0")
     logger.info("Server in ascolto su: http://%s:%s", SERVER_HOST, SERVER_PORT)
     logger.info("SICUREZZA: Nessuna chiamata di rete esterna verra' effettuata.")
+    logger.info("Garbage Collector: Batch TTL cleanup ogni %ds", BATCH_CLEANUP_INTERVAL_SECONDS)
     logger.info("=" * 60)
-    
-    # Avvia garbage collector
-    _gc_task_running = True
-    _gc_task = asyncio.create_task(_batch_garbage_collector())
     
     yield
     
     # Shutdown
-    _gc_task_running = False
-    if _gc_task:
-        _gc_task.cancel()
-        try:
-            await _gc_task
-        except asyncio.CancelledError:
-            pass
-    
     shutdown_scan_queue()
     logger.info("Server in arresto.")
 
