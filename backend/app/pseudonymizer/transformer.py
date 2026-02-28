@@ -156,35 +156,113 @@ def transform_pdf_file(
     original_path: Path,
     output_path: Path,
     findings: List[Finding],
+    strict: bool = False,
 ) -> List[str]:
     """
-    Per i PDF, non è possibile modificare il file originale in modo affidabile
-    senza strumenti avanzati. Generiamo un file .txt con il testo pseudonimizzato.
+    Trasforma un PDF testuale in un PDF pseudonimizzato (PDF→PDF rebuild).
+    Strategia: estrae testo pagina per pagina, applica sostituzioni, ricostruisce PDF.
+    Il layout originale non è preservato (avviso sempre incluso).
+    In strict: rimuove metadata PDF.
+    Se il PDF non è testuale o è cifrato: output = copia .pdf con warning.
     """
     warnings = []
     sub_map = _build_substitution_map(findings)
+
+    # Assicura che l'output sia sempre .pdf
+    if output_path.suffix.lower() != ".pdf":
+        output_path = output_path.with_suffix(".pdf")
 
     try:
         from pypdf import PdfReader
         reader = PdfReader(str(original_path))
 
-        all_text = []
+        if reader.is_encrypted:
+            warnings.append(
+                "Il PDF è cifrato/protetto da password: impossibile estrarre il testo. "
+                "Il file NON è stato pseudonimizzato. Etichetta: NOT_SAFE."
+            )
+            shutil.copy2(str(original_path), str(output_path))
+            return warnings
+
+        # Estrai testo per pagina
+        pages_text = []
         for page_num, page in enumerate(reader.pages, start=1):
-            page_text = page.extract_text() or ""
-            transformed_text = _apply_substitutions_to_text(page_text, sub_map)
-            all_text.append(f"--- Pagina {page_num} ---\n{transformed_text}")
+            try:
+                text = page.extract_text() or ""
+                pages_text.append(text)
+            except Exception as pe:
+                pages_text.append("")
+                warnings.append(f"Errore estrazione testo pagina {page_num}: {pe}")
 
-        # Output come file .txt pseudonimizzato
-        txt_output_path = output_path.with_suffix(".pseudonymized.txt")
-        txt_output_path.write_text("\n\n".join(all_text), encoding="utf-8")
+        if not any(t.strip() for t in pages_text):
+            warnings.append(
+                "Il PDF non contiene testo estraibile (possibile PDF scansionato). "
+                "Il file NON è stato pseudonimizzato. Etichetta: SAFE_WITH_WARNINGS."
+            )
+            shutil.copy2(str(original_path), str(output_path))
+            return warnings
 
-        warnings.append(
-            "NOTA: Per i file PDF, l'output è un file .txt con il testo pseudonimizzato. "
-            "La modifica diretta del PDF non è supportata nell'MVP."
-        )
+        # Applica sostituzioni
+        pages_pseudo = [_apply_substitutions_to_text(t, sub_map) for t in pages_text]
+
+        # Rebuild PDF con fpdf2 (primario)
+        try:
+            from fpdf import FPDF
+
+            pdf = FPDF()
+            pdf.set_auto_page_break(auto=True, margin=15)
+            pdf.set_margins(15, 15, 15)
+            pdf.set_title("")
+            pdf.set_author("")
+            pdf.set_creator("Local Pseudonymization Tool")
+            pdf.set_subject("")
+
+            for page_text in pages_pseudo:
+                pdf.add_page()
+                pdf.set_font("Helvetica", size=10)
+                for line in page_text.splitlines():
+                    safe_line = line.encode("latin-1", errors="replace").decode("latin-1")
+                    pdf.multi_cell(0, 5, safe_line)
+
+            pdf.output(str(output_path))
+            warnings.append(
+                "PDF rebuild completato. Il layout originale potrebbe differire dall'originale."
+            )
+
+        except Exception as fpdf_err:
+            warnings.append(f"fpdf2 rebuild fallito ({fpdf_err}), tentativo con reportlab...")
+            try:
+                from reportlab.lib.pagesizes import A4
+                from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+                from reportlab.lib.styles import getSampleStyleSheet
+                from reportlab.lib.units import mm
+
+                styles = getSampleStyleSheet()
+                story = []
+                for page_text in pages_pseudo:
+                    for line in page_text.splitlines():
+                        safe = line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                        if safe.strip():
+                            story.append(Paragraph(safe, styles["Normal"]))
+                        else:
+                            story.append(Spacer(1, 3 * mm))
+                    story.append(Spacer(1, 10 * mm))
+
+                doc_rl = SimpleDocTemplate(str(output_path), pagesize=A4)
+                doc_rl.build(story)
+                warnings.append(
+                    "PDF rebuild (reportlab) completato. Il layout originale potrebbe differire."
+                )
+            except Exception as rl_err:
+                warnings.append(
+                    f"Errore rebuild PDF con reportlab: {rl_err}. "
+                    "Output: copia del file originale non pseudonimizzata."
+                )
+                shutil.copy2(str(original_path), str(output_path))
 
     except Exception as e:
-        warnings.append(f"Errore durante la trasformazione del file PDF: {e}")
+        warnings.append(f"Errore generale trasformazione PDF: {e}")
+        shutil.copy2(str(original_path), str(output_path))
 
     return warnings
 
@@ -261,11 +339,9 @@ def transform_file(
         warnings = transform_xlsx_file(original_path, output_path, findings)
 
     elif ext == ".pdf":
+        # Assicura sempre estensione .pdf nell'output
+        output_path = output_dir / (original_path.stem + ".pdf")
         warnings = transform_pdf_file(original_path, output_path, findings)
-        # L'output effettivo è il .txt, aggiorna il path
-        txt_path = output_path.with_suffix(".pseudonymized.txt")
-        if txt_path.exists():
-            output_path = txt_path
 
     elif ext in (".jpg", ".jpeg", ".png"):
         warnings = transform_image_file(original_path, output_path, findings, parse_result)
@@ -276,3 +352,27 @@ def transform_file(
         warnings.append(f"Formato '{ext}' non supportato per la trasformazione. File copiato senza modifiche.")
 
     return output_path, warnings
+
+
+def apply_pseudonyms_to_text(
+    text: str,
+    findings: List[Finding],
+) -> tuple:
+    """
+    Applica le sostituzioni a una stringa di testo puro (per console/clipboard).
+    Restituisce (testo_pseudonimizzato, numero_sostituzioni_applicate).
+    """
+    sub_map = _build_substitution_map(findings)
+    if not sub_map:
+        return text, 0
+
+    result = text
+    applied = 0
+    sorted_keys = sorted(sub_map.keys(), key=len, reverse=True)
+    for original in sorted_keys:
+        pseudonym = sub_map[original]
+        if original in result:
+            result = result.replace(original, pseudonym)
+            applied += 1
+
+    return result, applied
