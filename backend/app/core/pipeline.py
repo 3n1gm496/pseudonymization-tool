@@ -13,8 +13,9 @@ from app.models.schemas import (
     ReviewDecisionItem, ReviewAction, BatchMode
 )
 from app.core.batch_manager import get_batch, update_batch, get_batch_dir, get_passphrase
-from app.parsers.factory import parse_file
-from app.parsers.base import ParseResult
+from app.core.config import STREAMING_THRESHOLD_MB, STREAMING_CHUNK_SIZE
+from app.parsers.factory import parse_file, get_parser
+from app.parsers.base import ParseResult, TextChunk
 from app.detectors.engine import detect_in_parse_result
 from app.pseudonymizer.engine import PseudonymEngine
 from app.pseudonymizer.transformer import transform_file
@@ -25,6 +26,15 @@ logger = logging.getLogger(__name__)
 
 # Store dei ParseResult in memoria (per la fase di trasformazione)
 _parse_results: Dict[str, ParseResult] = {}
+
+
+def _should_use_streaming(file_path: Path) -> bool:
+    """Verifica se il file è abbastanza grande per streaming."""
+    try:
+        size_mb = file_path.stat().st_size / (1024 * 1024)
+        return size_mb > STREAMING_THRESHOLD_MB
+    except Exception:
+        return False
 
 
 def run_scan_pipeline(batch_id: str) -> Batch:
@@ -47,8 +57,30 @@ def run_scan_pipeline(batch_id: str) -> Batch:
         file_path = Path(file_rec.stored_path)
         logger.info("Processing file: %s", file_rec.original_name)
 
-        # 1. Parsing
-        parse_result = parse_file(file_path)
+        # 1. Parsing (con streaming per file grandi)
+        use_streaming = _should_use_streaming(file_path)
+        
+        if use_streaming:
+            logger.info("File %s > %sMB, usando streaming", file_rec.original_name, STREAMING_THRESHOLD_MB)
+            parser = get_parser(file_path)
+            
+            if parser and hasattr(parser, 'supports_streaming') and parser.supports_streaming():
+                # Build ParseResult incrementalmente
+                parse_result = ParseResult(file_path=file_path)
+                try:
+                    for chunk in parser.parse_stream(file_path, chunk_size=STREAMING_CHUNK_SIZE):
+                        parse_result.chunks.append(chunk)
+                    parse_result.success = True
+                except Exception as e:
+                    parse_result.success = False
+                    parse_result.error_message = f"Errore streaming: {e}"
+                    logger.error("Errore durante streaming di %s: %s", file_rec.original_name, e)
+            else:
+                # Fallback a parse normale
+                parse_result = parse_file(file_path)
+        else:
+            parse_result = parse_file(file_path)
+        
         _parse_results[file_rec.file_id] = parse_result
 
         if not parse_result.success:

@@ -36,3 +36,7 @@ RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get("RATE_LIMIT_WINDOW_SECONDS", "60"
 
 # Scan queue / concurrency controls
 MAX_CONCURRENT_SCANS = int(os.environ.get("MAX_CONCURRENT_SCANS", "2"))
+
+# Streaming per file grandi
+STREAMING_THRESHOLD_MB = int(os.environ.get("STREAMING_THRESHOLD_MB", "50"))
+STREAMING_CHUNK_SIZE = int(os.environ.get("STREAMING_CHUNK_SIZE", "1000"))  # chunks di testo per volta

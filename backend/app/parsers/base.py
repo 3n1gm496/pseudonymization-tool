@@ -47,6 +47,21 @@ class BaseParser(ABC):
         """
         ...
 
+    def supports_streaming(self) -> bool:
+        """Indica se il parser supporta streaming per file grandi."""
+        return False
+
+    def parse_stream(self, file_path: Path, chunk_size: int = 1000):
+        """
+        Generator per parsing incrementale di file grandi.
+        Yield TextChunk man mano che vengono estratti.
+        Default: fallback a parse() normale.
+        """
+        result = self.parse(file_path)
+        if result.success:
+            for chunk in result.chunks:
+                yield chunk
+
     @property
     @abstractmethod
     def supported_extensions(self) -> List[str]:

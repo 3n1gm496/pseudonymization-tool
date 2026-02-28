@@ -15,6 +15,33 @@ class PdfParser(BaseParser):
     def supported_extensions(self) -> List[str]:
         return [".pdf"]
 
+    def supports_streaming(self) -> bool:
+        return True
+
+    def parse_stream(self, file_path: Path, chunk_size: int = 1000):
+        """Parse PDF in streaming, processando pagina per pagina."""
+        from pypdf import PdfReader
+        try:
+            reader = PdfReader(str(file_path))
+            if reader.is_encrypted:
+                return
+
+            for page_num, page in enumerate(reader.pages, start=1):
+                try:
+                    page_text = page.extract_text()
+                    if page_text and page_text.strip():
+                        for line_num, line in enumerate(page_text.splitlines(), start=1):
+                            if line.strip():
+                                yield TextChunk(
+                                    text=line,
+                                    source_ref=f"pagina {page_num}, riga {line_num}",
+                                    line_number=line_num,
+                                )
+                except Exception:
+                    pass
+        except Exception:
+            return
+
     def parse(self, file_path: Path) -> ParseResult:
         result = ParseResult(file_path=file_path)
         try:
