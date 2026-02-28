@@ -23,12 +23,14 @@ class RegexDetector(BaseDetector):
         detector_name: str,
         flags: int = re.IGNORECASE,
         validator=None,
+        normalizer=None,
     ):
         self._entity_type = entity_type
         self._pattern = re.compile(pattern, flags)
         self._confidence = confidence
         self._detector_name = detector_name
         self._validator = validator  # Funzione opzionale per validare il match
+        self._normalizer = normalizer  # Funzione opzionale per normalizzare il valore (es. lowercase per email)
 
     @property
     def name(self) -> str:
@@ -48,9 +50,15 @@ class RegexDetector(BaseDetector):
                 value = match.group(0)
                 start = match.start()
                 end = match.end()
+            
             # Applica il validatore se presente
             if self._validator and not self._validator(value):
                 continue
+            
+            # Applica il normalizer se presente (es. lowercase per email)
+            if self._normalizer:
+                value = self._normalizer(value)
+            
             findings.append(
                 RawFinding(
                     entity_type=self._entity_type,
@@ -126,6 +134,7 @@ EMAIL_DETECTOR = RegexDetector(
     pattern=r"\b[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}\b",
     confidence=0.95,
     detector_name="RegexEmailDetector",
+    normalizer=lambda s: s.lower(),  # Normalize email to lowercase for consistent pseudonymization
 )
 
 IPV4_DETECTOR = RegexDetector(

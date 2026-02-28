@@ -3,6 +3,7 @@ Router API principale per il Local Pseudonymization Tool.
 Espone gli endpoint RESTful per la gestione dei batch.
 """
 import logging
+import math
 from datetime import datetime
 from pathlib import Path
 from typing import List
@@ -21,13 +22,84 @@ from app.core.batch_manager import (
 )
 from app.core.pipeline import apply_review_decisions, run_apply_pipeline
 from app.core.scan_queue import enqueue_scan, is_scan_inflight
-from app.core.config import SUPPORTED_EXTENSIONS, MAX_FILE_SIZE_BYTES
+from app.core.config import (
+    SUPPORTED_EXTENSIONS, MAX_FILE_SIZE_BYTES,
+    MIN_PASSPHRASE_LENGTH, MIN_PASSPHRASE_ENTROPY
+)
 
 router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
 
 # Store per i timestamp di avvio dei batch
 _batch_start_times: dict = {}
+
+
+def _calculate_entropy(s: str) -> float:
+    """Calcola l'entropia di Shannon per una stringa (bits per carattere)."""
+    if not s:
+        return 0.0
+    freq = {}
+    for c in s:
+        freq[c] = freq.get(c, 0) + 1
+    entropy = 0.0
+    for count in freq.values():
+        p = count / len(s)
+        entropy -= p * math.log2(p)
+    return entropy
+
+
+def _validate_passphrase(passphrase: str) -> None:
+    """Valida la passphrase per lunghezza ed entropia minima."""
+    if not passphrase or len(passphrase) < MIN_PASSPHRASE_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"La passphrase deve essere di almeno {MIN_PASSPHRASE_LENGTH} caratteri."
+        )
+    
+    entropy = _calculate_entropy(passphrase)
+    if entropy < MIN_PASSPHRASE_ENTROPY:
+        raise HTTPException(
+            status_code=400,
+            detail=f"La passphrase è troppo debole (entropia: {entropy:.2f} bits/char, minimo: {MIN_PASSPHRASE_ENTROPY}). "
+                   "Usa caratteri variati e non ripetitivi."
+        )
+
+
+def _validate_file_magic_bytes(content: bytes, filename: str) -> str:
+    """
+    Valida il magic bytes del file per verificare che corrisponda all'estensione.
+    Restituisce l'estensione rilevata o solleva HTTPException.
+    """
+    ext = Path(filename).suffix.lower()
+    
+    # Magic bytes comuni
+    if content.startswith(b'%PDF'):
+        detected_ext = '.pdf'
+    elif content.startswith(b'PK\x03\x04'):
+        # ZIP-based formats (docx, xlsx)
+        if b'word/' in content[:2000]:
+            detected_ext = '.docx'
+        elif b'xl/' in content[:2000]:
+            detected_ext = '.xlsx'
+        else:
+            detected_ext = ext  # Trust extension for generic ZIP
+    elif content.startswith(b'\xff\xd8\xff'):
+        detected_ext = '.jpg'
+    elif content.startswith(b'\x89PNG'):
+        detected_ext = '.png'
+    else:
+        # Text-based formats allowed without strict validation
+        if ext in {'.txt', '.md', '.csv'}:
+            detected_ext = ext
+        else:
+            logger.warning(f"Non è possibile validare magic bytes per {filename}")
+            detected_ext = ext
+    
+    # Warn if mismatch but extension is supported
+    if detected_ext != ext and ext in SUPPORTED_EXTENSIONS:
+        logger.warning(f"Mismatch magic bytes per {filename}: dichiarato {ext}, rilevato {detected_ext}")
+    
+    return detected_ext
 
 
 @router.post("/batches", response_model=BatchStatusResponse)
@@ -40,8 +112,8 @@ async def create_new_batch(
     """
     Crea un nuovo batch, carica i file e li salva nella directory temporanea.
     """
-    if not passphrase or len(passphrase) < 4:
-        raise HTTPException(status_code=400, detail="La passphrase deve essere di almeno 4 caratteri.")
+    # Valida la passphrase con controllo entropia
+    _validate_passphrase(passphrase)
 
     # Valida la modalità
     try:
@@ -78,6 +150,16 @@ async def create_new_batch(
 
         if len(content) > MAX_FILE_SIZE_BYTES:
             logger.warning("File troppo grande ignorato: %s (%d bytes)", upload_file.filename, len(content))
+            continue
+
+        # Valida magic bytes del file
+        try:
+            detected_ext = _validate_file_magic_bytes(content, upload_file.filename)
+            if detected_ext not in SUPPORTED_EXTENSIONS:
+                logger.warning("File ignorato (magic bytes non corrisponde a formato supportato): %s", upload_file.filename)
+                continue
+        except Exception as e:
+            logger.warning("Errore validazione magic bytes per %s: %s", upload_file.filename, e)
             continue
 
         safe_name = Path(upload_file.filename).name
@@ -259,6 +341,9 @@ async def download_batch(batch_id: str, background_tasks: BackgroundTasks):
 
     zip_path = zip_files[0]
 
+    # Cleanup del timestamp di avvio
+    _batch_start_times.pop(batch_id, None)
+    
     # Pianifica la pulizia della directory temporanea dopo il download
     background_tasks.add_task(cleanup_batch, batch_id)
 

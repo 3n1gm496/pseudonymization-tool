@@ -25,6 +25,18 @@ class RawFinding:
     end_pos: int = 0    # Posizione di fine nel testo del chunk
     # Per le immagini, il bbox specifico della parola/entità trovata
     entity_bbox: List[float] = field(default_factory=list)
+    
+    def __post_init__(self):
+        """Validate confidence_score is between 0 and 1."""
+        if not (0.0 <= self.confidence_score <= 1.0):
+            # Clamp to valid range and log warning
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                f"Invalid confidence_score {self.confidence_score} for {self.detector_name}, "
+                f"clamping to [0.0, 1.0]"
+            )
+            self.confidence_score = max(0.0, min(1.0, self.confidence_score))
 
 
 class BaseDetector(ABC):

@@ -4,9 +4,10 @@ Coordina: parsing -> detection -> pseudonimizzazione -> trasformazione -> report
 """
 import logging
 import zipfile
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 from datetime import datetime
 from pathlib import Path
+from threading import Lock
 from typing import List, Dict, Optional
 
 from app.models.schemas import (
@@ -16,7 +17,8 @@ from app.models.schemas import (
 from app.core.batch_manager import get_batch, update_batch, get_batch_dir, get_passphrase
 from app.core.config import (
     STREAMING_THRESHOLD_MB, STREAMING_CHUNK_SIZE,
-    PARALLEL_FILE_PROCESSING, MAX_PARALLEL_FILES
+    PARALLEL_FILE_PROCESSING, MAX_PARALLEL_FILES,
+    FILE_PROCESSING_TIMEOUT_SECONDS
 )
 from app.parsers.factory import parse_file, get_parser
 from app.parsers.base import ParseResult, TextChunk
@@ -30,6 +32,7 @@ logger = logging.getLogger(__name__)
 
 # Store dei ParseResult in memoria (per la fase di trasformazione)
 _parse_results: Dict[str, ParseResult] = {}
+_parse_results_lock = Lock()
 
 
 def _should_use_streaming(file_path: Path) -> bool:
@@ -127,10 +130,11 @@ def run_scan_pipeline(batch_id: str) -> Batch:
             }
             
             # Raccogli i risultati man mano che completano
-            for future in as_completed(future_to_file):
+            for future in as_completed(future_to_file, timeout=FILE_PROCESSING_TIMEOUT_SECONDS * len(batch.files)):
                 file_rec = future_to_file[future]
                 try:
-                    updated_file_rec, file_findings, parse_result = future.result()
+                    # Timeout per singolo file
+                    updated_file_rec, file_findings, parse_result = future.result(timeout=FILE_PROCESSING_TIMEOUT_SECONDS)
                     
                     # Aggiorna il file record nel batch
                     for i, f in enumerate(batch.files):
@@ -138,10 +142,15 @@ def run_scan_pipeline(batch_id: str) -> Batch:
                             batch.files[i] = updated_file_rec
                             break
                     
-                    # Salva il parse result e i findings  
-                    _parse_results[updated_file_rec.file_id] = parse_result
+                    # Salva il parse result e i findings (thread-safe)
+                    with _parse_results_lock:
+                        _parse_results[updated_file_rec.file_id] = parse_result
                     all_findings.extend(file_findings)
-                    
+                
+                except TimeoutError:
+                    logger.error("Timeout durante elaborazione di %s (>%ds)", file_rec.original_name, FILE_PROCESSING_TIMEOUT_SECONDS)
+                    file_rec.status = FileStatus.FAILED
+                    file_rec.error_message = f"Timeout: elaborazione superata {FILE_PROCESSING_TIMEOUT_SECONDS}s"
                 except Exception as e:
                     logger.error("Errore durante elaborazione parallela di %s: %s", file_rec.original_name, e)
                     file_rec.status = FileStatus.FAILED
@@ -160,7 +169,8 @@ def run_scan_pipeline(batch_id: str) -> Batch:
                         batch.files[i] = updated_file_rec
                         break
                 
-                _parse_results[updated_file_rec.file_id] = parse_result
+                with _parse_results_lock:
+                    _parse_results[updated_file_rec.file_id] = parse_result
                 all_findings.extend(file_findings)
                 
             except Exception as e:
@@ -195,8 +205,13 @@ def apply_review_decisions(batch_id: str, decisions: List[ReviewDecisionItem]) -
         if finding.finding_id in decision_map:
             decision = decision_map[finding.finding_id]
             finding.review_action = decision.action
-            if decision.action == ReviewAction.MODIFY and decision.modified_pseudonym:
-                finding.modified_pseudonym = decision.modified_pseudonym
+            if decision.action == ReviewAction.MODIFY:
+                # Use sanitized pseudonym to prevent injection attacks
+                sanitized = decision.sanitized_pseudonym()
+                if sanitized:
+                    finding.modified_pseudonym = sanitized
+                else:
+                    logger.warning(f"Modified pseudonym vuoto o invalido per finding {finding.finding_id}, ignorato")
 
     update_batch(batch)
     return batch
@@ -236,7 +251,9 @@ def run_apply_pipeline(batch_id: str, started_at: str) -> Path:
 
             file_path = Path(file_rec.stored_path)
             file_findings = findings_by_file.get(file_rec.file_id, [])
-            parse_result = _parse_results.get(file_rec.file_id)
+            
+            with _parse_results_lock:
+                parse_result = _parse_results.get(file_rec.file_id)
 
             try:
                 output_path, transform_warnings = transform_file(

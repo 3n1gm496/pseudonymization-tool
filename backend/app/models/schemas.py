@@ -109,6 +109,7 @@ class FileRecord(BaseModel):
 class Batch(BaseModel):
     batch_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    last_activity_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     config: BatchConfig = Field(default_factory=BatchConfig)
     status: BatchStatus = BatchStatus.PENDING
     files: List[FileRecord] = Field(default_factory=list)
@@ -127,6 +128,16 @@ class ReviewDecisionItem(BaseModel):
     finding_id: str
     action: ReviewAction
     modified_pseudonym: Optional[str] = None
+
+    def sanitized_pseudonym(self) -> Optional[str]:
+        """Sanitize modified pseudonym to prevent injection attacks."""
+        if not self.modified_pseudonym:
+            return None
+        # Remove control characters, HTML/XML tags, and other injection vectors
+        # Keep only alphanumeric, underscore, dash, dot, and space
+        import re
+        sanitized = re.sub(r'[^a-zA-Z0-9\s\-_.@]', '', self.modified_pseudonym).strip()
+        return sanitized[:200]  # Max 200 chars
 
 
 class SubmitReviewRequest(BaseModel):

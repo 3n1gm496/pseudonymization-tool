@@ -54,3 +54,14 @@ DETECTOR_CACHE_MAX_SIZE = int(os.environ.get("DETECTOR_CACHE_MAX_SIZE", "10000")
 ML_NER_ENABLED = os.environ.get("ML_NER_ENABLED", "true").lower() == "true"
 ML_NER_MODEL = os.environ.get("ML_NER_MODEL", "en_core_web_sm")  # spaCy model
 ML_NER_CONFIDENCE_THRESHOLD = float(os.environ.get("ML_NER_CONFIDENCE_THRESHOLD", "0.7"))  # min confidence
+
+# Batch TTL and cleanup
+BATCH_INACTIVITY_TTL_HOURS = int(os.environ.get("BATCH_INACTIVITY_TTL_HOURS", "24"))  # 24 hours default
+BATCH_CLEANUP_INTERVAL_SECONDS = int(os.environ.get("BATCH_CLEANUP_INTERVAL_SECONDS", "3600"))  # Check every hour
+
+# File processing timeouts
+FILE_PROCESSING_TIMEOUT_SECONDS = int(os.environ.get("FILE_PROCESSING_TIMEOUT_SECONDS", "300"))  # 5 minutes per file
+
+# Security settings
+MIN_PASSPHRASE_LENGTH = int(os.environ.get("MIN_PASSPHRASE_LENGTH", "12"))
+MIN_PASSPHRASE_ENTROPY = float(os.environ.get("MIN_PASSPHRASE_ENTROPY", "2.5"))  # bits per character

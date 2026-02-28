@@ -33,6 +33,7 @@ def _resolve_overlaps(findings: List[RawFinding]) -> List[RawFinding]:
     """
     Risolve le sovrapposizioni tra finding nello stesso chunk di testo.
     Strategia: priorità al match più lungo; a parità di lunghezza, priorità alla confidenza più alta.
+    Gestisce correttamente tutti i casi di overlapping, inclusi finding con stessa lunghezza.
     """
     if not findings:
         return []
@@ -44,19 +45,34 @@ def _resolve_overlaps(findings: List[RawFinding]) -> List[RawFinding]:
     )
 
     resolved = []
-    last_end = -1
-
+    
     for finding in sorted_findings:
-        if finding.start_pos >= last_end:
+        # Verifica se questo finding si sovrappone con qualcuno già selezionato
+        overlaps_with_existing = False
+        
+        for existing in resolved:
+            # Check se c'è overlap
+            if not (finding.end_pos <= existing.start_pos or finding.start_pos >= existing.end_pos):
+                # C'è overlap - confronta lunghezza e confidenza
+                finding_len = finding.end_pos - finding.start_pos
+                existing_len = existing.end_pos - existing.start_pos
+                
+                if finding_len > existing_len or (finding_len == existing_len and finding.confidence_score > existing.confidence_score):
+                    # Il nuovo finding è migliore, rimuovi quello esistente
+                    resolved.remove(existing)
+                    resolved.append(finding)
+                    overlaps_with_existing = True
+                    break
+                else:
+                    # Quello esistente è migliore o uguale, skip il nuovo
+                    overlaps_with_existing = True
+                    break
+        
+        if not overlaps_with_existing:
             resolved.append(finding)
-            last_end = finding.end_pos
-        else:
-            # Sovrapposizione: mantieni il finding già selezionato (più lungo o più confidenza)
-            # Se il nuovo finding è più lungo, sostituisci
-            if resolved and finding.end_pos - finding.start_pos > resolved[-1].end_pos - resolved[-1].start_pos:
-                resolved[-1] = finding
-                last_end = finding.end_pos
-
+    
+    # Riordina per posizione finale
+    resolved.sort(key=lambda f: f.start_pos)
     return resolved
 
 
