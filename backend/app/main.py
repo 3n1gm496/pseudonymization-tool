@@ -2,8 +2,6 @@
 Punto di ingresso dell'applicazione Local Pseudonymization Tool.
 Il server è configurato per ascoltare SOLO su 127.0.0.1 (localhost).
 """
-import logging
-import sys
 import time
 import uuid
 from contextlib import asynccontextmanager

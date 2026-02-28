@@ -4,7 +4,7 @@ Provides JSON-formatted logs with correlation IDs and request context.
 """
 import logging
 import sys
-from typing import Any, Dict
+from typing import Any
 
 import structlog
 from structlog.typing import EventDict, Processor

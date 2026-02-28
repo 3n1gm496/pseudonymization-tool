@@ -75,7 +75,7 @@ async def readiness_check(response: Response) -> ReadinessResponse:
     try:
         from app.parsers.factory import ParserFactory
 
-        factory = ParserFactory()
+        ParserFactory()
         checks["parsers"] = {
             "status": "ok",
             "available": True,

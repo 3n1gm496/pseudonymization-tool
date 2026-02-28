@@ -34,7 +34,7 @@ python_functions = ["test_*"]
 addopts = [
     "-v",
     "--strict-markers",
-    "--cov=backend/app",
+    "--cov=app",
     "--cov-report=term-missing",
     "--cov-report=html",
     "--cov-report=xml",
@@ -46,7 +46,7 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["backend/app"]
+source = ["app"]
 omit = [
     "*/tests/*",
     "*/__pycache__/*",
