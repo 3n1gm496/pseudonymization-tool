@@ -15,7 +15,7 @@ Web application locale per la pseudonimizzazione sicura di dati sensibili in doc
 - **📄 Multi-formato** — Supporto per TXT, CSV, MD, DOCX, XLSX, PDF (testuali), JPG, PNG
 - **🔐 Sicurezza Avanzata** — Mapping cifrato con passphrase AES-256, zero logging di dati sensibili
 - **⚙️ Modalità Flessibili** — `light` (solo entità di rete) e `strict` (tutte le entità PII)
-- **🧭 Sorgenti Separate** — flusso esplicito `Console` (testo inline) e `File` (upload batch)
+- **🧭 Input Unificato** — testo inline e upload documenti disponibili nello stesso flusso
 - **🛡️ Preset Policy** — `SOC Logs`, `Policy Docs`, `Email Headers` con preview entità abilitate
 - **👁️ Review Manuale** — Interfaccia per rivedere e approvare/rifiutare ogni pseudonimo proposto
 - **📊 Report Dettagliati** — HTML navigabile e JSON strutturato per audit trail
@@ -103,7 +103,6 @@ Questa modalità permette di preparare il pacchetto su una macchina con internet
 
 1. **Upload**: Trascina i file da processare nell'area di upload.
 2. **Configura**: Seleziona la modalità (`light` o `strict`) e inserisci una **passphrase robusta** (essenziale per la sicurezza del mapping).
-   - Seleziona la sorgente: `Console` per testo inline, `File` per documenti.
    - Seleziona il preset policy (`SOC Logs`, `Policy Docs`, `Email Headers`).
    - Verifica la preview delle entità abilitate prima della scansione.
 3. **Avvia Scansione**: Il backend analizza i file e rileva le entità sensibili.

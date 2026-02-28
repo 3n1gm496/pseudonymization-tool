@@ -16,7 +16,7 @@ This document describes the high-priority (P0) improvements implemented in the p
   - `GET /api/settings/policies`
   - `GET /api/settings/policies/{preset}`
 - Improved frontend UX:
-  - explicit `Console`/`File` source selector
+  - unified input flow for inline text and file upload
   - preset selector and policy preview panel
   - consistent safety label rendering (`SAFE_TO_UPLOAD`, `SAFE_WITH_WARNINGS`, `NOT_SAFE`)
 - Improved reports with residual risk section and safety label summary.

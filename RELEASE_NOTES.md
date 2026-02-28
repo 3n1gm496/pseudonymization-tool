@@ -14,7 +14,7 @@
 - Endpoint protection on heavy operations (rate-limit, timeout, payload limits).
 - Safer server-side state persistence with sensitive-field scrubbing.
 - Batch cleanup now performs best-effort passphrase zeroization.
-- Frontend UX with explicit source mode (`Console` / `File`) and preset preview.
+- Frontend UX with unified input flow and preset preview.
 - Report output now includes residual risk/safety summary.
 - Timestamp handling migrated to timezone-aware UTC datetimes.
 

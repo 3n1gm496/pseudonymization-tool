@@ -79,10 +79,6 @@ html,body { height:100%; background:var(--bg); color:var(--text); font-family:va
 .composer-title { font-size:12px; font-weight:600; color:var(--text-muted); }
 .composer-controls { display:flex; align-items:center; gap:8px; }
 .composer-actions { display:flex; gap:6px; align-items:center; }
-.source-toggle { display:flex; border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
-.source-btn { background:transparent; color:var(--text-muted); border:none; padding:3px 10px; font-size:12px; cursor:pointer; }
-.source-btn.active { background:var(--accent); color:#fff; }
-.source-btn:not(.active):hover { background:var(--bg-hover); color:var(--text); }
 .composer-body { display:flex; flex-direction:column; }
 .composer-textarea { width:100%; height:140px; resize:vertical; min-height:80px; max-height:280px; background:var(--bg-surface); color:var(--text); border:none; outline:none; font-family:var(--font-mono); font-size:12px; line-height:1.6; padding:10px 16px; }
 .composer-textarea::placeholder { color:var(--text-subtle); }
