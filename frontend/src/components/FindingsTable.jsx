@@ -42,7 +42,13 @@ const FindingsTable = ({ batch, onApply, isLoading }) => {
         decisions: reviewItems,
       })
 
-      await onApply(batch.batch_id, batch.file_id)
+      const fileId = batch.file_id || batch.files?.[0]?.id || batch.files?.[0]?.file_id
+      await onApply({
+        batchId: batch.batch_id,
+        fileId,
+        isTextInput: !!batch.is_text_input,
+        sourceText: batch.source_text || '',
+      })
       showToast('Pseudonimizzazione applicata', 'success')
     } catch (error) {
       showToast(error.response?.data?.detail || 'Errore durante l\'applicazione', 'error')

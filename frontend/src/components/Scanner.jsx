@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react'
 import axios from 'axios'
 import { useToast } from '../hooks/useToast'
 
-const Scanner = ({ onScan, selectedPolicy, isLoading }) => {
+const Scanner = ({ onScan, isLoading }) => {
   const [text, setText] = useState('')
   const [uploadedFile, setUploadedFile] = useState(null)
   const fileInputRef = useRef(null)
@@ -18,9 +18,8 @@ const Scanner = ({ onScan, selectedPolicy, isLoading }) => {
     try {
       const response = await axios.post('/api/console/scan', {
         text,
-        preset: selectedPolicy,
       })
-      onScan(response.data)
+      onScan({ ...response.data, is_text_input: true, source_text: text })
       showToast('Scan completato', 'success')
     } catch (error) {
       showToast(error.response?.data?.detail || 'Errore durante lo scan', 'error')
@@ -41,7 +40,7 @@ const Scanner = ({ onScan, selectedPolicy, isLoading }) => {
       const response = await axios.post('/api/batches', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
-      onScan(response.data)
+      onScan({ ...response.data, is_text_input: false })
       showToast('File scansionato', 'success')
       setUploadedFile(null)
     } catch (error) {

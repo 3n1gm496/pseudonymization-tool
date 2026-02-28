@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Any, Dict
 
-from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile, Request
+from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse
 
@@ -48,6 +48,18 @@ from app.core.config import (
     MAX_CONSOLE_TEXT_CHARS,
 )
 from app.core.policies import get_policy, get_enabled_entity_types
+from app.core.auth import (
+    AUTH_ENABLED,
+    ADMIN_USERNAME,
+    SESSION_COOKIE_NAME,
+    SESSION_TTL_SECONDS,
+    auth_uses_default_password,
+    create_session,
+    destroy_session,
+    extract_token_from_request,
+    validate_session,
+    verify_credentials,
+)
 
 router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
@@ -206,6 +218,62 @@ async def health_check():
     }
 
 
+@router.post("/auth/login")
+async def auth_login(req: dict, response: Response):
+    username = (req.get("username") or "").strip()
+    password = req.get("password") or ""
+    if not verify_credentials(username, password):
+        raise HTTPException(status_code=401, detail="Credenziali non valide")
+
+    token, expires_at = create_session(username or ADMIN_USERNAME)
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=token,
+        httponly=True,
+        secure=False,
+        samesite="strict",
+        max_age=SESSION_TTL_SECONDS,
+        path="/",
+    )
+    return {
+        "authenticated": True,
+        "username": username or ADMIN_USERNAME,
+        "expires_at": datetime.fromtimestamp(expires_at, tz=timezone.utc).isoformat(),
+        "auth_enabled": AUTH_ENABLED,
+        "default_password": auth_uses_default_password(),
+    }
+
+
+@router.post("/auth/logout")
+async def auth_logout(request: Request, response: Response):
+    token = extract_token_from_request(request)
+    destroy_session(token)
+    response.delete_cookie(key=SESSION_COOKIE_NAME, path="/")
+    return {"ok": True}
+
+
+@router.get("/auth/me")
+async def auth_me(request: Request):
+    if not AUTH_ENABLED:
+        return {
+            "authenticated": True,
+            "username": ADMIN_USERNAME,
+            "auth_enabled": False,
+            "default_password": auth_uses_default_password(),
+        }
+
+    token = extract_token_from_request(request)
+    username = validate_session(token)
+    if not username:
+        raise HTTPException(status_code=401, detail="Non autenticato")
+    return {
+        "authenticated": True,
+        "username": username,
+        "auth_enabled": True,
+        "default_password": auth_uses_default_password(),
+    }
+
+
 @router.get("/ready")
 async def ready_check():
     checks = {
@@ -226,7 +294,7 @@ async def ready_check():
 async def create_new_batch(
     request: Request,
     files: List[UploadFile] = File(...),
-    mode: str = Form("light"),
+    mode: str = Form("strict"),
     preset: str = Form("SOC Logs"),
     passphrase: str = Form(""),
 ):
@@ -248,12 +316,8 @@ async def create_new_batch(
     if passphrase:
         _validate_passphrase(passphrase)
     
-    try:
-        batch_mode = BatchMode(mode.lower())
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"Modalità non valida: '{mode}'. Usa 'light' o 'strict'.")
-
-    batch_preset = _resolve_preset(preset)
+    batch_mode = BatchMode.STRICT
+    batch_preset = PresetName.SOC_LOGS
 
     config = BatchConfig(mode=batch_mode, preset=batch_preset)
     batch = Batch(config=config)
@@ -351,8 +415,8 @@ async def console_scan(req: dict, request: Request):
     _enforce_rate_limit(request, "console_scan", limit=30)
 
     text = req.get("text", "").strip()
-    mode_str = req.get("mode", "light")
-    preset_str = req.get("preset", "SOC Logs")
+    mode_str = "strict"
+    preset_str = "SOC Logs"
 
     if not text:
         raise HTTPException(status_code=400, detail="Il campo 'text' è obbligatorio.")
@@ -365,7 +429,7 @@ async def console_scan(req: dict, request: Request):
     try:
         batch_mode = BatchMode(mode_str.lower())
     except ValueError:
-        batch_mode = BatchMode.LIGHT
+        batch_mode = BatchMode.STRICT
 
     batch_preset = _resolve_preset(preset_str)
 

@@ -29,6 +29,8 @@ const Results = ({ batch, pseudonymizedText }) => {
     }
   }
 
+  const canShowText = typeof pseudonymizedText === 'string' && pseudonymizedText.length > 0
+
   return (
     <div className="w-full max-w-4xl mx-auto p-6 space-y-6">
       <div className="bg-white dark:bg-slate-800 rounded-lg shadow overflow-hidden">
@@ -39,7 +41,8 @@ const Results = ({ batch, pseudonymizedText }) => {
           </p>
         </div>
 
-        {pseudonymizedText && (
+        <div className="p-6 space-y-4">
+          {canShowText && (
           <div className="p-6 space-y-4">
             <div>
               <label className="block text-sm font-semibold mb-2">Testo Pseudonimizzato</label>
@@ -58,23 +61,24 @@ const Results = ({ batch, pseudonymizedText }) => {
                 </button>
               </div>
             </div>
-
-            <div className="flex gap-3">
-              <button
-                onClick={handleDownload}
-                className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
-              >
-                📥 Scarica ZIP
-              </button>
-              <button
-                onClick={() => window.location.reload()}
-                className="flex-1 px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-medium transition-colors"
-              >
-                🔄 Nuovo Scan
-              </button>
-            </div>
           </div>
-        )}
+          )}
+
+          <div className="flex gap-3">
+            <button
+              onClick={handleDownload}
+              className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
+            >
+              📥 Scarica ZIP
+            </button>
+            <button
+              onClick={() => window.location.reload()}
+              className="flex-1 px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-medium transition-colors"
+            >
+              🔄 Nuovo Scan
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

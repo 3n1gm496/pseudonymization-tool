@@ -32,6 +32,9 @@ services:
       MAX_UPLOAD_FILES_PER_BATCH: "20"
       MAX_CONSOLE_TEXT_CHARS: "200000"
       PYTHONUNBUFFERED: "1"
+      AUTH_ENABLED: "true"
+      AUTH_USERNAME: "admin"
+      AUTH_PASSWORD: "admin123!"
     
     # Volume mounts (config + temp storage)
     volumes:

@@ -1,32 +1,92 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import axios from 'axios'
 import Header from './components/Header'
-import PolicySelector from './components/PolicySelector'
 import Scanner from './components/Scanner'
 import FindingsTable from './components/FindingsTable'
 import Results from './components/Results'
 import { useToast } from './hooks/useToast'
+import LoginForm from './components/LoginForm'
 
 const App = () => {
+  axios.defaults.withCredentials = true
+
   const [currentStep, setCurrentStep] = useState('scanner') // scanner | findings | results
-  const [selectedPolicy, setSelectedPolicy] = useState('SOC_LOGS')
   const [batch, setBatch] = useState(null)
   const [pseudonymizedText, setPseudonymizedText] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [authUser, setAuthUser] = useState(null)
+  const [authLoading, setAuthLoading] = useState(true)
+  const [authWarning, setAuthWarning] = useState('')
   const { showToast, ToastContainer } = useToast()
+
+  useEffect(() => {
+    const bootstrapAuth = async () => {
+      try {
+        const response = await axios.get('/api/auth/me')
+        setAuthUser(response.data.username)
+        if (response.data.default_password) {
+          setAuthWarning('Stai usando la password di default: cambiala via AUTH_PASSWORD.')
+        }
+      } catch {
+        setAuthUser(null)
+      } finally {
+        setAuthLoading(false)
+      }
+    }
+    bootstrapAuth()
+  }, [])
+
+  const handleLogin = async (username, password) => {
+    setIsLoading(true)
+    try {
+      const response = await axios.post('/api/auth/login', { username, password })
+      setAuthUser(response.data.username)
+      if (response.data.default_password) {
+        setAuthWarning('Stai usando la password di default: cambiala via AUTH_PASSWORD.')
+      } else {
+        setAuthWarning('')
+      }
+      showToast('Login effettuato', 'success')
+    } catch (error) {
+      showToast(error.response?.data?.detail || 'Login fallito', 'error')
+      throw error
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleLogout = async () => {
+    try {
+      await axios.post('/api/auth/logout')
+    } catch {
+      // ignore
+    }
+    setAuthUser(null)
+    setBatch(null)
+    setPseudonymizedText(null)
+    setCurrentStep('scanner')
+    showToast('Logout effettuato', 'info')
+  }
 
   const handleScan = (scanResult) => {
     setBatch(scanResult)
     setCurrentStep('findings')
   }
 
-  const handleApply = async (batchId, fileId) => {
+  const handleApply = async ({ batchId, fileId, isTextInput, sourceText }) => {
     setIsLoading(true)
     try {
-      const response = await axios.post(`/api/batches/${batchId}/apply`, {
-        file_id: fileId,
-      })
-      setPseudonymizedText(response.data.pseudonymized_text)
+      if (isTextInput) {
+        const response = await axios.post('/api/console/apply', {
+          batch_id: batchId,
+          file_id: fileId,
+          text: sourceText || '',
+        })
+        setPseudonymizedText(response.data.pseudonymized_text || '')
+      } else {
+        await axios.post(`/api/batches/${batchId}/apply`)
+        setPseudonymizedText('')
+      }
       setCurrentStep('results')
       showToast('Pseudonimizzazione completata', 'success')
     } catch (error) {
@@ -42,11 +102,32 @@ const App = () => {
     setCurrentStep('scanner')
   }
 
+  if (authLoading) {
+    return <div className="min-h-screen bg-slate-50 dark:bg-slate-950" />
+  }
+
+  if (!authUser) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+        <Header user={null} onLogout={null} />
+        <main className="max-w-7xl mx-auto py-8 px-4">
+          <LoginForm onLogin={handleLogin} isLoading={isLoading} />
+        </main>
+        <ToastContainer />
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
-      <Header />
+      <Header user={authUser} onLogout={handleLogout} />
 
       <main className="max-w-7xl mx-auto py-8 px-4 space-y-8">
+        {authWarning && (
+          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 text-yellow-900 dark:text-yellow-200 px-4 py-3 rounded-lg">
+            {authWarning}
+          </div>
+        )}
         {/* Progress Bar */}
         {(currentStep === 'findings' || currentStep === 'results') && (
           <div className="flex items-center gap-4 justify-center mb-8">
@@ -70,14 +151,10 @@ const App = () => {
           </div>
         )}
 
-        {/* Policy Selector - Always visible */}
-        <PolicySelector selectedPolicy={selectedPolicy} onPolicyChange={setSelectedPolicy} />
-
         {/* Scanner Step */}
         {currentStep === 'scanner' && (
           <Scanner
             onScan={handleScan}
-            selectedPolicy={selectedPolicy}
             isLoading={isLoading}
           />
         )}

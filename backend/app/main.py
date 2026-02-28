@@ -7,14 +7,21 @@ import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.responses import JSONResponse
 
 from app.api.routes import router
 from app.core.config import SERVER_HOST, SERVER_PORT, TEMP_BASE_DIR
 from app.core.batch_manager import start_cleanup_scheduler
+from app.core.auth import (
+    AUTH_ENABLED,
+    auth_uses_default_password,
+    extract_token_from_request,
+    validate_session,
+)
 
 # Configurazione logging: nessun valore sensibile nei log
 logging.basicConfig(
@@ -49,6 +56,12 @@ async def lifespan(app: FastAPI):
         logger.warning("Errore nel caricamento dei dizionari: %s", e)
     start_cleanup_scheduler()
     logger.info("Cleanup scheduler avviato.")
+    if AUTH_ENABLED:
+        logger.info("Autenticazione API: ATTIVA")
+        if auth_uses_default_password():
+            logger.warning("AUTH_PASSWORD non impostata: uso password default (NON SICURO).")
+    else:
+        logger.warning("Autenticazione API: DISATTIVATA")
     yield
     # Shutdown
     logger.info("Server in arresto.")
@@ -71,11 +84,40 @@ app.add_middleware(
     allow_origins=[
         f"http://127.0.0.1:{SERVER_PORT}",
         f"http://localhost:{SERVER_PORT}",
+        "http://127.0.0.1:5173",
+        "http://localhost:5173",
     ],
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    if not AUTH_ENABLED:
+        return await call_next(request)
+
+    path = request.url.path
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
+    public_paths = {
+        "/api/health",
+        "/api/ready",
+        "/api/auth/login",
+        "/api/auth/me",
+        "/api/docs",
+    }
+
+    if path.startswith("/api") and path not in public_paths and not path.startswith("/api/docs"):
+        token = extract_token_from_request(request)
+        username = validate_session(token)
+        if not username:
+            return JSONResponse(status_code=401, content={"detail": "Authentication required"})
+        request.state.auth_user = username
+
+    return await call_next(request)
 
 # Registra i router API
 app.include_router(router)
