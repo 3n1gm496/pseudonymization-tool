@@ -2,7 +2,7 @@
 Motore di detection: orchestra tutti i detector e gestisce le sovrapposizioni.
 """
 import logging
-from typing import List
+from typing import List, Optional
 
 from app.detectors.base import RawFinding
 from app.detectors.regex_detectors import ALL_REGEX_DETECTORS
@@ -11,6 +11,22 @@ from app.detectors.cache import get_detector_cache
 from app.parsers.base import ParseResult, TextChunk
 
 logger = logging.getLogger(__name__)
+
+# ML detector singleton
+_ml_detector_instance: Optional[object] = None
+
+
+def get_ml_detector():
+    """Get ML NER detector singleton instance."""
+    global _ml_detector_instance
+    if _ml_detector_instance is None:
+        try:
+            from app.detectors.ml_detector import MLNERDetector
+            _ml_detector_instance = MLNERDetector()
+        except Exception as e:
+            logger.warning(f"Failed to initialize ML detector: {e}")
+            _ml_detector_instance = None
+    return _ml_detector_instance
 
 
 def _resolve_overlaps(findings: List[RawFinding]) -> List[RawFinding]:
@@ -54,7 +70,8 @@ def detect_in_chunk(chunk: TextChunk) -> List[RawFinding]:
 
     # Cerca nel cache
     cache = get_detector_cache()
-    cached_findings = cache.get(chunk.text, chunk.chunk_id)
+    chunk_id = chunk.source_ref or f"chunk_{id(chunk)}"  # Use source_ref as ID
+    cached_findings = cache.get(chunk.text, chunk_id)
     if cached_findings is not None:
         return cached_findings
 
@@ -76,12 +93,21 @@ def detect_in_chunk(chunk: TextChunk) -> List[RawFinding]:
         all_findings.extend(dict_findings)
     except Exception as e:
         logger.error("Errore nel DictionaryDetector: %s", e)
+    
+    # Esegui il ML/NER detector (P2 feature)
+    try:
+        ml_detector = get_ml_detector()
+        if ml_detector and ml_detector.enabled:
+            ml_findings = ml_detector.detect(chunk)
+            all_findings.extend(ml_findings)
+    except Exception as e:
+        logger.error("Errore nel MLNERDetector: %s", e)
 
     # Risolvi le sovrapposizioni
     resolved_findings = _resolve_overlaps(all_findings)
 
     # Salva nel cache
-    cache.put(chunk.text, chunk.chunk_id, resolved_findings)
+    cache.put(chunk.text, chunk_id, resolved_findings)
 
     return resolved_findings
 

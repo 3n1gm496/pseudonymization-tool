@@ -49,3 +49,8 @@ STREAMING_CHUNK_SIZE = int(os.environ.get("STREAMING_CHUNK_SIZE", "1000"))  # ch
 DETECTOR_CACHE_ENABLED = os.environ.get("DETECTOR_CACHE_ENABLED", "true").lower() == "true"
 DETECTOR_CACHE_TTL_SECONDS = int(os.environ.get("DETECTOR_CACHE_TTL_SECONDS", "3600"))  # 1 ora
 DETECTOR_CACHE_MAX_SIZE = int(os.environ.get("DETECTOR_CACHE_MAX_SIZE", "10000"))  # max 10k entries
+
+# ML/NER detector (P2 feature)
+ML_NER_ENABLED = os.environ.get("ML_NER_ENABLED", "true").lower() == "true"
+ML_NER_MODEL = os.environ.get("ML_NER_MODEL", "en_core_web_sm")  # spaCy model
+ML_NER_CONFIDENCE_THRESHOLD = float(os.environ.get("ML_NER_CONFIDENCE_THRESHOLD", "0.7"))  # min confidence
