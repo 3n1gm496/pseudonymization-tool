@@ -139,12 +139,43 @@ docker compose down
 
 ---
 
+## 🤖 Integrazione con AI - "Prepara per AI"
+
+Vuoi inviare i tuoi dati a un modello AI (ChatGPT, Claude, LLaMA) senza esporre informazioni sensibili?
+
+### Workflow
+
+1. **Pseudonimizza i tuoi dati** nel Tool (vedi sezione Utilizzo sopra)
+2. **Scarica il testo pseudonimizzato** dalla sezione risultati
+3. **Scarica il file `mapping.enc` cifrato** (nel drawer "Prepara per AI")
+4. **Invia il testo pseudonimo all'AI** (non inviare il mapping.enc o la passphrase)
+5. **Ricevi la risposta dall'AI** (che contiene i tuoi pseudonimi)
+6. **Usa il tab "Decifera Risposta AI"** per reintegrare i dati originali
+
+### Sicurezza
+
+- ✅ Dati originali **MAI inviati** a terze parti
+- ✅ Mapping cifrato con **AES-256-GCM + PBKDF2-600k**
+- ✅ Passphrase **NON inviata** con il mapping
+- ✅ Nulla può essere decifrato senza la passphrase
+
+### Documentazione Completa
+
+→ Vedi [docs/11_AI_Integration_and_Revert_Flows.md](docs/11_AI_Integration_and_Revert_Flows.md) per:
+- Passaggio-per-passaggio dei tre flussi (Prepara per AI, Decifera Risposta, Revert Batch ZIP)
+- Come scegliere una passphrase robusta
+- Exemple workflow completo
+- Troubleshooting
+
+---
+
 ## 🔐 Sicurezza e Limitazioni
 
-- **Passphrase**: La sicurezza del mapping dipende dalla robustezza della passphrase. Usane una lunga e complessa.
+- **Passphrase**: La sicurezza del mapping dipende dalla robustezza della passphrase. Usane una lunga e complessa (min 12 char, con maiuscole/minuscole/numeri/simboli).
 - **OCR**: La qualità dell'OCR dipende dalla risoluzione e dalla chiarezza dell'immagine. Testo sfocato o scritto a mano potrebbe non essere rilevato.
 - **Formule XLSX**: Le formule vengono ignorate e non pseudonimizzate per evitare di corrompere i fogli di calcolo.
 - **Log di Installazione**: In caso di problemi durante l'installazione delle dipendenze, il log completo viene salvato in `install.log`.
+- **Mapping.enc**: Una volta persa la passphrase, il file mapping.enc non è più recuperabile. Conservarlo in un luogo sicuro.
 ---
 
 ## 🛠️ Sviluppo
