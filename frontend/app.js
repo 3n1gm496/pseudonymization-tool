@@ -5,12 +5,10 @@ const LS_MODE = 'pst_mode';
 const LS_LDAP = 'pst_ldap_config';
 const LS_SESSIONS = 'pst_sessions';
 const LS_PRESET = 'pst_preset';
-const LS_SOURCE_MODE = 'pst_source_mode';
 
 const state = {
   mode: localStorage.getItem(LS_MODE) || 'light',
   preset: localStorage.getItem(LS_PRESET) || 'SOC Logs',
-  sourceMode: localStorage.getItem(LS_SOURCE_MODE) || 'console',
   batches: {},
   activeBatchId: null,
   currentPassphrase: null,
@@ -21,7 +19,6 @@ const state = {
 
 document.addEventListener('DOMContentLoaded', () => {
   setMode(state.mode, false);
-  setSourceMode(state.sourceMode, false);
   setPreset(state.preset, false);
   checkServerHealth();
   setInterval(checkServerHealth, 15000);
@@ -88,16 +85,6 @@ function setMode(m, save) {
   if (el) el.textContent = m === 'light' ? 'Light' : 'Strict';
 }
 
-function setSourceMode(mode, save) {
-  if (save === undefined) save = true;
-  state.sourceMode = mode;
-  if (save) localStorage.setItem(LS_SOURCE_MODE, mode);
-  const btnConsole = document.getElementById('source-console');
-  const btnFile = document.getElementById('source-file');
-  if (btnConsole) btnConsole.classList.toggle('active', mode === 'console');
-  if (btnFile) btnFile.classList.toggle('active', mode === 'file');
-}
-
 function setPreset(preset, save) {
   if (save === undefined) save = true;
   state.preset = preset;
@@ -139,10 +126,6 @@ async function pasteFromClipboard() {
 // ─── FLUSSO 1: TESTO INLINE ──────────────────────────────────────────────────
 
 async function scanComposer() {
-  if (state.sourceMode !== 'console') {
-    toast('Modalità corrente: File. Passa a Console per scansionare testo inline.', 'warning');
-    return;
-  }
   const ta = document.getElementById('composer-textarea');
   const text = ta.value.trim();
   if (!text) { toast('Inserisci del testo prima di scansionare.', 'warning'); return; }
@@ -193,10 +176,6 @@ async function scanComposer() {
 // ─── FLUSSO 2: UPLOAD FILE ───────────────────────────────────────────────────
 
 async function handleFileUpload(event) {
-  if (state.sourceMode !== 'file') {
-    toast('Modalità corrente: Console. Passa a File per caricare documenti.', 'warning');
-    return;
-  }
   const files = Array.from(event.target.files);
   if (!files.length) return;
   event.target.value = '';
@@ -864,10 +843,6 @@ async function refreshLdapCache() {
 // ─── DRAG-AND-DROP DIRETTO ──────────────────────────────────────────────────
 
 async function handleFileUploadDirect(files) {
-  if (state.sourceMode !== 'file') {
-    toast('Modalità corrente: Console. Passa a File per drag-and-drop.', 'warning');
-    return;
-  }
   if (!files || !files.length) return;
   for (const file of files) {
     const cardEl = createBatchCard(null, file.name, 'uploading');
