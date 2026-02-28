@@ -709,6 +709,30 @@ async def console_apply(req: dict, request: Request):
 
     passphrase = get_passphrase(batch_id)
 
+    # Create and save encrypted mapping for console batch
+    # This allows "Prepara per AI" flow to download mapping.enc
+    try:
+        from app.models.schemas import ReviewAction
+        file_findings = [f for f in batch.findings if f.file_id == file_id]
+        mapping_data = {"mapping": {}}
+        for finding in file_findings:
+            if finding.review_action != ReviewAction.REJECT:
+                pseudo = finding.final_pseudonym
+                canon = finding.canonical_value or finding.original_value
+                if pseudo not in mapping_data["mapping"]:
+                    mapping_data["mapping"][pseudo] = canon
+        
+        # Save encrypted mapping to batch directory
+        from app.mapping.crypto import save_encrypted_mapping
+        batch_dir = get_batch_dir(batch_id)
+        mapping_path = batch_dir / "mapping.enc"
+        save_encrypted_mapping(mapping_data, passphrase, mapping_path)
+        logger.info("Console batch mapping.enc salvato per batch %s", batch_id)
+    except Exception as e:
+        logger.error("Errore nel salvataggio mapping per console batch %s: %s", batch_id, e)
+        # Non fallire l'intera operazione se il mapping non può essere salvato
+        # Ma loggiamo l'errore per debugging
+
     return {
         "batch_id": batch_id,
         "file_id": file_id,
