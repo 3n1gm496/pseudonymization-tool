@@ -4,22 +4,50 @@ Il server è configurato per ascoltare SOLO su 127.0.0.1 (localhost).
 """
 import time
 import uuid
+from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from pathlib import Path
+from threading import Lock
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import router
 from app.api.monitoring import router as monitoring_router
-from app.core.config import SERVER_HOST, SERVER_PORT
+from app.core.config import SERVER_HOST, SERVER_PORT, RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SECONDS
 from app.core.logging_config import configure_logging, get_logger, log_request_start, log_request_end
 
 # Configure structured logging
 configure_logging(log_level="INFO", json_logs=False)
 logger = get_logger(__name__)
+
+_RATE_LIMIT_EXCLUDED_PATHS = {"/api/health", "/api/ready", "/api/metrics"}
+_request_timestamps: dict[str, deque[float]] = defaultdict(deque)
+_rate_limit_lock = Lock()
+
+
+def _client_key(request: Request) -> str:
+    if request.client and request.client.host:
+        return request.client.host
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return "unknown"
+
+
+def _is_rate_limited(client_id: str, now: float) -> bool:
+    with _rate_limit_lock:
+        bucket = _request_timestamps[client_id]
+        threshold = now - RATE_LIMIT_WINDOW_SECONDS
+        while bucket and bucket[0] < threshold:
+            bucket.popleft()
+        if len(bucket) >= RATE_LIMIT_REQUESTS:
+            return True
+        bucket.append(now)
+    return False
 
 
 # ─── Lifespan (startup/shutdown moderno, compatibile FastAPI >= 0.93) ─────────
@@ -75,6 +103,16 @@ async def logging_middleware(request: Request, call_next):
     # Add request ID to state
     request.state.request_id = request_id
 
+    if request.url.path.startswith("/api") and request.url.path not in _RATE_LIMIT_EXCLUDED_PATHS:
+        now = time.monotonic()
+        client_id = _client_key(request)
+        if _is_rate_limited(client_id, now):
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Rate limit exceeded. Retry later."},
+                headers={"Retry-After": str(RATE_LIMIT_WINDOW_SECONDS)},
+            )
+
     log_request_start(
         method=request.method,
         path=request.url.path,
@@ -95,6 +133,10 @@ async def logging_middleware(request: Request, call_next):
 
     # Add correlation ID to response headers
     response.headers["X-Request-ID"] = request_id
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Cache-Control"] = "no-store"
 
     return response
 
