@@ -206,6 +206,16 @@ def _scrub_sensitive(value: Any) -> Any:
     return value
 
 
+def _audit_event(request: Optional[Request], action: str, **details: Any) -> None:
+    user = "anonymous"
+    ip = "unknown"
+    if request is not None:
+        user = getattr(request.state, "auth_user", "anonymous")
+        ip = request.client.host if request.client else "unknown"
+    cleaned = _scrub_sensitive(details)
+    logger.info("AUDIT action=%s user=%s ip=%s details=%s", action, user, ip, cleaned)
+
+
 # ─── Health ───────────────────────────────────────────────────────────────────
 
 @router.get("/health")
@@ -219,10 +229,11 @@ async def health_check():
 
 
 @router.post("/auth/login")
-async def auth_login(req: dict, response: Response):
+async def auth_login(req: dict, response: Response, request: Request):
     username = (req.get("username") or "").strip()
     password = req.get("password") or ""
     if not verify_credentials(username, password):
+        _audit_event(request, "auth_login_failed", username=username)
         raise HTTPException(status_code=401, detail="Credenziali non valide")
 
     token, expires_at = create_session(username or ADMIN_USERNAME)
@@ -235,6 +246,7 @@ async def auth_login(req: dict, response: Response):
         max_age=SESSION_TTL_SECONDS,
         path="/",
     )
+    _audit_event(request, "auth_login_success", username=username or ADMIN_USERNAME)
     return {
         "authenticated": True,
         "username": username or ADMIN_USERNAME,
@@ -249,6 +261,7 @@ async def auth_logout(request: Request, response: Response):
     token = extract_token_from_request(request)
     destroy_session(token)
     response.delete_cookie(key=SESSION_COOKIE_NAME, path="/")
+    _audit_event(request, "auth_logout")
     return {"ok": True}
 
 
@@ -391,6 +404,15 @@ async def create_new_batch(
         logger.error("Errore scansione batch %s: %s", batch.batch_id, e)
         raise HTTPException(status_code=500, detail=f"Errore durante la scansione: {e}")
 
+    _audit_event(
+        request,
+        "batch_scan_completed",
+        batch_id=batch.batch_id,
+        files_count=len(batch.files),
+        findings_count=len(batch.findings),
+        safety_label=batch.safety_label.value if batch.safety_label else "SAFE_TO_UPLOAD",
+    )
+
     return {
         "batch_id": batch.batch_id,
         "status": batch.status.value,
@@ -458,6 +480,14 @@ async def console_scan(req: dict, request: Request):
         fd = f.model_dump() if hasattr(f, "model_dump") else f.dict()
         findings_list.append(fd)
 
+    _audit_event(
+        request,
+        "console_scan_completed",
+        batch_id=batch.batch_id,
+        findings_count=len(findings_list),
+        safety_label=safety.value if hasattr(safety, "value") else str(safety),
+    )
+
     return {
         "batch_id": batch.batch_id,
         "file_id": file_id,
@@ -520,6 +550,15 @@ async def console_apply(req: dict, request: Request):
         logger.error("Errore console/apply batch %s: %s", batch_id, e)
         raise HTTPException(status_code=500, detail=str(e))
 
+    _audit_event(
+        request,
+        "console_apply_completed",
+        batch_id=batch_id,
+        file_id=file_id,
+        applied_count=applied_count,
+        safety_label=safety.value if hasattr(safety, "value") else str(safety),
+    )
+
     return {
         "batch_id": batch_id,
         "pseudonymized_text": pseudo_text,
@@ -574,7 +613,7 @@ async def get_findings(batch_id: str):
 
 
 @router.post("/batches/{batch_id}/review")
-async def submit_review(batch_id: str, review_request: SubmitReviewRequest):
+async def submit_review(batch_id: str, review_request: SubmitReviewRequest, request: Request):
     """
     Persiste le decisioni di review per il batch.
     Le decisions vengono applicate al momento dell'apply.
@@ -600,6 +639,16 @@ async def submit_review(batch_id: str, review_request: SubmitReviewRequest):
 
     # Applica anche ai finding in memoria per coerenza immediata
     batch = apply_review_decisions(batch_id, review_request.decisions)
+
+    _audit_event(
+        request,
+        "batch_review_saved",
+        batch_id=batch_id,
+        accepted=counts["accepted"],
+        rejected=counts["rejected"],
+        modified=counts["modified"],
+        total=len(review_request.decisions),
+    )
 
     return {
         "message": f"Review persistita: {len(review_request.decisions)} decisioni.",
@@ -669,6 +718,15 @@ async def apply_batch(batch_id: str, request: Request):
     accepted_count = decisions_count - rejected_count - modified_count
     ignored_count = rejected_count  # i rejected non vengono sostituiti
 
+    _audit_event(
+        request,
+        "batch_apply_completed",
+        batch_id=batch_id,
+        accepted_count=accepted_count,
+        rejected_count=rejected_count,
+        modified_count=modified_count,
+    )
+
     return {
         "message": "Trasformazioni applicate.",
         "batch_id": batch_id,
@@ -682,10 +740,15 @@ async def apply_batch(batch_id: str, request: Request):
 
 
 @router.get("/batches/{batch_id}/download")
-async def download_batch(batch_id: str, background_tasks: BackgroundTasks):
+async def download_batch(batch_id: str, background_tasks: BackgroundTasks, request: Request):
     batch = get_batch(batch_id)
     if not batch:
         raise HTTPException(status_code=404, detail=f"Batch non trovato: {batch_id}")
+    if any(getattr(f, "is_text_input", False) for f in batch.files):
+        raise HTTPException(
+            status_code=400,
+            detail="Download ZIP disponibile solo per batch da file. Per input testo usa il download TXT dalla UI.",
+        )
     if batch.status != BatchStatus.DONE:
         raise HTTPException(status_code=400, detail=f"Batch non completato (stato: {batch.status.value}).")
     batch_dir = get_batch_dir(batch_id)
@@ -696,6 +759,7 @@ async def download_batch(batch_id: str, background_tasks: BackgroundTasks):
     
     # Security Fix #10: Cleanup dict after download
     _batch_start_times.pop(batch_id, None)
+    _audit_event(request, "batch_download", batch_id=batch_id, filename=zip_path.name)
     background_tasks.add_task(cleanup_batch, batch_id)
     return FileResponse(path=str(zip_path), media_type="application/zip", filename=zip_path.name)
 

@@ -89,14 +89,15 @@ const FindingsTable = ({ batch, onApply, isLoading }) => {
 
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
+            <caption className="sr-only">Tabella findings con decisioni di review</caption>
             <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
               <tr>
-                <th className="px-4 py-3 text-left font-semibold">Tipo</th>
-                <th className="px-4 py-3 text-left font-semibold">Valore Originale</th>
-                <th className="px-4 py-3 text-left font-semibold">Proposta</th>
-                <th className="px-4 py-3 text-left font-semibold">Personalizzazione</th>
-                <th className="px-4 py-3 text-left font-semibold">Confidenza</th>
-                <th className="px-4 py-3 text-left font-semibold">Azione</th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold">Tipo</th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold">Valore Originale</th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold">Proposta</th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold">Personalizzazione</th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold">Confidenza</th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold">Azione</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
@@ -121,6 +122,7 @@ const FindingsTable = ({ batch, onApply, isLoading }) => {
                       className="w-full px-2 py-1 text-xs border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="Personalizza..."
                       disabled={isLoading}
+                      aria-label={`Pseudonimo personalizzato per ${finding.entity_type}`}
                     />
                   </td>
                   <td className="px-4 py-3">
@@ -140,6 +142,7 @@ const FindingsTable = ({ batch, onApply, isLoading }) => {
                       }
                       className="px-2 py-1 text-xs border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       disabled={isLoading}
+                      aria-label={`Azione review per ${finding.entity_type}`}
                     >
                       <option value="accept">Accetta</option>
                       <option value="reject">Rifiuta</option>

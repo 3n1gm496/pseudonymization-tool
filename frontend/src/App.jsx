@@ -16,7 +16,6 @@ const App = () => {
   const [isLoading, setIsLoading] = useState(false)
   const [authUser, setAuthUser] = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
-  const [authWarning, setAuthWarning] = useState('')
   const { showToast, ToastContainer } = useToast()
 
   useEffect(() => {
@@ -24,9 +23,6 @@ const App = () => {
       try {
         const response = await axios.get('/api/auth/me')
         setAuthUser(response.data.username)
-        if (response.data.default_password) {
-          setAuthWarning('Stai usando la password di default: cambiala via AUTH_PASSWORD.')
-        }
       } catch {
         setAuthUser(null)
       } finally {
@@ -41,11 +37,6 @@ const App = () => {
     try {
       const response = await axios.post('/api/auth/login', { username, password })
       setAuthUser(response.data.username)
-      if (response.data.default_password) {
-        setAuthWarning('Stai usando la password di default: cambiala via AUTH_PASSWORD.')
-      } else {
-        setAuthWarning('')
-      }
       showToast('Login effettuato', 'success')
     } catch (error) {
       showToast(error.response?.data?.detail || 'Login fallito', 'error')
@@ -123,33 +114,26 @@ const App = () => {
       <Header user={authUser} onLogout={handleLogout} />
 
       <main className="max-w-7xl mx-auto py-8 px-4 space-y-8">
-        {authWarning && (
-          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 text-yellow-900 dark:text-yellow-200 px-4 py-3 rounded-lg">
-            {authWarning}
-          </div>
-        )}
         {/* Progress Bar */}
-        {(currentStep === 'findings' || currentStep === 'results') && (
-          <div className="flex items-center gap-4 justify-center mb-8">
-            <div className={`px-4 py-2 rounded-lg font-medium ${
-              currentStep === 'scanner' ? 'bg-blue-600 text-white' : 'bg-green-600 text-white'
-            }`}>
-              ✓ Scansione
-            </div>
-            <div className="h-1 flex-1 bg-slate-300 dark:bg-slate-700"></div>
-            <div className={`px-4 py-2 rounded-lg font-medium ${
-              currentStep === 'findings' ? 'bg-blue-600 text-white' : 'bg-green-600 text-white'
-            }`}>
-              {currentStep === 'results' ? '✓' : '2'} Revisione
-            </div>
-            <div className="h-1 flex-1 bg-slate-300 dark:bg-slate-700"></div>
-            <div className={`px-4 py-2 rounded-lg font-medium ${
-              currentStep === 'results' ? 'bg-blue-600 text-white' : 'bg-slate-300 dark:bg-slate-700'
-            }`}>
-              3 Risultato
-            </div>
+        <div className="flex items-center gap-3 justify-center mb-8" aria-label="Stato avanzamento">
+          <div className={`px-4 py-2 rounded-lg font-medium ${
+            currentStep === 'scanner' ? 'bg-blue-600 text-white' : 'bg-green-600 text-white'
+          }`}>
+            {currentStep === 'scanner' ? '1' : '✓'} Scansione
           </div>
-        )}
+          <div className="h-1 flex-1 max-w-16 bg-slate-300 dark:bg-slate-700"></div>
+          <div className={`px-4 py-2 rounded-lg font-medium ${
+            currentStep === 'findings' ? 'bg-blue-600 text-white' : currentStep === 'results' ? 'bg-green-600 text-white' : 'bg-slate-300 dark:bg-slate-700'
+          }`}>
+            {currentStep === 'results' ? '✓' : '2'} Revisione
+          </div>
+          <div className="h-1 flex-1 max-w-16 bg-slate-300 dark:bg-slate-700"></div>
+          <div className={`px-4 py-2 rounded-lg font-medium ${
+            currentStep === 'results' ? 'bg-blue-600 text-white' : 'bg-slate-300 dark:bg-slate-700'
+          }`}>
+            3 Risultato
+          </div>
+        </div>
 
         {/* Scanner Step */}
         {currentStep === 'scanner' && (
@@ -174,15 +158,8 @@ const App = () => {
             <Results
               batch={batch}
               pseudonymizedText={pseudonymizedText}
+              onNewScan={handleReset}
             />
-            <div className="text-center">
-              <button
-                onClick={handleReset}
-                className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
-              >
-                ← Torna al Nuovo Scan
-              </button>
-            </div>
           </>
         )}
       </main>

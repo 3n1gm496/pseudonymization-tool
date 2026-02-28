@@ -66,13 +66,22 @@ const Scanner = ({ onScan, isLoading }) => {
     }
   }
 
+  const handleDropzoneKeyDown = (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      fileInputRef.current?.click()
+    }
+  }
+
   return (
     <div className="w-full max-w-4xl mx-auto p-6 space-y-6">
       {/* Text Input */}
       <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-6">
         <h2 className="text-lg font-semibold mb-4">Testo Diretto</h2>
         <form onSubmit={handleTextScan} className="space-y-4">
+          <label htmlFor="scan-text" className="sr-only">Testo da pseudonimizzare</label>
           <textarea
+            id="scan-text"
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder="Incolla o digita il testo da pseudonimizzare..."
@@ -80,6 +89,7 @@ const Scanner = ({ onScan, isLoading }) => {
             maxLength={10000}
             className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
             disabled={isLoading}
+            aria-label="Testo da pseudonimizzare"
           />
           <div className="flex justify-between items-center">
             <span className="text-sm text-slate-500 dark:text-slate-400">
@@ -104,7 +114,11 @@ const Scanner = ({ onScan, isLoading }) => {
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
+          onKeyDown={handleDropzoneKeyDown}
           className="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg p-8 text-center cursor-pointer hover:border-blue-500 transition-colors"
+          role="button"
+          tabIndex={0}
+          aria-label="Area caricamento file"
         >
           <input
             ref={fileInputRef}
@@ -113,6 +127,7 @@ const Scanner = ({ onScan, isLoading }) => {
             onChange={(e) => setUploadedFile(e.target.files?.[0] || null)}
             className="hidden"
             disabled={isLoading}
+            aria-label="Seleziona file"
           />
           <div className="space-y-2">
             <div className="text-3xl">📁</div>

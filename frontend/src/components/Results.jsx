@@ -2,9 +2,10 @@ import React from 'react'
 import axios from 'axios'
 import { useToast } from '../hooks/useToast'
 
-const Results = ({ batch, pseudonymizedText }) => {
+const Results = ({ batch, pseudonymizedText, onNewScan }) => {
   const { showToast } = useToast()
   const [copied, setCopied] = React.useState(false)
+  const isTextFlow = !!batch?.is_text_input
 
   const handleCopy = () => {
     navigator.clipboard.writeText(pseudonymizedText || '')
@@ -29,6 +30,18 @@ const Results = ({ batch, pseudonymizedText }) => {
     }
   }
 
+  const handleDownloadText = () => {
+    const textContent = pseudonymizedText || ''
+    const blob = new Blob([textContent], { type: 'text/plain;charset=utf-8' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `pseudonymized-${batch.batch_id.slice(0, 8)}.txt`
+    a.click()
+    window.URL.revokeObjectURL(url)
+    showToast('Download TXT completato', 'success')
+  }
+
   const canShowText = typeof pseudonymizedText === 'string' && pseudonymizedText.length > 0
 
   return (
@@ -43,7 +56,7 @@ const Results = ({ batch, pseudonymizedText }) => {
 
         <div className="p-6 space-y-4">
           {canShowText && (
-          <div className="p-6 space-y-4">
+          <div className="space-y-4">
             <div>
               <label className="block text-sm font-semibold mb-2">Testo Pseudonimizzato</label>
               <div className="relative">
@@ -65,15 +78,25 @@ const Results = ({ batch, pseudonymizedText }) => {
           )}
 
           <div className="flex gap-3">
+            {!isTextFlow ? (
+              <button
+                onClick={handleDownload}
+                className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
+              >
+                📥 Scarica ZIP
+              </button>
+            ) : (
+              <button
+                onClick={handleDownloadText}
+                className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
+              >
+                📥 Scarica TXT
+              </button>
+            )}
             <button
-              onClick={handleDownload}
-              className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
-            >
-              📥 Scarica ZIP
-            </button>
-            <button
-              onClick={() => window.location.reload()}
+              onClick={onNewScan}
               className="flex-1 px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-medium transition-colors"
+              aria-label="Avvia una nuova scansione"
             >
               🔄 Nuovo Scan
             </button>
