@@ -21,6 +21,7 @@ class RawFinding:
     source_chunk: TextChunk
     confidence_score: float
     detector_name: str
+    canonical_value: str = ""
     start_pos: int = 0  # Posizione di inizio nel testo del chunk
     end_pos: int = 0    # Posizione di fine nel testo del chunk
     # Per le immagini, il bbox specifico della parola/entità trovata
