@@ -1,33 +1,57 @@
-# Profili:
-#   - dev: development, console rebuild
-#   - prod: production hardened
+# Docker Compose: Pseudonymization Tool v4.0
+# Modes:
+#   - dev:  development (console logs visible)
+#   - prod: production (hardened)
+#
+# Usage:
+#   docker compose up --build          # Build & run (dev profile)
+#   docker compose up --build -d       # Build & run in background
+#   COMPOSE_PROFILES=prod docker compose up --build  # Production build
+#   docker compose down                # Stop & remove
+
 services:
   pseudonymization-tool:
     build:
       context: .
       dockerfile: Dockerfile
+      # Multi-stage build:
+      # - Stage 1 (frontend-builder): Node.js 20 → builds React/Tailwind → frontend/dist/
+      # - Stage 2 (runtime): Python 3.12-slim → includes Tesseract OCR → serves frontend + API
+    
     container_name: pseudonymization-tool
+    image: pseudonymization-tool:latest
+    
+    # API port exposed
     ports:
       - "8000:8000"
+    
+    # Configuration
     environment:
       PSEUDONYMIZER_PORT: "8000"
       API_HEAVY_TIMEOUT_SECONDS: "180"
       MAX_UPLOAD_FILES_PER_BATCH: "20"
       MAX_CONSOLE_TEXT_CHARS: "200000"
-    profiles:
-      - dev
-      - prod
+      PYTHONUNBUFFERED: "1"
+    
+    # Volume mounts (config + temp storage)
     volumes:
-      - ./backend/config:/app/backend/config
+      - ./backend/config:/app/backend/config:ro
       - ./output_samples:/app/output_samples
       - pseudonymizer_tmp:/tmp/pseudonymizer_batches
+    
+    # Health check (API readiness)
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 20s
+    
+    # Restart policy
     restart: unless-stopped
 
+# Named volume for batch temp storage
 volumes:
   pseudonymizer_tmp:
+    driver: local
+

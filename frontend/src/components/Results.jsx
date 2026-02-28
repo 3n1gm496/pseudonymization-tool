@@ -1,0 +1,100 @@
+import React from 'react'
+import axios from 'axios'
+import { useToast } from '../hooks/useToast'
+
+const Results = ({ batch, pseudonymizedText }) => {
+  const { showToast } = useToast()
+  const [copied, setCopied] = React.useState(false)
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(pseudonymizedText || '')
+    setCopied(true)
+    showToast('Testo copiato negli appunti', 'success')
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleDownload = async () => {
+    try {
+      const response = await axios.get(`/api/batches/${batch.batch_id}/download`, {
+        responseType: 'blob',
+      })
+      const url = window.URL.createObjectURL(response.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `pseudonymized-batch-${batch.batch_id.slice(0, 8)}.zip`
+      a.click()
+      showToast('Download completato', 'success')
+    } catch (error) {
+      showToast('Errore durante il download', 'error')
+    }
+  }
+
+  return (
+    <div className="w-full max-w-4xl mx-auto p-6 space-y-6">
+      <div className="bg-white dark:bg-slate-800 rounded-lg shadow overflow-hidden">
+        <div className="p-6 border-b border-slate-200 dark:border-slate-700">
+          <h2 className="text-lg font-semibold mb-2">Risultato Pseudonimizzazione</h2>
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            Batch ID: <code className="bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded text-xs">{batch.batch_id.slice(0, 12)}...</code>
+          </p>
+        </div>
+
+        {pseudonymizedText && (
+          <div className="p-6 space-y-4">
+            <div>
+              <label className="block text-sm font-semibold mb-2">Testo Pseudonimizzato</label>
+              <div className="relative">
+                <textarea
+                  readOnly
+                  value={pseudonymizedText}
+                  rows={8}
+                  className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-900 dark:text-white font-mono text-sm resize-none"
+                />
+                <button
+                  onClick={handleCopy}
+                  className="absolute top-2 right-2 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm transition-colors"
+                >
+                  {copied ? '✓ Copiato' : 'Copia'}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={handleDownload}
+                className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
+              >
+                📥 Scarica ZIP
+              </button>
+              <button
+                onClick={() => window.location.reload()}
+                className="flex-1 px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-medium transition-colors"
+              >
+                🔄 Nuovo Scan
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
+          <div className="text-sm font-semibold text-blue-900 dark:text-blue-200">Entità Pseudonimizzate</div>
+          <div className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">{batch.findings.length}</div>
+        </div>
+        <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 border border-green-200 dark:border-green-800">
+          <div className="text-sm font-semibold text-green-900 dark:text-green-200">Safety Label</div>
+          <div className="text-lg font-bold text-green-600 dark:text-green-400 mt-1">{batch.safety_label}</div>
+        </div>
+        <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4 border border-purple-200 dark:border-purple-800">
+          <div className="text-sm font-semibold text-purple-900 dark:text-purple-200">Modalità</div>
+          <div className="text-lg font-bold text-purple-600 dark:text-purple-400 mt-1">
+            {batch.is_text_input ? '📝 Testo' : '📄 File'}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default Results

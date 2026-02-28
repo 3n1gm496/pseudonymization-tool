@@ -7,7 +7,7 @@ import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -80,21 +80,55 @@ app.add_middleware(
 # Registra i router API
 app.include_router(router)
 
-# Serve i file statici del frontend
-FRONTEND_DIR = Path(__file__).resolve().parent.parent.parent / "frontend"
-if FRONTEND_DIR.exists():
-    app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
+# Serve i file statici del frontend React (production build o fallback)
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+FRONTEND_BUILD = BASE_DIR / "frontend" / "dist"
+FRONTEND_DEV = BASE_DIR / "frontend"
 
-    @app.get("/", response_class=FileResponse)
-    async def serve_frontend():
-        """Serve l'interfaccia web principale."""
-        return FileResponse(str(FRONTEND_DIR / "index.html"))
+# Determina da quale directory servire
+if FRONTEND_BUILD.exists():
+    frontend_dir = FRONTEND_BUILD
+    logger.info("Serving React production build from: %s", frontend_dir)
+elif FRONTEND_DEV.exists():
+    frontend_dir = FRONTEND_DEV
+    logger.info("Serving fallback frontend from: %s", frontend_dir)
 else:
-    logger.warning("Directory frontend non trovata: %s", FRONTEND_DIR)
+    frontend_dir = None
+    logger.warning("Frontend directory not found")
 
+if frontend_dir and frontend_dir.exists():
+    # Mount static files if exists
+    if (frontend_dir / "assets").exists():
+        app.mount("/assets", StaticFiles(directory=str(frontend_dir / "assets")), name="assets")
+    
+    # SPA routing: serve index.html for unknown routes (client-side routing)
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        """Serve React SPA with client-side routing fallback."""
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not Found")
+        
+        requested_path = frontend_dir / full_path
+        if requested_path.exists() and requested_path.is_file():
+            return FileResponse(str(requested_path))
+        
+        index_path = frontend_dir / "index.html"
+        if index_path.exists():
+            return FileResponse(str(index_path))
+        
+        raise HTTPException(status_code=404, detail="Not Found")
+    
+    @app.get("/")
+    async def serve_root():
+        """Serve the main application."""
+        index_path = frontend_dir / "index.html"
+        if index_path.exists():
+            return FileResponse(str(index_path))
+        raise HTTPException(status_code=404, detail="Frontend not configured yet")
+else:
     @app.get("/")
     async def serve_placeholder():
-        return {"message": "Frontend non trovato. Avviare il server dalla directory corretta."}
+        return {"message": "Frontend not found. Ensure frontend/ directory exists."}
 
 
 if __name__ == "__main__":

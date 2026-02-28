@@ -1,11 +1,12 @@
-# Local Pseudonymization Tool
+# Local Pseudonymization Tool v4.0
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![React 18](https://img.shields.io/badge/React-18.2-61dafb.svg)](https://react.dev)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.3-38b2ac.svg)](https://tailwindcss.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688.svg)](https://fastapi.tiangolo.com)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-Web application locale per la pseudonimizzazione sicura di dati sensibili in documenti di testo, DOCX, XLSX, PDF e immagini. Progettato per ambienti enterprise che richiedono massima sicurezza e capacità di operare completamente offline.
+Web application locale moderna per la pseudonimizzazione sicura di dati sensibili in documenti di testo, DOCX, XLSX, PDF e immagini. Interfaccia React con Tailwind CSS, darkmode supportato. Progettato per ambienti enterprise che richiedono massima sicurezza e capacità di operare completamente offline.
 
 🔗 **Repository:** [github.com/3n1gm496/pseudonymization-tool](https://github.com/3n1gm496/pseudonymization-tool)
 
@@ -156,15 +157,76 @@ python3.11 -m venv .venv
 source .venv/bin/activate  # Linux/macOS
 # oppure .venv\Scripts\activate  # Windows
 
-# Installa dipendenze
+# Installa dipendenze backend
 pip install -r backend/requirements.txt
-
-# Avvia backend in modalità dev
-cd backend
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### Esecuzione Test
+### Frontend React (v4.0+)
+
+Il frontend è stato modernizzato con **React 18**, **Tailwind CSS** e **dark mode**.
+
+#### Setup Frontend
+
+```bash
+cd frontend
+npm install
+```
+
+#### Dev (Vite + HMR)
+
+```bash
+# Terminal 1: Backend
+cd backend
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+
+# Terminal 2: Frontend (Vite dev server)
+cd frontend
+npm run dev
+```
+
+Accedi a: `http://localhost:5173` (con API proxy a backend)
+
+#### Build per Production
+
+```bash
+cd frontend
+npm run build
+```
+
+Crea `frontend/dist/` che FastAPI servira' automaticamente in produzione.
+
+**Alternativa (Full Stack Script)**
+
+```bash
+./dev-stack.sh
+```
+
+Avvia sia backend che frontend in parallelo. Premi Ctrl+C per fermare entrambi.
+
+#### Caratteristiche Frontend
+
+✨ **UI/UX**
+- Dark mode toggle (persiste in localStorage)
+- Responsive design mobile-first
+- Smooth animations e transitions
+- Toast notifications (success, error, warning, info)
+- Drag-and-drop file upload
+
+📊 **Workflow**
+- Scanner unificato (testo + file)
+- Policy preview real-time
+- Findings table con review interattivo
+- Custom pseudonym personalizzato
+- Download ZIP con report (HTML + JSON)
+
+🔧 **Tech Stack**
+- React 18 con Hooks
+- Tailwind CSS v3 (dark mode)
+- Vite bundler (velocissimo)
+- Axios for API calls
+- Context API per state management
+
+
 
 ```bash
 cd backend
@@ -196,17 +258,45 @@ Note operative container:
 
 ```
 pseudonymization-tool/
-├── backend/              # FastAPI backend
+├── backend/                    # FastAPI backend
 │   ├── app/
-│   │   ├── api/         # API routes
-│   │   ├── core/        # Business logic
-│   │   ├── detectors/   # Entity detection
-│   │   ├── parsers/     # Document parsers
-│   │   ├── pseudonymizer/  # Transformation engine
-│   │   └── report/      # Report generation
-│   └── config/          # Configuration files
-├── frontend/            # Static HTML/CSS/JS
-└── docs/               # Documentation
+│   │   ├── api/               # API routes (/api/*)
+│   │   ├── core/              # Business logic
+│   │   ├── detectors/         # Entity detection (regex, dict, ML, SOC)
+│   │   ├── parsers/           # Document parsers (PDF, DOCX, XLSX, IMG)
+│   │   ├── pseudonymizer/     # Transformation engine
+│   │   ├── mapping/           # Crypto (AES-256 encryption)
+│   │   ├── report/            # Report generation
+│   │   └── models/            # Pydantic schemas
+│   ├── config/                # Configuration files
+│   ├── tests/                 # Unit & integration tests (60+)
+│   └── requirements.txt
+├── frontend/                  # React 18 + Tailwind CSS (v4.0+)
+│   ├── src/
+│   │   ├── components/        # React components
+│   │   │   ├── Header.jsx
+│   │   │   ├── Scanner.jsx
+│   │   │   ├── PolicySelector.jsx
+│   │   │   ├── FindingsTable.jsx
+│   │   │   └── Results.jsx
+│   │   ├── context/           # Context API (dark mode)
+│   │   ├── hooks/             # Custom hooks (useToast)
+│   │   ├── App.jsx            # Root component
+│   │   ├── main.jsx           # Entry point
+│   │   └── index.css          # Tailwind imports
+│   ├── dist/                  # Build output (production)
+│   ├── index.html
+│   ├── package.json
+│   ├── vite.config.js
+│   └── tailwind.config.js
+├── frontend-legacy/           # Vanilla JS (backup)
+├── scripts/                   # Operational tools
+│   └── ops.sh                 # Unified deployment script
+├── docs/                      # Documentation
+├── build-frontend.sh          # Build React frontend
+├── dev-stack.sh               # Start backend + frontend
+├── docker-compose.yml
+└── README.md
 ```
 
 ---
