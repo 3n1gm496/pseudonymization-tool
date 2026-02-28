@@ -40,3 +40,8 @@ MAX_CONCURRENT_SCANS = int(os.environ.get("MAX_CONCURRENT_SCANS", "2"))
 # Streaming per file grandi
 STREAMING_THRESHOLD_MB = int(os.environ.get("STREAMING_THRESHOLD_MB", "50"))
 STREAMING_CHUNK_SIZE = int(os.environ.get("STREAMING_CHUNK_SIZE", "1000"))  # chunks di testo per volta
+
+# Caching detector results
+DETECTOR_CACHE_ENABLED = os.environ.get("DETECTOR_CACHE_ENABLED", "true").lower() == "true"
+DETECTOR_CACHE_TTL_SECONDS = int(os.environ.get("DETECTOR_CACHE_TTL_SECONDS", "3600"))  # 1 ora
+DETECTOR_CACHE_MAX_SIZE = int(os.environ.get("DETECTOR_CACHE_MAX_SIZE", "10000"))  # max 10k entries

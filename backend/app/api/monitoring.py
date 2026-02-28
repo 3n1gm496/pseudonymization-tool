@@ -110,9 +110,20 @@ async def metrics() -> Dict[str, Any]:
     """
     uptime = time.time() - START_TIME
 
+    # Get detector cache stats
+    cache_stats = {}
+    try:
+        from app.detectors.cache import get_detector_cache
+        cache = get_detector_cache()
+        cache_stats = cache.get_stats()
+    except Exception as e:
+        logger.warning("Failed to get cache stats: %s", e)
+        cache_stats = {"error": str(e)}
+
     return {
         "app_uptime_seconds": round(uptime, 2),
         "app_version": "1.0.0",
         "app_name": "pseudonymization-tool",
         "timestamp": datetime.utcnow().isoformat(),
+        "detector_cache": cache_stats,
     }

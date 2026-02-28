@@ -7,6 +7,7 @@ from typing import List
 from app.detectors.base import RawFinding
 from app.detectors.regex_detectors import ALL_REGEX_DETECTORS
 from app.detectors.dictionary_detector import get_dictionary_detector
+from app.detectors.cache import get_detector_cache
 from app.parsers.base import ParseResult, TextChunk
 
 logger = logging.getLogger(__name__)
@@ -46,10 +47,18 @@ def _resolve_overlaps(findings: List[RawFinding]) -> List[RawFinding]:
 def detect_in_chunk(chunk: TextChunk) -> List[RawFinding]:
     """
     Esegue tutti i detector su un singolo TextChunk e restituisce i finding deduplicati.
+    Usa il cache per evitare elaborazioni ripetute dello stesso testo.
     """
     if chunk.is_formula:
         return []
 
+    # Cerca nel cache
+    cache = get_detector_cache()
+    cached_findings = cache.get(chunk.text, chunk.chunk_id)
+    if cached_findings is not None:
+        return cached_findings
+
+    # Cache miss - esegui la detection
     all_findings: List[RawFinding] = []
 
     # Esegui i detector regex
@@ -69,7 +78,12 @@ def detect_in_chunk(chunk: TextChunk) -> List[RawFinding]:
         logger.error("Errore nel DictionaryDetector: %s", e)
 
     # Risolvi le sovrapposizioni
-    return _resolve_overlaps(all_findings)
+    resolved_findings = _resolve_overlaps(all_findings)
+
+    # Salva nel cache
+    cache.put(chunk.text, chunk.chunk_id, resolved_findings)
+
+    return resolved_findings
 
 
 def detect_in_parse_result(parse_result: ParseResult) -> List[RawFinding]:
