@@ -1,0 +1,92 @@
+"""
+Motore di detection: orchestra tutti i detector e gestisce le sovrapposizioni.
+"""
+import logging
+from typing import List
+
+from app.detectors.base import RawFinding
+from app.detectors.regex_detectors import ALL_REGEX_DETECTORS
+from app.detectors.dictionary_detector import get_dictionary_detector
+from app.parsers.base import ParseResult, TextChunk
+
+logger = logging.getLogger(__name__)
+
+
+def _resolve_overlaps(findings: List[RawFinding]) -> List[RawFinding]:
+    """
+    Risolve le sovrapposizioni tra finding nello stesso chunk di testo.
+    Strategia: priorità al match più lungo; a parità di lunghezza, priorità alla confidenza più alta.
+    """
+    if not findings:
+        return []
+
+    # Ordina per posizione di inizio, poi per lunghezza decrescente, poi per confidenza decrescente
+    sorted_findings = sorted(
+        findings,
+        key=lambda f: (f.start_pos, -(f.end_pos - f.start_pos), -f.confidence_score)
+    )
+
+    resolved = []
+    last_end = -1
+
+    for finding in sorted_findings:
+        if finding.start_pos >= last_end:
+            resolved.append(finding)
+            last_end = finding.end_pos
+        else:
+            # Sovrapposizione: mantieni il finding già selezionato (più lungo o più confidenza)
+            # Se il nuovo finding è più lungo, sostituisci
+            if resolved and finding.end_pos - finding.start_pos > resolved[-1].end_pos - resolved[-1].start_pos:
+                resolved[-1] = finding
+                last_end = finding.end_pos
+
+    return resolved
+
+
+def detect_in_chunk(chunk: TextChunk) -> List[RawFinding]:
+    """
+    Esegue tutti i detector su un singolo TextChunk e restituisce i finding deduplicati.
+    """
+    if chunk.is_formula:
+        return []
+
+    all_findings: List[RawFinding] = []
+
+    # Esegui i detector regex
+    for detector in ALL_REGEX_DETECTORS:
+        try:
+            chunk_findings = detector.detect(chunk)
+            all_findings.extend(chunk_findings)
+        except Exception as e:
+            logger.error("Errore nel detector '%s': %s", detector.name, e)
+
+    # Esegui il detector dizionario
+    try:
+        dict_detector = get_dictionary_detector()
+        dict_findings = dict_detector.detect(chunk)
+        all_findings.extend(dict_findings)
+    except Exception as e:
+        logger.error("Errore nel DictionaryDetector: %s", e)
+
+    # Risolvi le sovrapposizioni
+    return _resolve_overlaps(all_findings)
+
+
+def detect_in_parse_result(parse_result: ParseResult) -> List[RawFinding]:
+    """
+    Esegue la detection su tutti i chunk di un ParseResult.
+    """
+    all_findings: List[RawFinding] = []
+
+    for chunk in parse_result.chunks:
+        chunk_findings = detect_in_chunk(chunk)
+        all_findings.extend(chunk_findings)
+
+    logger.info(
+        "Detection completata per '%s': trovati %d finding in %d chunk.",
+        parse_result.file_path.name,
+        len(all_findings),
+        len(parse_result.chunks),
+    )
+
+    return all_findings
