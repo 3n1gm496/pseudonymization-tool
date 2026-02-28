@@ -12,19 +12,22 @@ Flussi:
 """
 import json
 import logging
+import asyncio
 import shutil
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Any, Dict
 
-from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.models.schemas import (
     Batch, BatchConfig, BatchMode, BatchStatus, FileRecord, FileStatus,
     BatchStatusResponse, FindingsResponse,
     SubmitReviewRequest, ReviewAction,
-    SafetyLabel,
+    SafetyLabel, PresetName,
     LdapConfig, LdapTestResult,
 )
 from app.core.batch_manager import (
@@ -36,12 +39,21 @@ from app.core.batch_manager import (
 from app.core.pipeline import run_scan_pipeline, apply_review_decisions, run_apply_pipeline
 from app.core.console_pipeline import run_text_scan, run_text_apply
 import math
-from app.core.config import SUPPORTED_EXTENSIONS, MAX_FILE_SIZE_BYTES, CONFIG_DIR
+from app.core.config import (
+    SUPPORTED_EXTENSIONS,
+    MAX_FILE_SIZE_BYTES,
+    CONFIG_DIR,
+    API_HEAVY_TIMEOUT_SECONDS,
+    MAX_UPLOAD_FILES_PER_BATCH,
+    MAX_CONSOLE_TEXT_CHARS,
+)
+from app.core.policies import get_policy, get_enabled_entity_types
 
 router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
 
 _batch_start_times: dict = {}
+_rate_buckets: Dict[str, List[float]] = {}
 
 # File di stato server-side (no password, no PII)
 _STATE_FILE = CONFIG_DIR / "state.json"
@@ -145,6 +157,43 @@ def _findings_list(batch: Batch) -> list:
     return result
 
 
+def _resolve_preset(raw_value: str) -> PresetName:
+    value = (raw_value or "").strip()
+    for preset in PresetName:
+        if preset.value.lower() == value.lower():
+            return preset
+    raise HTTPException(status_code=400, detail=f"Preset non valido: '{raw_value}'.")
+
+
+def _enforce_rate_limit(request: Request, scope: str, limit: int, window_seconds: int = 60) -> None:
+    client_ip = request.client.host if request.client else "unknown"
+    now = time.time()
+    bucket_key = f"{scope}:{client_ip}"
+    timestamps = _rate_buckets.get(bucket_key, [])
+    timestamps = [t for t in timestamps if now - t < window_seconds]
+    if len(timestamps) >= limit:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Troppe richieste per '{scope}'. Riprova tra pochi secondi.",
+        )
+    timestamps.append(now)
+    _rate_buckets[bucket_key] = timestamps
+
+
+def _scrub_sensitive(value: Any) -> Any:
+    if isinstance(value, dict):
+        cleaned = {}
+        for key, item in value.items():
+            key_l = str(key).lower()
+            if any(token in key_l for token in ("password", "passphrase", "secret", "token", "api_key", "bind_password")):
+                continue
+            cleaned[key] = _scrub_sensitive(item)
+        return cleaned
+    if isinstance(value, list):
+        return [_scrub_sensitive(item) for item in value]
+    return value
+
+
 # ─── Health ───────────────────────────────────────────────────────────────────
 
 @router.get("/health")
@@ -157,12 +206,28 @@ async def health_check():
     }
 
 
+@router.get("/ready")
+async def ready_check():
+    checks = {
+        "config_dir": CONFIG_DIR.exists(),
+        "dictionaries_dir": (CONFIG_DIR / "dictionaries").exists(),
+    }
+    ready = all(checks.values())
+    return {
+        "ready": ready,
+        "checks": checks,
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
+
 # ─── Batch (Upload File) ──────────────────────────────────────────────────────
 
 @router.post("/batches")
 async def create_new_batch(
+    request: Request,
     files: List[UploadFile] = File(...),
     mode: str = Form("light"),
+    preset: str = Form("SOC Logs"),
     passphrase: str = Form(""),
 ):
     """
@@ -171,6 +236,14 @@ async def create_new_batch(
     Integra Security Fix #3: File magic bytes validation
     Restituisce batch_id, passphrase generata, findings e safety_label.
     """
+    _enforce_rate_limit(request, "batch_create", limit=20)
+
+    if len(files) > MAX_UPLOAD_FILES_PER_BATCH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Numero file eccessivo ({len(files)}). Massimo consentito: {MAX_UPLOAD_FILES_PER_BATCH}.",
+        )
+
     # Security Fix #7: Validate passphrase entropy if provided
     if passphrase:
         _validate_passphrase(passphrase)
@@ -180,7 +253,9 @@ async def create_new_batch(
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Modalità non valida: '{mode}'. Usa 'light' o 'strict'.")
 
-    config = BatchConfig(mode=batch_mode)
+    batch_preset = _resolve_preset(preset)
+
+    config = BatchConfig(mode=batch_mode, preset=batch_preset)
     batch = Batch(config=config)
     batch = create_batch(batch)
 
@@ -238,7 +313,16 @@ async def create_new_batch(
     _batch_start_times[batch.batch_id] = datetime.utcnow().isoformat()
 
     try:
-        batch = run_scan_pipeline(batch.batch_id)
+        batch = await asyncio.wait_for(
+            run_in_threadpool(run_scan_pipeline, batch.batch_id),
+            timeout=API_HEAVY_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        cleanup_batch(batch.batch_id)
+        raise HTTPException(
+            status_code=504,
+            detail="Timeout durante la scansione del batch. Riduci dimensione o numero file.",
+        )
     except Exception as e:
         logger.error("Errore scansione batch %s: %s", batch.batch_id, e)
         raise HTTPException(status_code=500, detail=f"Errore durante la scansione: {e}")
@@ -258,24 +342,34 @@ async def create_new_batch(
 # ─── Console (Testo Inline) ───────────────────────────────────────────────────
 
 @router.post("/console/scan")
-async def console_scan(req: dict):
+async def console_scan(req: dict, request: Request):
     """
     Scansiona testo inline. Crea batch internamente.
     Accetta: { text, mode }
     Restituisce: batch_id, passphrase, findings, safety_label
     """
+    _enforce_rate_limit(request, "console_scan", limit=30)
+
     text = req.get("text", "").strip()
     mode_str = req.get("mode", "light")
+    preset_str = req.get("preset", "SOC Logs")
 
     if not text:
         raise HTTPException(status_code=400, detail="Il campo 'text' è obbligatorio.")
+    if len(text) > MAX_CONSOLE_TEXT_CHARS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Testo troppo lungo ({len(text)} caratteri). Massimo consentito: {MAX_CONSOLE_TEXT_CHARS}.",
+        )
 
     try:
         batch_mode = BatchMode(mode_str.lower())
     except ValueError:
         batch_mode = BatchMode.LIGHT
 
-    config = BatchConfig(mode=batch_mode)
+    batch_preset = _resolve_preset(preset_str)
+
+    config = BatchConfig(mode=batch_mode, preset=batch_preset)
     batch = Batch(config=config)
     create_batch(batch)
     pp = generate_passphrase()
@@ -283,9 +377,13 @@ async def console_scan(req: dict):
     _batch_start_times[batch.batch_id] = datetime.utcnow().isoformat()
 
     try:
-        file_id, findings, safety = run_text_scan(
-            batch_id=batch.batch_id, text=text, label="inline"
+        file_id, findings, safety = await asyncio.wait_for(
+            run_in_threadpool(run_text_scan, batch.batch_id, text, "inline"),
+            timeout=API_HEAVY_TIMEOUT_SECONDS,
         )
+    except asyncio.TimeoutError:
+        cleanup_batch(batch.batch_id)
+        raise HTTPException(status_code=504, detail="Timeout nella scansione del testo inline.")
     except Exception as e:
         logger.error("Errore console/scan: %s", e)
         cleanup_batch(batch.batch_id)
@@ -307,17 +405,24 @@ async def console_scan(req: dict):
 
 
 @router.post("/console/apply")
-async def console_apply(req: dict):
+async def console_apply(req: dict, request: Request):
     """
     Applica sostituzioni al testo inline, rispettando le decisions persistite.
     Accetta: { batch_id, file_id, text }
     """
+    _enforce_rate_limit(request, "console_apply", limit=30)
+
     batch_id = req.get("batch_id")
     file_id = req.get("file_id")
     text = req.get("text", "")
 
     if not batch_id or not file_id:
         raise HTTPException(status_code=400, detail="batch_id e file_id sono obbligatori")
+    if len(text) > MAX_CONSOLE_TEXT_CHARS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Testo troppo lungo ({len(text)} caratteri). Massimo consentito: {MAX_CONSOLE_TEXT_CHARS}.",
+        )
 
     batch = get_batch(batch_id)
     if not batch:
@@ -341,9 +446,12 @@ async def console_apply(req: dict):
         apply_review_decisions(batch_id, decision_items)
 
     try:
-        pseudo_text, safety, residual_warnings, applied_count = run_text_apply(
-            batch_id=batch_id, file_id=file_id, original_text=text
+        pseudo_text, safety, residual_warnings, applied_count = await asyncio.wait_for(
+            run_in_threadpool(run_text_apply, batch_id, file_id, text),
+            timeout=API_HEAVY_TIMEOUT_SECONDS,
         )
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="Timeout durante l'applicazione sul testo inline.")
     except Exception as e:
         logger.error("Errore console/apply batch %s: %s", batch_id, e)
         raise HTTPException(status_code=500, detail=str(e))
@@ -440,10 +548,12 @@ async def submit_review(batch_id: str, review_request: SubmitReviewRequest):
 
 
 @router.post("/batches/{batch_id}/apply")
-async def apply_batch(batch_id: str):
+async def apply_batch(batch_id: str, request: Request):
     """
     Applica le sostituzioni usando le decisions persistite.
     """
+    _enforce_rate_limit(request, "batch_apply", limit=20)
+
     batch = get_batch(batch_id)
     if not batch:
         raise HTTPException(status_code=404, detail=f"Batch non trovato: {batch_id}")
@@ -472,7 +582,12 @@ async def apply_batch(batch_id: str):
 
     started_at = _batch_start_times.get(batch_id, datetime.utcnow().isoformat())
     try:
-        zip_path = run_apply_pipeline(batch_id, started_at)
+        zip_path = await asyncio.wait_for(
+            run_in_threadpool(run_apply_pipeline, batch_id, started_at),
+            timeout=API_HEAVY_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="Timeout durante apply del batch.")
     except Exception as e:
         logger.error("Errore apply batch %s: %s", batch_id, e)
         raise HTTPException(status_code=500, detail=str(e))
@@ -563,11 +678,7 @@ async def save_server_state(state: dict):
     Salva la configurazione lato server (no password, no PII).
     La password LDAP viene rimossa prima del salvataggio.
     """
-    # Rimuovi campi sensibili
-    safe_state = {k: v for k, v in state.items() if k not in ("bind_password", "password")}
-    if "ldap" in safe_state and isinstance(safe_state["ldap"], dict):
-        safe_state["ldap"].pop("bind_password", None)
-        safe_state["ldap"].pop("password", None)
+    safe_state = _scrub_sensitive(state)
     try:
         _STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
         _STATE_FILE.write_text(json.dumps(safe_state, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -695,4 +806,23 @@ async def get_entity_types():
             {"value": et.value, "label": et.value.replace("_", " ").title()}
             for et in EntityType
         ]
+    }
+
+
+@router.get("/settings/policies")
+async def get_policies():
+    return {"presets": [preset.value for preset in PresetName]}
+
+
+@router.get("/settings/policies/{preset_name}")
+async def get_policy_preview(preset_name: str):
+    preset = _resolve_preset(preset_name)
+    policy = get_policy(preset)
+    enabled = get_enabled_entity_types(preset)
+    return {
+        "preset": preset.value,
+        "description": policy.get("description", ""),
+        "confidence_threshold": policy.get("confidence_threshold", 0.0),
+        "enabled_entity_types": enabled,
+        "entity_count": len(enabled),
     }

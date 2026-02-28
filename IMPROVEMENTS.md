@@ -2,6 +2,29 @@
 
 This document describes the high-priority (P0) improvements implemented in the pseudonymization-tool project.
 
+## ✅ Latest Completed Enhancements (v4 hardening)
+
+- Added readiness endpoint `GET /api/ready` with dependency checks.
+- Added endpoint-level protection for heavy operations:
+  - request rate limiting (in-memory, per-client scope)
+  - timeout guard with user-friendly `504` messages
+  - payload limits (`MAX_UPLOAD_FILES_PER_BATCH`, `MAX_CONSOLE_TEXT_CHARS`)
+- Strengthened secret handling:
+  - recursive sanitization of saved server state (`password`, `passphrase`, `token`, `secret` keys removed)
+  - passphrase zeroization best-effort on batch cleanup
+- Added policy preview APIs:
+  - `GET /api/settings/policies`
+  - `GET /api/settings/policies/{preset}`
+- Improved frontend UX:
+  - explicit `Console`/`File` source selector
+  - preset selector and policy preview panel
+  - consistent safety label rendering (`SAFE_TO_UPLOAD`, `SAFE_WITH_WARNINGS`, `NOT_SAFE`)
+- Improved reports with residual risk section and safety label summary.
+- Added contract tests `backend/tests/test_api_contract.py`.
+- Extended CI workflow with:
+  - dedicated contract test step
+  - startup smoke test for `/api/health` and `/api/ready`.
+
 ## 🎯 Improvements Overview
 
 ### 1. CI/CD Pipeline with GitHub Actions ✅

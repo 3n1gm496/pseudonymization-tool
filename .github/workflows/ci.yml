@@ -63,6 +63,21 @@ jobs:
         cd backend
         pytest tests/ -v --cov=app --cov-report=xml --cov-report=html --cov-report=term-missing
 
+    - name: Run API contract tests
+      run: |
+        cd backend
+        pytest tests/test_api_contract.py -v
+
+    - name: Startup smoke test
+      run: |
+        cd backend
+        python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 &
+        UVICORN_PID=$!
+        sleep 5
+        curl -f http://127.0.0.1:8000/api/health
+        curl -f http://127.0.0.1:8000/api/ready
+        kill $UVICORN_PID || true
+
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
       with:

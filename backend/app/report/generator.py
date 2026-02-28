@@ -43,6 +43,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         .badge-err {{ background: #fee2e2; color: #991b1b; }}
         .badge-skip {{ background: #e0e7ff; color: #3730a3; }}
         .warning-box {{ background: #fef3c7; border-left: 4px solid #f59e0b; padding: 0.8rem 1rem; border-radius: 0 6px 6px 0; margin-bottom: 0.5rem; font-size: 0.9rem; }}
+        .risk-box {{ border-left: 4px solid #dc2626; background: #fee2e2; padding: 0.8rem 1rem; border-radius: 0 6px 6px 0; margin-bottom: 0.5rem; font-size: 0.9rem; }}
+        .risk-safe {{ border-left-color: #16a34a; background: #dcfce7; }}
+        .risk-warn {{ border-left-color: #d97706; background: #fef3c7; }}
         .type-bar {{ display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; }}
         .type-bar .bar {{ height: 18px; background: #2563eb; border-radius: 3px; min-width: 4px; }}
         .type-bar .type-name {{ font-size: 0.85rem; min-width: 160px; }}
@@ -79,6 +82,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <h2>Entità per Tipo</h2>
         {findings_by_type_html}
     </div>
+
+    {residual_risk_section}
 
     <div class="card">
         <h2>Dettaglio File</h2>
@@ -168,6 +173,8 @@ def build_report_data(
         "findings_by_type": dict(findings_by_type),
         "files_detail": files_detail,
         "global_warnings": global_warnings,
+        "safety_label": batch.safety_label.value if hasattr(batch.safety_label, "value") else str(batch.safety_label),
+        "residual_warnings": batch.residual_warnings,
         "security_note": (
             "Questo report non contiene i valori originali dei dati sensibili. "
             "I valori originali sono conservati esclusivamente nel file di mapping cifrato."
@@ -229,6 +236,17 @@ def generate_html_report(report_data: Dict[str, Any], output_path: Path) -> None
         warnings_html = "\n".join(f'<div class="warning-box">{w}</div>' for w in global_warnings)
         warnings_section = f'<div class="card"><h2>Warning e Limitazioni</h2>{warnings_html}</div>'
 
+    safety_label = report_data.get("safety_label", "SAFE_TO_UPLOAD")
+    residual_warnings = report_data.get("residual_warnings", [])
+    risk_cls = "risk-safe" if safety_label == "SAFE_TO_UPLOAD" else ("risk-warn" if safety_label == "SAFE_WITH_WARNINGS" else "")
+    residual_rows = "" if not residual_warnings else "<ul>" + "".join(f"<li>{w}</li>" for w in residual_warnings) + "</ul>"
+    residual_risk_section = (
+        f'<div class="card"><h2>Residual Risk</h2>'
+        f'<div class="risk-box {risk_cls}"><b>Safety Label:</b> {safety_label}</div>'
+        f'{residual_rows if residual_rows else "<p>Nessun residual warning rilevato.</p>"}'
+        f'</div>'
+    )
+
     html = HTML_TEMPLATE.format(
         batch_id=report_data.get("batch_id", "N/A"),
         mode=config.get("mode", "N/A").upper(),
@@ -240,6 +258,7 @@ def generate_html_report(report_data: Dict[str, Any], output_path: Path) -> None
         total_findings=summary.get("total_findings", 0),
         entities_applied=summary.get("entities_applied", 0),
         findings_by_type_html=findings_by_type_html,
+        residual_risk_section=residual_risk_section,
         files_rows="\n".join(files_rows),
         warnings_section=warnings_section,
     )

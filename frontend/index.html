@@ -46,9 +46,20 @@
   <main class="console-area">
 
     <!-- Composer -->
-    <section class="composer-section">
+    <section class="composer-section" id="composer-section">
       <div class="composer-header">
         <span class="composer-title">Incolla testo o carica file</span>
+        <div class="composer-controls">
+          <div class="source-toggle">
+            <button id="source-console" class="source-btn active" onclick="setSourceMode('console')">Console</button>
+            <button id="source-file" class="source-btn" onclick="setSourceMode('file')">File</button>
+          </div>
+          <select id="preset-select" class="ctrl-select" onchange="setPreset(this.value)">
+            <option value="SOC Logs">SOC Logs</option>
+            <option value="Policy Docs">Policy Docs</option>
+            <option value="Email Headers">Email Headers</option>
+          </select>
+        </div>
         <div class="composer-actions">
           <button class="btn btn-ghost" onclick="pasteFromClipboard()">&#x1F4CB; Incolla</button>
           <label class="btn btn-ghost">
@@ -70,6 +81,7 @@
           <span id="composer-char-count" class="char-count">0 caratteri</span>
           <span class="composer-hint">Ctrl+Enter per scansionare</span>
         </div>
+        <div class="policy-preview" id="policy-preview">Policy attiva: caricamento...</div>
       </div>
     </section>
 

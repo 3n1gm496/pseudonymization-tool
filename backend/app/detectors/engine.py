@@ -237,3 +237,21 @@ def build_extra_detectors(ldap_enabled: bool = True) -> List:
         logger.debug("DomainFragmentDetector non caricato: %s", e)
 
     return detectors
+
+
+def get_ml_detector():
+    """Compatibility accessor for ML detector integrations/tests."""
+    try:
+        from app.detectors.ml_detector import MLNERDetector
+        return MLNERDetector()
+    except Exception as e:
+        logger.warning("ML detector non disponibile: %s", e)
+
+        class _NoopDetector:
+            enabled = False
+            name = "ml_ner"
+
+            def detect(self, chunk):
+                return []
+
+        return _NoopDetector()

@@ -14,7 +14,7 @@ from typing import Dict, List, Optional, Any
 from pathlib import Path
 
 from app.models.schemas import Batch, BatchStatus, BatchMode
-from app.core.config import TEMP_BASE_DIR
+from app.core.config import TEMP_BASE_DIR, BATCH_INACTIVITY_TTL_HOURS
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +25,8 @@ _engines: Dict[str, object] = {}            # batch_id -> PseudonymEngine (persi
 _decisions: Dict[str, Dict[str, Any]] = {}  # batch_id -> {finding_id -> decision_dict}
 _last_activity: Dict[str, float] = {}       # batch_id -> timestamp ultima attività
 
-# Timeout di inattività (default 60 minuti)
-BATCH_INACTIVITY_TIMEOUT_SECONDS = 60 * 60
+# Timeout di inattività (configurabile)
+BATCH_INACTIVITY_TIMEOUT_SECONDS = max(300, BATCH_INACTIVITY_TTL_HOURS * 3600)
 
 _cleanup_lock = threading.Lock()
 
@@ -182,7 +182,9 @@ def cleanup_batch(batch_id: str) -> None:
         except Exception as e:
             logger.error("Errore rimozione directory batch %s: %s", batch_id, e)
 
-    _passphrases.pop(batch_id, None)
+    if batch_id in _passphrases:
+        _passphrases[batch_id] = ""
+        _passphrases.pop(batch_id, None)
     _engines.pop(batch_id, None)
     _decisions.pop(batch_id, None)
     _batches.pop(batch_id, None)

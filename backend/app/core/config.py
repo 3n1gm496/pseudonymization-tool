@@ -61,7 +61,12 @@ BATCH_CLEANUP_INTERVAL_SECONDS = int(os.environ.get("BATCH_CLEANUP_INTERVAL_SECO
 
 # File processing timeouts
 FILE_PROCESSING_TIMEOUT_SECONDS = int(os.environ.get("FILE_PROCESSING_TIMEOUT_SECONDS", "300"))
+API_HEAVY_TIMEOUT_SECONDS = int(os.environ.get("API_HEAVY_TIMEOUT_SECONDS", "120"))
 
 # Security settings
 MIN_PASSPHRASE_LENGTH = int(os.environ.get("MIN_PASSPHRASE_LENGTH", "12"))
 MIN_PASSPHRASE_ENTROPY = float(os.environ.get("MIN_PASSPHRASE_ENTROPY", "2.5"))
+
+# API payload limits
+MAX_UPLOAD_FILES_PER_BATCH = int(os.environ.get("MAX_UPLOAD_FILES_PER_BATCH", "20"))
+MAX_CONSOLE_TEXT_CHARS = int(os.environ.get("MAX_CONSOLE_TEXT_CHARS", "200000"))

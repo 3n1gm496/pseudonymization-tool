@@ -4,9 +4,13 @@ const API = '';
 const LS_MODE = 'pst_mode';
 const LS_LDAP = 'pst_ldap_config';
 const LS_SESSIONS = 'pst_sessions';
+const LS_PRESET = 'pst_preset';
+const LS_SOURCE_MODE = 'pst_source_mode';
 
 const state = {
   mode: localStorage.getItem(LS_MODE) || 'light',
+  preset: localStorage.getItem(LS_PRESET) || 'SOC Logs',
+  sourceMode: localStorage.getItem(LS_SOURCE_MODE) || 'console',
   batches: {},
   activeBatchId: null,
   currentPassphrase: null,
@@ -17,9 +21,12 @@ const state = {
 
 document.addEventListener('DOMContentLoaded', () => {
   setMode(state.mode, false);
+  setSourceMode(state.sourceMode, false);
+  setPreset(state.preset, false);
   checkServerHealth();
   setInterval(checkServerHealth, 15000);
   loadDictStatus();
+  refreshPolicyPreview();
   restoreLdapConfig();
   restoreSessionHistory();
 
@@ -54,7 +61,8 @@ document.addEventListener('DOMContentLoaded', () => {
 async function checkServerHealth() {
   const dot = document.getElementById('server-status');
   try {
-    const r = await fetch(API + '/api/health', { signal: AbortSignal.timeout(3000) });
+    const ready = await fetch(API + '/api/ready', { signal: AbortSignal.timeout(3000) });
+    const r = ready.ok ? ready : await fetch(API + '/api/health', { signal: AbortSignal.timeout(3000) });
     if (r.ok) {
       dot.className = 'status-dot status-ok';
       dot.title = 'Server attivo';
@@ -80,6 +88,40 @@ function setMode(m, save) {
   if (el) el.textContent = m === 'light' ? 'Light' : 'Strict';
 }
 
+function setSourceMode(mode, save) {
+  if (save === undefined) save = true;
+  state.sourceMode = mode;
+  if (save) localStorage.setItem(LS_SOURCE_MODE, mode);
+  const btnConsole = document.getElementById('source-console');
+  const btnFile = document.getElementById('source-file');
+  if (btnConsole) btnConsole.classList.toggle('active', mode === 'console');
+  if (btnFile) btnFile.classList.toggle('active', mode === 'file');
+}
+
+function setPreset(preset, save) {
+  if (save === undefined) save = true;
+  state.preset = preset;
+  if (save) localStorage.setItem(LS_PRESET, preset);
+  const select = document.getElementById('preset-select');
+  if (select) select.value = preset;
+  refreshPolicyPreview();
+}
+
+async function refreshPolicyPreview() {
+  const box = document.getElementById('policy-preview');
+  if (!box) return;
+  try {
+    const encoded = encodeURIComponent(state.preset);
+    const r = await fetch(API + '/api/settings/policies/' + encoded);
+    if (!r.ok) throw new Error('Policy non disponibile');
+    const d = await r.json();
+    const sample = (d.enabled_entity_types || []).slice(0, 8).join(', ');
+    box.textContent = 'Policy: ' + d.preset + ' · Soglia ' + d.confidence_threshold + ' · Entità abilitate: ' + d.entity_count + (sample ? ' (' + sample + (d.entity_count > 8 ? ', ...' : '') + ')' : '');
+  } catch {
+    box.textContent = 'Policy attiva: ' + state.preset;
+  }
+}
+
 // ─── CLIPBOARD ───────────────────────────────────────────────────────────────
 
 async function pasteFromClipboard() {
@@ -97,6 +139,10 @@ async function pasteFromClipboard() {
 // ─── FLUSSO 1: TESTO INLINE ──────────────────────────────────────────────────
 
 async function scanComposer() {
+  if (state.sourceMode !== 'console') {
+    toast('Modalità corrente: File. Passa a Console per scansionare testo inline.', 'warning');
+    return;
+  }
   const ta = document.getElementById('composer-textarea');
   const text = ta.value.trim();
   if (!text) { toast('Inserisci del testo prima di scansionare.', 'warning'); return; }
@@ -108,7 +154,7 @@ async function scanComposer() {
     const r = await fetch(API + '/api/console/scan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: text, mode: state.mode }),
+      body: JSON.stringify({ text: text, mode: state.mode, preset: state.preset }),
     });
     if (!r.ok) {
       let msg = 'Errore ' + r.status;
@@ -147,6 +193,10 @@ async function scanComposer() {
 // ─── FLUSSO 2: UPLOAD FILE ───────────────────────────────────────────────────
 
 async function handleFileUpload(event) {
+  if (state.sourceMode !== 'file') {
+    toast('Modalità corrente: Console. Passa a File per caricare documenti.', 'warning');
+    return;
+  }
   const files = Array.from(event.target.files);
   if (!files.length) return;
   event.target.value = '';
@@ -156,6 +206,7 @@ async function handleFileUpload(event) {
       const fd = new FormData();
       fd.append('files', file);
       fd.append('mode', state.mode);
+      fd.append('preset', state.preset);
       // NON impostare Content-Type: il browser lo imposta con il boundary corretto
       const r = await fetch(API + '/api/batches', { method: 'POST', body: fd });
       if (!r.ok) {
@@ -301,11 +352,13 @@ function showTextResult(batchId, data) {
   out.className = 'card-output';
   const warnings = data.residual_warnings || [];
   const appliedCount = data.applied_count || 0;
+  const safety = data.safety_label || 'SAFE_TO_UPLOAD';
   out.innerHTML =
     '<div class="output-header">' +
       '<span class="output-label">Testo pseudonimizzato (' + appliedCount + ' sostituzioni)</span>' +
       '<button class="btn btn-sm btn-ghost" onclick="copyOutput(\'' + batchId + '\')">&#x1F4CB; Copia</button>' +
     '</div>' +
+    '<div class="output-clean"><b>Safety:</b> ' + escHtml(safety) + '</div>' +
     '<pre class="output-text" id="output-text-' + batchId + '">' + escHtml(data.pseudonymized_text || '') + '</pre>' +
     (warnings.length
       ? '<div class="output-warnings"><b>&#x26A0; Possibili residui (' + warnings.length + '):</b><ul>' +
@@ -347,7 +400,7 @@ function createBatchCard(batchId, label, status) {
 function updateCardReady(cardEl, batchId, data) {
   const findings = data.findings || [];
   const safety = data.safety_label || 'SAFE_TO_UPLOAD';
-  const safetyClass = safety === 'BLOCKED' ? 'safety-blocked' : safety === 'NEEDS_REVIEW' ? 'safety-review' : 'safety-ok';
+  const safetyClass = safety === 'NOT_SAFE' ? 'safety-blocked' : safety === 'SAFE_WITH_WARNINGS' ? 'safety-review' : 'safety-ok';
   const byType = {};
   findings.forEach(f => { byType[f.entity_type] = (byType[f.entity_type] || 0) + 1; });
   const chips = Object.entries(byType)
@@ -811,6 +864,10 @@ async function refreshLdapCache() {
 // ─── DRAG-AND-DROP DIRETTO ──────────────────────────────────────────────────
 
 async function handleFileUploadDirect(files) {
+  if (state.sourceMode !== 'file') {
+    toast('Modalità corrente: Console. Passa a File per drag-and-drop.', 'warning');
+    return;
+  }
   if (!files || !files.length) return;
   for (const file of files) {
     const cardEl = createBatchCard(null, file.name, 'uploading');
@@ -818,6 +875,7 @@ async function handleFileUploadDirect(files) {
       const fd = new FormData();
       fd.append('files', file);
       fd.append('mode', state.mode);
+      fd.append('preset', state.preset);
       const r = await fetch(API + '/api/batches', { method: 'POST', body: fd });
       if (!r.ok) {
         let msg = 'Errore ' + r.status;

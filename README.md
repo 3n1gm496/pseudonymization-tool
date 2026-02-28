@@ -15,8 +15,11 @@ Web application locale per la pseudonimizzazione sicura di dati sensibili in doc
 - **📄 Multi-formato** — Supporto per TXT, CSV, MD, DOCX, XLSX, PDF (testuali), JPG, PNG
 - **🔐 Sicurezza Avanzata** — Mapping cifrato con passphrase AES-256, zero logging di dati sensibili
 - **⚙️ Modalità Flessibili** — `light` (solo entità di rete) e `strict` (tutte le entità PII)
+- **🧭 Sorgenti Separate** — flusso esplicito `Console` (testo inline) e `File` (upload batch)
+- **🛡️ Preset Policy** — `SOC Logs`, `Policy Docs`, `Email Headers` con preview entità abilitate
 - **👁️ Review Manuale** — Interfaccia per rivedere e approvare/rifiutare ogni pseudonimo proposto
 - **📊 Report Dettagliati** — HTML navigabile e JSON strutturato per audit trail
+- **✅ Readiness API** — endpoint `/api/ready` per distinguere processo attivo da servizio pronto
 - **🎯 Deterministico** — Stesso input = stesso output con la stessa passphrase
 
 ---
@@ -100,6 +103,9 @@ Questa modalità permette di preparare il pacchetto su una macchina con internet
 
 1. **Upload**: Trascina i file da processare nell'area di upload.
 2. **Configura**: Seleziona la modalità (`light` o `strict`) e inserisci una **passphrase robusta** (essenziale per la sicurezza del mapping).
+   - Seleziona la sorgente: `Console` per testo inline, `File` per documenti.
+   - Seleziona il preset policy (`SOC Logs`, `Policy Docs`, `Email Headers`).
+   - Verifica la preview delle entità abilitate prima della scansione.
 3. **Avvia Scansione**: Il backend analizza i file e rileva le entità sensibili.
 4. **Review**: Rivedi i "finding" proposti. Puoi deselezionare quelli che non vuoi pseudonimizzare.
 5. **Applica**: Applica le modifiche. I file originali non vengono mai toccati.
@@ -140,8 +146,18 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ### Esecuzione Test
 
 ```bash
-cd backend/tests
-python test_functional.py
+cd backend
+pytest tests/ -v
+pytest tests/test_api_contract.py -v
+```
+
+### Endpoint Operativi
+
+```bash
+curl http://127.0.0.1:8000/api/health
+curl http://127.0.0.1:8000/api/ready
+curl http://127.0.0.1:8000/api/settings/policies
+curl http://127.0.0.1:8000/api/settings/policies/SOC%20Logs
 ```
 
 ### Struttura Progetto
