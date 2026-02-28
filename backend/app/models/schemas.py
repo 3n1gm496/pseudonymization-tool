@@ -7,7 +7,7 @@ from typing import Optional, Dict, List, Any
 from enum import Enum
 from pydantic import BaseModel, Field
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 # ─── Enumerazioni ────────────────────────────────────────────────────────────
@@ -157,7 +157,7 @@ class FileRecord(BaseModel):
 
 class Batch(BaseModel):
     batch_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     config: BatchConfig = Field(default_factory=BatchConfig)
     status: BatchStatus = BatchStatus.PENDING
     files: List[FileRecord] = Field(default_factory=list)

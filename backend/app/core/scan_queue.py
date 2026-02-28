@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timezone
 from threading import Lock
 
 from app.core.batch_manager import get_batch, update_batch
@@ -31,7 +31,7 @@ def enqueue_scan(batch_id: str, started_at: str | None = None) -> bool:
         _inflight_batches.add(batch_id)
 
     if not started_at:
-        started_at = datetime.utcnow().isoformat()
+        started_at = datetime.now(timezone.utc).isoformat()
 
     _executor.submit(_run_scan_job, batch_id, started_at)
     return True

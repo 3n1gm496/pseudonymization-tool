@@ -2,7 +2,7 @@
 Health check and monitoring endpoints.
 """
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any
 
 from fastapi import APIRouter, Response, status
@@ -41,7 +41,7 @@ async def health_check() -> HealthResponse:
 
     return HealthResponse(
         status="healthy",
-        timestamp=datetime.utcnow().isoformat(),
+        timestamp=datetime.now(timezone.utc).isoformat(),
         uptime_seconds=round(uptime, 2),
         version="1.0.0",
     )
@@ -135,7 +135,7 @@ async def metrics() -> Dict[str, Any]:
         "app_uptime_seconds": round(uptime, 2),
         "app_version": "1.0.0",
         "app_name": "pseudonymization-tool",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "detector_cache": cache_stats,
         "parallel_processing": parallel_config,
     }

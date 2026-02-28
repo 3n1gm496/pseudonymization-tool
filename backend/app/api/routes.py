@@ -15,7 +15,7 @@ import logging
 import asyncio
 import shutil
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Any, Dict
 
@@ -202,7 +202,7 @@ async def health_check():
         "status": "ok",
         "service": "Local Pseudonymization Tool",
         "version": "4.0.0",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -216,7 +216,7 @@ async def ready_check():
     return {
         "ready": ready,
         "checks": checks,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -310,7 +310,7 @@ async def create_new_batch(
         )
 
     update_batch(batch)
-    _batch_start_times[batch.batch_id] = datetime.utcnow().isoformat()
+    _batch_start_times[batch.batch_id] = datetime.now(timezone.utc).isoformat()
 
     try:
         batch = await asyncio.wait_for(
@@ -374,7 +374,7 @@ async def console_scan(req: dict, request: Request):
     create_batch(batch)
     pp = generate_passphrase()
     store_passphrase(batch.batch_id, pp)
-    _batch_start_times[batch.batch_id] = datetime.utcnow().isoformat()
+    _batch_start_times[batch.batch_id] = datetime.now(timezone.utc).isoformat()
 
     try:
         file_id, findings, safety = await asyncio.wait_for(
@@ -580,7 +580,7 @@ async def apply_batch(batch_id: str, request: Request):
             ))
         apply_review_decisions(batch_id, decision_items)
 
-    started_at = _batch_start_times.get(batch_id, datetime.utcnow().isoformat())
+    started_at = _batch_start_times.get(batch_id, datetime.now(timezone.utc).isoformat())
     try:
         zip_path = await asyncio.wait_for(
             run_in_threadpool(run_apply_pipeline, batch_id, started_at),

@@ -5,7 +5,7 @@ Usa PseudonymEngine persistente per batch, canonical_value, policy hash, safety 
 """
 import logging
 import zipfile
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict, Optional
 
@@ -187,7 +187,7 @@ def run_apply_pipeline(batch_id: str, started_at: str) -> Path:
                 file_rec.error_message = f"Errore durante la trasformazione: {e}"
                 logger.error("Errore trasformazione '%s': %s", file_rec.original_name, e)
 
-    completed_at = datetime.utcnow().isoformat()
+    completed_at = datetime.now(timezone.utc).isoformat()
 
     # Genera il mapping cifrato
     if passphrase and not batch.config.is_dry_run:
