@@ -4,6 +4,7 @@ Coordina: parsing -> detection -> pseudonimizzazione -> trasformazione -> report
 """
 import logging
 import zipfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional
@@ -13,7 +14,10 @@ from app.models.schemas import (
     ReviewDecisionItem, ReviewAction, BatchMode
 )
 from app.core.batch_manager import get_batch, update_batch, get_batch_dir, get_passphrase
-from app.core.config import STREAMING_THRESHOLD_MB, STREAMING_CHUNK_SIZE
+from app.core.config import (
+    STREAMING_THRESHOLD_MB, STREAMING_CHUNK_SIZE,
+    PARALLEL_FILE_PROCESSING, MAX_PARALLEL_FILES
+)
 from app.parsers.factory import parse_file, get_parser
 from app.parsers.base import ParseResult, TextChunk
 from app.detectors.engine import detect_in_parse_result
@@ -37,10 +41,68 @@ def _should_use_streaming(file_path: Path) -> bool:
         return False
 
 
+def _process_single_file(file_rec: FileRecord, engine: PseudonymEngine) -> tuple[FileRecord, List[Finding], ParseResult]:
+    """
+    Processa un singolo file: parsing + detection + pseudonimizzazione.
+    Ritorna (file_rec aggiornato, findings, parse_result).
+    """
+    file_path = Path(file_rec.stored_path)
+    logger.info("Processing file: %s", file_rec.original_name)
+
+    # 1. Parsing (con streaming per file grandi)
+    use_streaming = _should_use_streaming(file_path)
+    
+    if use_streaming:
+        logger.info("File %s > %sMB, usando streaming", file_rec.original_name, STREAMING_THRESHOLD_MB)
+        parser = get_parser(file_path)
+        
+        if parser and hasattr(parser, 'supports_streaming') and parser.supports_streaming():
+            # Build ParseResult incrementalmente
+            parse_result = ParseResult(file_path=file_path)
+            try:
+                for chunk in parser.parse_stream(file_path, chunk_size=STREAMING_CHUNK_SIZE):
+                    parse_result.chunks.append(chunk)
+                parse_result.success = True
+            except Exception as e:
+                parse_result.success = False
+                parse_result.error_message = f"Errore streaming: {e}"
+                logger.error("Errore durante streaming di %s: %s", file_rec.original_name, e)
+        else:
+            # Fallback a parse normale
+            parse_result = parse_file(file_path)
+    else:
+        parse_result = parse_file(file_path)
+
+    if not parse_result.success:
+        file_rec.status = FileStatus.FAILED
+        file_rec.error_message = parse_result.error_message
+        logger.warning("Parsing fallito per '%s': %s", file_rec.original_name, parse_result.error_message)
+        return file_rec, [], parse_result
+
+    # Aggiungi i warning del parser al file record
+    file_rec.warnings.extend(parse_result.warnings)
+
+    # 2. Detection
+    raw_findings = detect_in_parse_result(parse_result)
+
+    # 3. Pseudonimizzazione (genera pseudonimi proposti)
+    file_findings = engine.process_findings(raw_findings, file_rec.file_id)
+    file_rec.findings_count = len(file_findings)
+    file_rec.status = FileStatus.PARSED
+    
+    logger.info(
+        "File '%s' processato: %d finding trovati.",
+        file_rec.original_name, len(file_findings)
+    )
+
+    return file_rec, file_findings, parse_result
+
+
 def run_scan_pipeline(batch_id: str) -> Batch:
     """
     Fase 1: Parsing e Detection.
     Processa tutti i file del batch e popola la lista dei findings.
+    Supporta elaborazione parallela se PARALLEL_FILE_PROCESSING è abilitato.
     """
     batch = get_batch(batch_id)
     if not batch:
@@ -53,58 +115,58 @@ def run_scan_pipeline(batch_id: str) -> Batch:
     engine = PseudonymEngine(mode=batch.config.mode)
     all_findings: List[Finding] = []
 
-    for file_rec in batch.files:
-        file_path = Path(file_rec.stored_path)
-        logger.info("Processing file: %s", file_rec.original_name)
-
-        # 1. Parsing (con streaming per file grandi)
-        use_streaming = _should_use_streaming(file_path)
+    if PARALLEL_FILE_PROCESSING and len(batch.files) > 1:
+        # Elaborazione parallela
+        logger.info("Elaborazione parallela di %d file (max %d workers)", len(batch.files), MAX_PARALLEL_FILES)
         
-        if use_streaming:
-            logger.info("File %s > %sMB, usando streaming", file_rec.original_name, STREAMING_THRESHOLD_MB)
-            parser = get_parser(file_path)
+        with ThreadPoolExecutor(max_workers=MAX_PARALLEL_FILES) as executor:
+            # Sottometti tutti i file per l'elaborazione
+            future_to_file = {
+                executor.submit(_process_single_file, file_rec, engine): file_rec
+                for file_rec in batch.files
+            }
             
-            if parser and hasattr(parser, 'supports_streaming') and parser.supports_streaming():
-                # Build ParseResult incrementalmente
-                parse_result = ParseResult(file_path=file_path)
+            # Raccogli i risultati man mano che completano
+            for future in as_completed(future_to_file):
+                file_rec = future_to_file[future]
                 try:
-                    for chunk in parser.parse_stream(file_path, chunk_size=STREAMING_CHUNK_SIZE):
-                        parse_result.chunks.append(chunk)
-                    parse_result.success = True
+                    updated_file_rec, file_findings, parse_result = future.result()
+                    
+                    # Aggiorna il file record nel batch
+                    for i, f in enumerate(batch.files):
+                        if f.file_id == updated_file_rec.file_id:
+                            batch.files[i] = updated_file_rec
+                            break
+                    
+                    # Salva il parse result e i findings  
+                    _parse_results[updated_file_rec.file_id] = parse_result
+                    all_findings.extend(file_findings)
+                    
                 except Exception as e:
-                    parse_result.success = False
-                    parse_result.error_message = f"Errore streaming: {e}"
-                    logger.error("Errore durante streaming di %s: %s", file_rec.original_name, e)
-            else:
-                # Fallback a parse normale
-                parse_result = parse_file(file_path)
-        else:
-            parse_result = parse_file(file_path)
+                    logger.error("Errore durante elaborazione parallela di %s: %s", file_rec.original_name, e)
+                    file_rec.status = FileStatus.FAILED
+                    file_rec.error_message = f"Errore parallelo: {e}"
+    else:
+        # Elaborazione sequenziale (fallback o batch con 1 file)
+        logger.info("Elaborazione sequenziale di %d file", len(batch.files))
         
-        _parse_results[file_rec.file_id] = parse_result
-
-        if not parse_result.success:
-            file_rec.status = FileStatus.FAILED
-            file_rec.error_message = parse_result.error_message
-            logger.warning("Parsing fallito per '%s': %s", file_rec.original_name, parse_result.error_message)
-            continue
-
-        # Aggiungi i warning del parser al file record
-        file_rec.warnings.extend(parse_result.warnings)
-
-        # 2. Detection
-        raw_findings = detect_in_parse_result(parse_result)
-
-        # 3. Pseudonimizzazione (genera pseudonimi proposti)
-        file_findings = engine.process_findings(raw_findings, file_rec.file_id)
-        file_rec.findings_count = len(file_findings)
-        all_findings.extend(file_findings)
-
-        file_rec.status = FileStatus.PARSED
-        logger.info(
-            "File '%s' processato: %d finding trovati.",
-            file_rec.original_name, len(file_findings)
-        )
+        for file_rec in batch.files:
+            try:
+                updated_file_rec, file_findings, parse_result = _process_single_file(file_rec, engine)
+                
+                # Aggiorna il file record
+                for i, f in enumerate(batch.files):
+                    if f.file_id == updated_file_rec.file_id:
+                        batch.files[i] = updated_file_rec
+                        break
+                
+                _parse_results[updated_file_rec.file_id] = parse_result
+                all_findings.extend(file_findings)
+                
+            except Exception as e:
+                logger.error("Errore durante elaborazione di %s: %s", file_rec.original_name, e)
+                file_rec.status = FileStatus.FAILED
+                file_rec.error_message = f"Errore: {e}"
 
     # Aggiorna il batch con tutti i findings
     batch.findings = all_findings

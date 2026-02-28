@@ -120,10 +120,22 @@ async def metrics() -> Dict[str, Any]:
         logger.warning("Failed to get cache stats: %s", e)
         cache_stats = {"error": str(e)}
 
+    # Get parallel processing config
+    try:
+        from app.core.config import PARALLEL_FILE_PROCESSING, MAX_PARALLEL_FILES
+        parallel_config = {
+            "enabled": PARALLEL_FILE_PROCESSING,
+            "max_workers": MAX_PARALLEL_FILES,
+        }
+    except Exception as e:
+        logger.warning("Failed to get parallel config: %s", e)
+        parallel_config = {"error": str(e)}
+
     return {
         "app_uptime_seconds": round(uptime, 2),
         "app_version": "1.0.0",
         "app_name": "pseudonymization-tool",
         "timestamp": datetime.utcnow().isoformat(),
         "detector_cache": cache_stats,
+        "parallel_processing": parallel_config,
     }
