@@ -312,10 +312,12 @@ safety check
 
 Future improvements to consider:
 - [ ] Performance optimization (streaming, async processing)
-- [ ] API rate limiting
+- [ ] API rate limiting distribuito (Redis/shared-state)
 - [ ] Advanced metrics (Prometheus format)
 - [ ] ML-based entity recognition
 - [ ] Frontend modernization (React/Vue)
+- [ ] Detector quality loop (false-positive feedback dalla review)
+- [ ] Deploy parity con stack container (compose + healthcheck + runbook)
 
 ## 🤝 Contributing
 

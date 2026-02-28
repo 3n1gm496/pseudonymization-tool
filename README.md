@@ -97,6 +97,28 @@ Questa modalità permette di preparare il pacchetto su una macchina con internet
 2. Esegui lo script `start.bat` o `start.sh` come al solito.
 3. Lo script rileverà automaticamente la presenza di `wheelhouse/` e installerà le dipendenze da lì, **senza richiedere alcuna connessione internet**.
 
+### 2.3. Modalità Docker Compose
+
+Questa modalità fornisce un avvio standardizzato dell'app in container, in linea con approcci infrastrutturali tipo `security-scanning-platform`.
+
+```bash
+cd pseudonymization-tool
+docker compose up --build -d
+```
+
+Verifica servizio:
+
+```bash
+curl http://127.0.0.1:8000/api/health
+curl http://127.0.0.1:8000/api/ready
+```
+
+Stop:
+
+```bash
+docker compose down
+```
+
 ---
 
 ## 💡 Utilizzo
@@ -158,6 +180,17 @@ curl http://127.0.0.1:8000/api/ready
 curl http://127.0.0.1:8000/api/settings/policies
 curl http://127.0.0.1:8000/api/settings/policies/SOC%20Logs
 ```
+
+### Esecuzione via Docker
+
+```bash
+docker compose up --build
+```
+
+Note operative container:
+- Le configurazioni dizionario sono montate da `backend/config`.
+- I dati temporanei batch sono su volume Docker dedicato `pseudonymizer_tmp`.
+- OCR (`tesseract`) è incluso nell'immagine.
 
 ### Struttura Progetto
 
