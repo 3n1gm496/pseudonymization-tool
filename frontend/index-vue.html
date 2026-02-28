@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local Pseudonymization Tool</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <!-- Vue.js 3 from CDN -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+</head>
+<body>
+
+<div id="app">
+    <header class="app-header">
+        <div class="header-inner">
+            <div class="header-brand">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
+                <span>Local Pseudonymization Tool</span>
+            </div>
+            <div class="header-meta">
+                <span class="badge-local">🔒 Solo Locale — Nessun dato inviato all'esterno</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="app-main">
+        <!-- Real-time Progress Widget (only visible during processing) -->
+        <div v-if="batchProcessing" class="progress-widget">
+            <div class="progress-header">
+                <h3>⚡ Elaborazione in corso</h3>
+                <button @click="closeProgressWidget" class="close-btn">×</button>
+            </div>
+            <div class="progress-content">
+                <div class="progress-bar-container">
+                    <div class="progress-bar" :style="{width: progressPercentage + '%'}"></div>
+                </div>
+                <p class="progress-text">{{ progressMessage }}</p>
+                <p class="progress-details">
+                    File: {{ currentProgress }}/{{ totalFiles }} 
+                    <span v-if="findingsCount > 0" style="color: #f59e0b;">| Findings: {{ findingsCount }}</span>
+                </p>
+            </div>
+        </div>
+
+        <!-- Original upload step content -->
+        <section id="step-upload" class="step active">
+            <div class="step-header">
+                <div class="step-number">1</div>
+                <div>
+                    <h2>Carica File e Configura il Batch</h2>
+                    <p class="step-desc">Trascina i file nell'area sottostante oppure clicca per selezionarli.</p>
+                </div>
+            </div>
+
+            <div 
+                class="upload-area" 
+                id="drop-zone"
+                @dragover.prevent="dragOver = true"
+                @dragleave.prevent="dragOver = false"
+                @drop.prevent="handleDrop"
+                :class="{'drag-active': dragOver}"
+            >
+                <input type="file" id="file-input" ref="fileInput" multiple accept=".txt,.md,.csv,.docx,.pdf,.xlsx,.jpg,.jpeg,.png" @change="handleFileSelect" hidden>
+                <div class="upload-icon">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                </div>
+                <p class="upload-text">
+                    Trascina i file qui o 
+                    <button type="button" class="link-btn" @click="$refs.fileInput.click()">clicca per selezionare</button>
+                </p>
+                <p class="upload-hint">Formati: TXT, MD, CSV, DOCX, PDF, XLSX, JPG, PNG — Max 50 MB per file</p>
+            </div>
+
+            <div v-if="selectedFiles.length > 0" class="file-list">
+                <div v-for="(file, index) in selectedFiles" :key="index" class="file-item">
+                    <span class="file-icon">{{ getFileIcon(file.name) }}</span>
+                    <div class="file-info">
+                        <div class="file-name">{{ file.name }}</div>
+                        <div class="file-size">{{ formatBytes(file.size) }}</div>
+                    </div>
+                    <button @click="removeFile(index)" class="remove-btn" title="Rimuovi">×</button>
+                </div>
+            </div>
+
+            <div class="config-panel">
+                <div class="config-row">
+                    <div class="config-group">
+                        <label class="config-label">Modalità di Pseudonimizzazione</label>
+                        <div class="mode-selector">
+                            <label class="mode-option">
+                                <input type="radio" v-model="mode" value="light">
+                                <div class="mode-card">
+                                    <strong>Light</strong>
+                                    <small>Preserva struttura e contesto per massima utilità SOC</small>
+                                </div>
+                            </label>
+                            <label class="mode-option">
+                                <input type="radio" v-model="mode" value="strict">
+                                <div class="mode-card">
+                                    <strong>Strict</strong>
+                                    <small>Massima offuscazione, riduce rischio re-identificazione</small>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="config-group">
+                        <label class="config-label" for="passphrase">Passphrase Batch <span class="required">*</span></label>
+                        <div class="passphrase-input-wrap">
+                            <input 
+                                :type="showPassphrase ? 'text' : 'password'" 
+                                v-model="passphrase"
+                                id="passphrase" 
+                                placeholder="Inserisci una passphrase sicura..." 
+                                autocomplete="off"
+                            >
+                            <button type="button" @click="showPassphrase = !showPassphrase" class="toggle-pw" title="Mostra/Nascondi">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="pw-strength" :class="passphraseStrength.class">{{ passphraseStrength.text }}</div>
+                        <p class="config-hint">La passphrase cifra il file di mapping per la reversibilità.</p>
+                    </div>
+                </div>
+
+                <div class="config-row">
+                    <label class="checkbox-label">
+                        <input type="checkbox" v-model="dryRun">
+                        <span class="checkbox-custom"></span>
+                        <div>
+                            <strong>Modalità Dry-Run</strong>
+                            <small>Esegue solo la scansione senza applicare modifiche ai file</small>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <div class="action-bar">
+                <button @click="startBatch" class="btn btn-primary" :disabled="!canStartBatch">
+                    <span v-if="!processing">🚀 Avvia Batch</span>
+                    <span v-else>⏳ Elaborazione...</span>
+                </button>
+            </div>
+        </section>
+
+        <!-- Toast notifications container -->
+        <div id="toast-container" class="toast-container"></div>
+    </main>
+</div>
+
+<script src="/static/app-vue.js"></script>
+
+</body>
+</html>

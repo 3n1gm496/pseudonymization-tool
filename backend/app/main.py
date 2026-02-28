@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import router
 from app.api.monitoring import router as monitoring_router
+from app.api.websocket import router as websocket_router
 from app.core.config import SERVER_HOST, SERVER_PORT, RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SECONDS
 from app.core.logging_config import configure_logging, get_logger, log_request_start, log_request_end
 from app.core.scan_queue import shutdown_scan_queue
@@ -93,6 +94,7 @@ app.add_middleware(
 # Registra i router API
 app.include_router(router)
 app.include_router(monitoring_router, prefix="/api")
+app.include_router(websocket_router, prefix="/api")
 
 
 # Request logging middleware
