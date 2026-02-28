@@ -2,57 +2,27 @@
 Punto di ingresso dell'applicazione Local Pseudonymization Tool.
 Il server è configurato per ascoltare SOLO su 127.0.0.1 (localhost).
 """
-import time
-import uuid
-from collections import defaultdict, deque
+import logging
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
-from threading import Lock
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 from app.api.routes import router
-from app.api.monitoring import router as monitoring_router
-from app.api.websocket import router as websocket_router
-from app.core.config import (
-    SERVER_HOST, SERVER_PORT, RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SECONDS,
-    BATCH_CLEANUP_INTERVAL_SECONDS
+from app.core.config import SERVER_HOST, SERVER_PORT, TEMP_BASE_DIR
+from app.core.batch_manager import start_cleanup_scheduler
+
+# Configurazione logging: nessun valore sensibile nei log
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
 )
-from app.core.logging_config import configure_logging, get_logger, log_request_start, log_request_end
-from app.core.scan_queue import shutdown_scan_queue
-
-# Configure structured logging
-configure_logging(log_level="INFO", json_logs=False)
-logger = get_logger(__name__)
-
-_RATE_LIMIT_EXCLUDED_PATHS = {"/api/health", "/api/ready", "/api/metrics"}
-_request_timestamps: dict[str, deque[float]] = defaultdict(deque)
-_rate_limit_lock = Lock()
-
-
-def _client_key(request: Request) -> str:
-    if request.client and request.client.host:
-        return request.client.host
-    forwarded_for = request.headers.get("x-forwarded-for")
-    if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
-    return "unknown"
-
-
-def _is_rate_limited(client_id: str, now: float) -> bool:
-    with _rate_limit_lock:
-        bucket = _request_timestamps[client_id]
-        threshold = now - RATE_LIMIT_WINDOW_SECONDS
-        while bucket and bucket[0] < threshold:
-            bucket.popleft()
-        if len(bucket) >= RATE_LIMIT_REQUESTS:
-            return True
-        bucket.append(now)
-    return False
+logger = logging.getLogger(__name__)
 
 
 # ─── Lifespan (startup/shutdown moderno, compatibile FastAPI >= 0.93) ─────────
@@ -61,16 +31,26 @@ def _is_rate_limited(client_id: str, now: float) -> bool:
 async def lifespan(app: FastAPI):
     # Startup
     logger.info("=" * 60)
-    logger.info("Local Pseudonymization Tool — MVP v1.0.0")
+    logger.info("Local Pseudonymization Tool — vNext v2.0.0")
     logger.info("Server in ascolto su: http://%s:%s", SERVER_HOST, SERVER_PORT)
     logger.info("SICUREZZA: Nessuna chiamata di rete esterna verra' effettuata.")
-    logger.info("Garbage Collector: Batch TTL cleanup ogni %ds", BATCH_CLEANUP_INTERVAL_SECONDS)
     logger.info("=" * 60)
-    
+    TEMP_BASE_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        from app.core.policies import save_default_policies
+        save_default_policies()
+    except Exception as e:
+        logger.warning("Impossibile salvare le policy di default: %s", e)
+    try:
+        from app.detectors.dictionary_detector import get_dictionary_detector
+        detector = get_dictionary_detector()
+        logger.info("DictionaryDetector: %d termini caricati.", detector.loaded_terms_count)
+    except Exception as e:
+        logger.warning("Errore nel caricamento dei dizionari: %s", e)
+    start_cleanup_scheduler()
+    logger.info("Cleanup scheduler avviato.")
     yield
-    
     # Shutdown
-    shutdown_scan_queue()
     logger.info("Server in arresto.")
 
 
@@ -79,7 +59,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Local Pseudonymization Tool",
     description="Tool locale per la pseudonimizzazione di documenti sensibili. Solo uso locale.",
-    version="1.0.0-MVP",
+    version="2.0.0-vNext",
     docs_url="/api/docs",  # Swagger UI disponibile solo in locale
     redoc_url=None,
     lifespan=lifespan,
@@ -99,56 +79,6 @@ app.add_middleware(
 
 # Registra i router API
 app.include_router(router)
-app.include_router(monitoring_router, prefix="/api")
-app.include_router(websocket_router, prefix="/api")
-
-
-# Request logging middleware
-@app.middleware("http")
-async def logging_middleware(request: Request, call_next):
-    """Log all requests with timing and correlation ID."""
-    request_id = str(uuid.uuid4())
-    start_time = time.time()
-
-    # Add request ID to state
-    request.state.request_id = request_id
-
-    if request.url.path.startswith("/api") and request.url.path not in _RATE_LIMIT_EXCLUDED_PATHS:
-        now = time.monotonic()
-        client_id = _client_key(request)
-        if _is_rate_limited(client_id, now):
-            return JSONResponse(
-                status_code=429,
-                content={"detail": "Rate limit exceeded. Retry later."},
-                headers={"Retry-After": str(RATE_LIMIT_WINDOW_SECONDS)},
-            )
-
-    log_request_start(
-        method=request.method,
-        path=request.url.path,
-        request_id=request_id,
-    )
-
-    response = await call_next(request)
-
-    duration_ms = (time.time() - start_time) * 1000
-
-    log_request_end(
-        method=request.method,
-        path=request.url.path,
-        request_id=request_id,
-        status_code=response.status_code,
-        duration_ms=duration_ms,
-    )
-
-    # Add correlation ID to response headers
-    response.headers["X-Request-ID"] = request_id
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"] = "DENY"
-    response.headers["Referrer-Policy"] = "no-referrer"
-    response.headers["Cache-Control"] = "no-store"
-
-    return response
 
 # Serve i file statici del frontend
 FRONTEND_DIR = Path(__file__).resolve().parent.parent.parent / "frontend"

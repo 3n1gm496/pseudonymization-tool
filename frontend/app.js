@@ -1,562 +1,940 @@
-/**
- * Local Pseudonymization Tool — Frontend Application
- * Vanilla JavaScript SPA, nessuna dipendenza esterna.
- * Tutte le chiamate API sono dirette a 127.0.0.1:8000 (localhost).
- */
+// Local Pseudonymization Tool — Frontend v4.0.0
 
-'use strict';
-
-// ─── Stato Applicazione ──────────────────────────────────────────────────────
+const API = '';
+const LS_MODE = 'pst_mode';
+const LS_LDAP = 'pst_ldap_config';
+const LS_SESSIONS = 'pst_sessions';
 
 const state = {
-    files: [],          // File selezionati dall'utente
-    batchId: null,      // ID del batch corrente
-    findings: [],       // Finding restituiti dal backend
-    filteredFindings: [], // Finding dopo i filtri
-    fileMap: {},        // file_id -> original_name
-    decisions: {},      // finding_id -> { action, modified_pseudonym }
+  mode: localStorage.getItem(LS_MODE) || 'light',
+  batches: {},
+  activeBatchId: null,
+  currentPassphrase: null,
+  passphraseVisible: false,
 };
 
-// ─── Utility ─────────────────────────────────────────────────────────────────
-
-const API_BASE = window.location.origin + '/api';
-
-async function apiCall(method, path, body = null, isFormData = false) {
-    const opts = { method };
-    if (body) {
-        if (isFormData) {
-            opts.body = body;
-        } else {
-            opts.headers = { 'Content-Type': 'application/json' };
-            opts.body = JSON.stringify(body);
-        }
-    }
-    const resp = await fetch(API_BASE + path, opts);
-    if (!resp.ok) {
-        let errMsg = `HTTP ${resp.status}`;
-        try {
-            const err = await resp.json();
-            errMsg = err.detail || errMsg;
-        } catch (_) {}
-        throw new Error(errMsg);
-    }
-    return resp.json();
-}
-
-function showToast(msg, type = 'info', duration = 4000) {
-    const container = document.getElementById('toast-container');
-    const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-    toast.textContent = msg;
-    container.appendChild(toast);
-    setTimeout(() => {
-        toast.style.opacity = '0';
-        toast.style.transition = 'opacity 0.3s';
-        setTimeout(() => toast.remove(), 300);
-    }, duration);
-}
-
-function showStep(stepId) {
-    document.querySelectorAll('.step').forEach(s => {
-        s.classList.remove('active');
-        s.classList.add('hidden');
-    });
-    const target = document.getElementById(stepId);
-    if (target) {
-        target.classList.remove('hidden');
-        target.classList.add('active');
-    }
-}
-
-function formatBytes(bytes) {
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-}
-
-function getFileIcon(name) {
-    const ext = name.split('.').pop().toLowerCase();
-    const icons = {
-        txt: '📄', md: '📝', csv: '📊', docx: '📘', pdf: '📕',
-        xlsx: '📗', jpg: '🖼️', jpeg: '🖼️', png: '🖼️',
-    };
-    return icons[ext] || '📄';
-}
-
-// ─── Gestione File ────────────────────────────────────────────────────────────
-
-const SUPPORTED_EXTS = ['txt', 'md', 'csv', 'docx', 'pdf', 'xlsx', 'jpg', 'jpeg', 'png'];
-
-function addFiles(newFiles) {
-    for (const file of newFiles) {
-        const ext = file.name.split('.').pop().toLowerCase();
-        if (!SUPPORTED_EXTS.includes(ext)) {
-            showToast(`Formato non supportato: ${file.name}`, 'warning');
-            continue;
-        }
-        if (file.size > 50 * 1024 * 1024) {
-            showToast(`File troppo grande (max 50 MB): ${file.name}`, 'warning');
-            continue;
-        }
-        // Evita duplicati
-        if (!state.files.find(f => f.name === file.name && f.size === file.size)) {
-            state.files.push(file);
-        }
-    }
-    renderFileList();
-    updateScanButton();
-}
-
-function removeFile(index) {
-    state.files.splice(index, 1);
-    renderFileList();
-    updateScanButton();
-}
-
-function renderFileList() {
-    const container = document.getElementById('file-list');
-    if (state.files.length === 0) {
-        container.classList.add('hidden');
-        return;
-    }
-    container.classList.remove('hidden');
-    container.innerHTML = state.files.map((f, i) => `
-        <div class="file-item">
-            <span class="file-icon">${getFileIcon(f.name)}</span>
-            <span class="file-name">${escapeHtml(f.name)}</span>
-            <span class="file-size">${formatBytes(f.size)}</span>
-            <button class="file-remove" onclick="removeFile(${i})" title="Rimuovi">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                    <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-            </button>
-        </div>
-    `).join('');
-}
-
-function escapeHtml(str) {
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-// ─── Passphrase Strength ──────────────────────────────────────────────────────
-
-function checkPasswordStrength(pw) {
-    const bar = document.getElementById('pw-strength');
-    if (!pw) { bar.className = 'pw-strength'; bar.style.width = '0'; return; }
-    let score = 0;
-    if (pw.length >= 8) score++;
-    if (pw.length >= 14) score++;
-    if (/[A-Z]/.test(pw)) score++;
-    if (/[0-9]/.test(pw)) score++;
-    if (/[^a-zA-Z0-9]/.test(pw)) score++;
-    if (score <= 2) bar.className = 'pw-strength weak';
-    else if (score <= 3) bar.className = 'pw-strength medium';
-    else bar.className = 'pw-strength strong';
-}
-
-function updateScanButton() {
-    const btn = document.getElementById('btn-scan');
-    const pw = document.getElementById('passphrase').value;
-    btn.disabled = state.files.length === 0 || pw.length < 4;
-}
-
-// ─── Drag & Drop ──────────────────────────────────────────────────────────────
-
-function initDropZone() {
-    const zone = document.getElementById('drop-zone');
-
-    zone.addEventListener('click', () => document.getElementById('file-input').click());
-    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
-    zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
-    zone.addEventListener('drop', e => {
-        e.preventDefault();
-        zone.classList.remove('drag-over');
-        addFiles(Array.from(e.dataTransfer.files));
-    });
-
-    document.getElementById('file-input').addEventListener('change', e => {
-        addFiles(Array.from(e.target.files));
-        e.target.value = ''; // Reset per permettere ri-selezione dello stesso file
-    });
-}
-
-// ─── Scansione ────────────────────────────────────────────────────────────────
-
-async function startScan() {
-    const pw = document.getElementById('passphrase').value;
-    const mode = document.querySelector('input[name="mode"]:checked').value;
-    const isDryRun = document.getElementById('dry-run').checked;
-
-    if (!pw || pw.length < 4) {
-        showToast('Inserisci una passphrase di almeno 4 caratteri.', 'error');
-        return;
-    }
-
-    showStep('step-scanning');
-    document.getElementById('scan-status-msg').textContent = 'Caricamento file...';
-    document.getElementById('progress-bar').style.width = '20%';
-
-    try {
-        // Crea il FormData con i file e la configurazione
-        const formData = new FormData();
-        for (const file of state.files) {
-            formData.append('files', file, file.name);
-        }
-        formData.append('mode', mode);
-        formData.append('is_dry_run', isDryRun ? 'true' : 'false');
-        formData.append('passphrase', pw);
-
-        // Crea il batch e carica i file
-        document.getElementById('scan-status-msg').textContent = 'Creazione batch e upload file...';
-        document.getElementById('progress-bar').style.width = '35%';
-
-        const batchData = await apiCall('POST', '/batches', formData, true);
-        state.batchId = batchData.batch_id;
-
-        // Costruisci la mappa file_id -> nome
-        state.fileMap = {};
-        for (const fr of batchData.files) {
-            state.fileMap[fr.file_id] = fr.original_name;
-        }
-
-        // Avvia la scansione
-        document.getElementById('scan-status-msg').textContent = 'Analisi dei file in corso...';
-        document.getElementById('progress-bar').style.width = '60%';
-
-        const scanResult = await apiCall('POST', `/batches/${state.batchId}/scan`);
-
-        document.getElementById('progress-bar').style.width = '90%';
-        document.getElementById('scan-status-msg').textContent = `Trovati ${scanResult.findings_count} potenziali dati sensibili.`;
-
-        // Recupera i finding
-        const findingsData = await apiCall('GET', `/batches/${state.batchId}/findings`);
-        state.findings = findingsData.findings;
-
-        document.getElementById('progress-bar').style.width = '100%';
-
-        setTimeout(() => {
-            renderReviewStep(batchData.files);
-            showStep('step-review');
-        }, 500);
-
-    } catch (err) {
-        document.getElementById('error-message').textContent = `Errore durante la scansione: ${err.message}`;
-        showStep('step-error');
-        showToast(`Errore: ${err.message}`, 'error');
-    }
-}
-
-// ─── Review ───────────────────────────────────────────────────────────────────
-
-function renderReviewStep(fileRecords) {
-    // Popola il filtro file
-    const filterFile = document.getElementById('filter-file');
-    filterFile.innerHTML = '<option value="">Tutti i file</option>';
-    for (const fr of fileRecords) {
-        const opt = document.createElement('option');
-        opt.value = fr.file_id;
-        opt.textContent = fr.original_name;
-        filterFile.appendChild(opt);
-    }
-
-    // Inizializza le decisioni (tutte "accept" di default)
-    state.decisions = {};
-    for (const f of state.findings) {
-        state.decisions[f.finding_id] = { action: 'accept', modified_pseudonym: null };
-    }
-
-    applyFiltersAndRender();
-}
-
-function applyFiltersAndRender() {
-    const typeFilter = document.getElementById('filter-type').value;
-    const fileFilter = document.getElementById('filter-file').value;
-    const searchFilter = document.getElementById('filter-search').value.toLowerCase();
-
-    state.filteredFindings = state.findings.filter(f => {
-        if (typeFilter && f.entity_type !== typeFilter) return false;
-        if (fileFilter && f.file_id !== fileFilter) return false;
-        if (searchFilter) {
-            const inOriginal = f.original_value.toLowerCase().includes(searchFilter);
-            const inPseudo = f.proposed_pseudonym.toLowerCase().includes(searchFilter);
-            if (!inOriginal && !inPseudo) return false;
-        }
-        return true;
-    });
-
-    renderFindingsTable();
-    updateReviewCounter();
-}
-
-function renderFindingsTable() {
-    const tbody = document.getElementById('findings-tbody');
-    const noMsg = document.getElementById('no-findings-msg');
-
-    if (state.filteredFindings.length === 0) {
-        tbody.innerHTML = '';
-        noMsg.classList.remove('hidden');
-        return;
-    }
-
-    noMsg.classList.add('hidden');
-
-    tbody.innerHTML = state.filteredFindings.map(f => {
-        const dec = state.decisions[f.finding_id] || { action: 'accept', modified_pseudonym: null };
-        const fileName = state.fileMap[f.file_id] || f.file_id;
-        const location = f.location;
-        let sourceRef = fileName;
-        if (location.line) sourceRef += `:${location.line}`;
-        if (location.cell_ref) sourceRef += ` (${location.cell_ref})`;
-
-        const confClass = f.confidence_score >= 0.9 ? 'conf-high' : f.confidence_score >= 0.7 ? 'conf-medium' : 'conf-low';
-        const confPct = Math.round(f.confidence_score * 100);
-
-        const rowClass = dec.action === 'reject' ? 'rejected' : dec.action === 'modify' ? 'modified' : '';
-        const selectClass = dec.action === 'accept' ? 'accepted' : dec.action === 'reject' ? 'rejected' : 'modified';
-
-        const modifyInput = dec.action === 'modify' ? `
-            <input type="text" class="modify-input"
-                value="${escapeHtml(dec.modified_pseudonym || f.proposed_pseudonym)}"
-                placeholder="Inserisci pseudonimo personalizzato..."
-                onchange="updateModifiedPseudonym('${f.finding_id}', this.value)"
-                oninput="updateModifiedPseudonym('${f.finding_id}', this.value)">
-        ` : '';
-
-        return `
-        <tr class="${rowClass}" data-finding-id="${f.finding_id}">
-            <td><span class="entity-badge badge-${f.entity_type}">${f.entity_type}</span></td>
-            <td><span class="original-value" title="${escapeHtml(f.original_value)}">${escapeHtml(f.original_value)}</span></td>
-            <td>
-                <span class="pseudonym-value">${escapeHtml(dec.action === 'modify' && dec.modified_pseudonym ? dec.modified_pseudonym : f.proposed_pseudonym)}</span>
-            </td>
-            <td style="font-size:0.8rem;color:var(--text-muted);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(sourceRef)}">${escapeHtml(sourceRef)}</td>
-            <td>
-                <div class="conf-bar-wrap ${confClass}">
-                    <div class="conf-bar"><div class="conf-bar-fill" style="width:${confPct}%"></div></div>
-                    <span class="conf-label">${confPct}%</span>
-                </div>
-            </td>
-            <td>
-                <select class="action-select ${selectClass}"
-                    onchange="updateDecision('${f.finding_id}', this.value)">
-                    <option value="accept" ${dec.action === 'accept' ? 'selected' : ''}>✓ Accetta</option>
-                    <option value="reject" ${dec.action === 'reject' ? 'selected' : ''}>✗ Escludi</option>
-                    <option value="modify" ${dec.action === 'modify' ? 'selected' : ''}>✎ Modifica</option>
-                </select>
-                ${modifyInput}
-            </td>
-        </tr>`;
-    }).join('');
-}
-
-function updateDecision(findingId, action) {
-    if (!state.decisions[findingId]) {
-        state.decisions[findingId] = { action: 'accept', modified_pseudonym: null };
-    }
-    state.decisions[findingId].action = action;
-    if (action !== 'modify') {
-        state.decisions[findingId].modified_pseudonym = null;
-    }
-    applyFiltersAndRender();
-}
-
-function updateModifiedPseudonym(findingId, value) {
-    if (!state.decisions[findingId]) {
-        state.decisions[findingId] = { action: 'modify', modified_pseudonym: value };
-    } else {
-        state.decisions[findingId].modified_pseudonym = value;
-    }
-}
-
-function updateReviewCounter() {
-    const total = state.findings.length;
-    const accepted = Object.values(state.decisions).filter(d => d.action === 'accept').length;
-    const rejected = Object.values(state.decisions).filter(d => d.action === 'reject').length;
-    const modified = Object.values(state.decisions).filter(d => d.action === 'modify').length;
-    document.getElementById('review-counter').textContent =
-        `${total} totali — ${accepted} accettati — ${modified} modificati — ${rejected} esclusi`;
-}
-
-function acceptAll() {
-    for (const fid of Object.keys(state.decisions)) {
-        state.decisions[fid] = { action: 'accept', modified_pseudonym: null };
-    }
-    applyFiltersAndRender();
-    showToast('Tutti i finding accettati.', 'success');
-}
-
-function rejectAll() {
-    for (const fid of Object.keys(state.decisions)) {
-        state.decisions[fid] = { action: 'reject', modified_pseudonym: null };
-    }
-    applyFiltersAndRender();
-    showToast('Tutti i finding esclusi.', 'warning');
-}
-
-// ─── Applicazione ─────────────────────────────────────────────────────────────
-
-async function applyBatch() {
-    try {
-        // Invia le decisioni di review
-        const decisions = Object.entries(state.decisions).map(([finding_id, dec]) => ({
-            finding_id,
-            action: dec.action,
-            modified_pseudonym: dec.modified_pseudonym || null,
-        }));
-
-        await apiCall('POST', `/batches/${state.batchId}/review`, { decisions });
-
-        // Applica le trasformazioni
-        showToast('Applicazione trasformazioni in corso...', 'info');
-        await apiCall('POST', `/batches/${state.batchId}/apply`);
-
-        // Recupera il batch per le statistiche
-        const batchStatus = await apiCall('GET', `/batches/${state.batchId}`);
-
-        renderDoneStep(batchStatus);
-        showStep('step-done');
-        showToast('Batch completato con successo!', 'success');
-
-    } catch (err) {
-        document.getElementById('error-message').textContent = `Errore durante l'applicazione: ${err.message}`;
-        showStep('step-error');
-        showToast(`Errore: ${err.message}`, 'error');
-    }
-}
-
-// ─── Done ─────────────────────────────────────────────────────────────────────
-
-function renderDoneStep(batchStatus) {
-    const accepted = Object.values(state.decisions).filter(d => d.action === 'accept').length;
-    const modified = Object.values(state.decisions).filter(d => d.action === 'modify').length;
-    const applied = accepted + modified;
-
-    document.getElementById('done-summary').innerHTML = `
-        <div class="done-stats">
-            <div class="done-stat"><div class="value">${batchStatus.files.length}</div><div class="label">File Processati</div></div>
-            <div class="done-stat"><div class="value">${state.findings.length}</div><div class="label">Entità Rilevate</div></div>
-            <div class="done-stat"><div class="value">${applied}</div><div class="label">Sostituzioni Applicate</div></div>
-            <div class="done-stat"><div class="value">${Object.values(state.decisions).filter(d => d.action === 'reject').length}</div><div class="label">Finding Esclusi</div></div>
-        </div>
-    `;
-
-    const batchId = state.batchId;
-    document.getElementById('download-grid').innerHTML = `
-        <button class="btn-download primary" onclick="downloadZip()">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-            Scarica File Pseudonimizzati (.zip)
-        </button>
-        <button class="btn-download" onclick="downloadReport('html')">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-            Report HTML
-        </button>
-        <button class="btn-download" onclick="downloadReport('json')">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-            Report JSON
-        </button>
-    `;
-}
-
-async function downloadZip() {
-    try {
-        const resp = await fetch(`${API_BASE}/batches/${state.batchId}/download`);
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const blob = await resp.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `pseudonymized_batch_${state.batchId.substring(0, 8)}.zip`;
-        a.click();
-        URL.revokeObjectURL(url);
-        showToast('Download avviato.', 'success');
-    } catch (err) {
-        showToast(`Errore download: ${err.message}`, 'error');
-    }
-}
-
-async function downloadReport(format) {
-    try {
-        const resp = await fetch(`${API_BASE}/batches/${state.batchId}/report/${format}`);
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const blob = await resp.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `report.${format}`;
-        a.click();
-        URL.revokeObjectURL(url);
-    } catch (err) {
-        showToast(`Errore download report: ${err.message}`, 'error');
-    }
-}
-
-// ─── Reset ────────────────────────────────────────────────────────────────────
-
-function resetApp() {
-    state.files = [];
-    state.batchId = null;
-    state.findings = [];
-    state.filteredFindings = [];
-    state.fileMap = {};
-    state.decisions = {};
-
-    document.getElementById('file-list').classList.add('hidden');
-    document.getElementById('file-list').innerHTML = '';
-    document.getElementById('passphrase').value = '';
-    document.getElementById('dry-run').checked = false;
-    document.querySelector('input[name="mode"][value="light"]').checked = true;
-    document.getElementById('pw-strength').className = 'pw-strength';
-    document.getElementById('btn-scan').disabled = true;
-    document.getElementById('filter-type').value = '';
-    document.getElementById('filter-file').innerHTML = '<option value="">Tutti i file</option>';
-    document.getElementById('filter-search').value = '';
-
-    showStep('step-upload');
-}
-
-// ─── Inizializzazione ─────────────────────────────────────────────────────────
+// ─── INIT ────────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
-    initDropZone();
+  setMode(state.mode, false);
+  checkServerHealth();
+  setInterval(checkServerHealth, 15000);
+  loadDictStatus();
+  restoreLdapConfig();
+  restoreSessionHistory();
 
-    // Passphrase
-    document.getElementById('passphrase').addEventListener('input', e => {
-        checkPasswordStrength(e.target.value);
-        updateScanButton();
-    });
+  const ta = document.getElementById('composer-textarea');
+  ta.addEventListener('input', () => {
+    document.getElementById('composer-char-count').textContent =
+      ta.value.length.toLocaleString('it') + ' caratteri';
+  });
+  ta.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); scanComposer(); }
+  });
 
-    // Toggle visibilità passphrase
-    document.getElementById('toggle-pw').addEventListener('click', () => {
-        const input = document.getElementById('passphrase');
-        input.type = input.type === 'password' ? 'text' : 'password';
-    });
-
-    // Pulsante scansione
-    document.getElementById('btn-scan').addEventListener('click', startScan);
-
-    // Filtri review
-    document.getElementById('filter-type').addEventListener('change', applyFiltersAndRender);
-    document.getElementById('filter-file').addEventListener('change', applyFiltersAndRender);
-    document.getElementById('filter-search').addEventListener('input', applyFiltersAndRender);
-
-    // Azioni bulk review
-    document.getElementById('btn-accept-all').addEventListener('click', acceptAll);
-    document.getElementById('btn-reject-all').addEventListener('click', rejectAll);
-
-    // Applica modifiche
-    document.getElementById('btn-apply').addEventListener('click', applyBatch);
-
-    // Pulsanti di reset
-    document.getElementById('btn-back-to-upload').addEventListener('click', resetApp);
-    document.getElementById('btn-new-batch').addEventListener('click', resetApp);
-    document.getElementById('btn-retry').addEventListener('click', resetApp);
-
-    showStep('step-upload');
+  // Drag-and-drop drop zone
+  const dropZone = document.getElementById('composer-section') || document.body;
+  dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.classList.add('drop-zone-active');
+  });
+  dropZone.addEventListener('dragleave', (e) => {
+    if (!dropZone.contains(e.relatedTarget)) dropZone.classList.remove('drop-zone-active');
+  });
+  dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('drop-zone-active');
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length) handleFileUploadDirect(files);
+  });
 });
 
-// Esponi funzioni globali usate dagli handler inline
-window.removeFile = removeFile;
-window.updateDecision = updateDecision;
-window.updateModifiedPseudonym = updateModifiedPseudonym;
-window.downloadZip = downloadZip;
-window.downloadReport = downloadReport;
+// ─── HEALTH ──────────────────────────────────────────────────────────────────
+
+async function checkServerHealth() {
+  const dot = document.getElementById('server-status');
+  try {
+    const r = await fetch(API + '/api/health', { signal: AbortSignal.timeout(3000) });
+    if (r.ok) {
+      dot.className = 'status-dot status-ok';
+      dot.title = 'Server attivo';
+    } else {
+      dot.className = 'status-dot status-error';
+      dot.title = 'Server non raggiungibile';
+    }
+  } catch {
+    dot.className = 'status-dot status-error';
+    dot.title = 'Server non raggiungibile';
+  }
+}
+
+// ─── MODE ────────────────────────────────────────────────────────────────────
+
+function setMode(m, save) {
+  if (save === undefined) save = true;
+  state.mode = m;
+  if (save) localStorage.setItem(LS_MODE, m);
+  document.getElementById('mode-light').classList.toggle('active', m === 'light');
+  document.getElementById('mode-strict').classList.toggle('active', m === 'strict');
+  const el = document.getElementById('info-mode');
+  if (el) el.textContent = m === 'light' ? 'Light' : 'Strict';
+}
+
+// ─── CLIPBOARD ───────────────────────────────────────────────────────────────
+
+async function pasteFromClipboard() {
+  try {
+    const text = await navigator.clipboard.readText();
+    const ta = document.getElementById('composer-textarea');
+    ta.value = text;
+    ta.dispatchEvent(new Event('input'));
+    toast('Testo incollato dagli appunti', 'success');
+  } catch {
+    toast('Incolla manualmente con Ctrl+V.', 'warning');
+  }
+}
+
+// ─── FLUSSO 1: TESTO INLINE ──────────────────────────────────────────────────
+
+async function scanComposer() {
+  const ta = document.getElementById('composer-textarea');
+  const text = ta.value.trim();
+  if (!text) { toast('Inserisci del testo prima di scansionare.', 'warning'); return; }
+  const btn = document.getElementById('scan-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Scansione...';
+  const cardEl = createBatchCard(null, 'Testo inline', 'scanning');
+  try {
+    const r = await fetch(API + '/api/console/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text, mode: state.mode }),
+    });
+    if (!r.ok) {
+      let msg = 'Errore ' + r.status;
+      try { const e = await r.json(); msg = e.detail || JSON.stringify(e); } catch {}
+      throw new Error(msg);
+    }
+    const data = await r.json();
+    const batchId = data.batch_id;
+    cardEl.dataset.batchId = batchId;
+    state.batches[batchId] = {
+      id: batchId,
+      label: 'Testo inline',
+      mode: state.mode,
+      status: 'review',
+      findings: data.findings || [],
+      inputText: text,
+      fileId: data.file_id,
+      passphrase: data.passphrase,
+      createdAt: new Date().toISOString(),
+    };
+    state.activeBatchId = batchId;
+    state.currentPassphrase = data.passphrase;
+    updateCardReady(cardEl, batchId, data);
+    addToSidebar(batchId, 'Testo inline', (data.findings || []).length);
+    saveSessionHistory(batchId, 'Testo inline', (data.findings || []).length);
+    showPassphraseModal(data.passphrase);
+  } catch (err) {
+    updateCardError(cardEl, err.message);
+    toast('Errore scansione: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔍 Scansiona';
+  }
+}
+
+// ─── FLUSSO 2: UPLOAD FILE ───────────────────────────────────────────────────
+
+async function handleFileUpload(event) {
+  const files = Array.from(event.target.files);
+  if (!files.length) return;
+  event.target.value = '';
+  for (const file of files) {
+    const cardEl = createBatchCard(null, file.name, 'uploading');
+    try {
+      const fd = new FormData();
+      fd.append('files', file);
+      fd.append('mode', state.mode);
+      // NON impostare Content-Type: il browser lo imposta con il boundary corretto
+      const r = await fetch(API + '/api/batches', { method: 'POST', body: fd });
+      if (!r.ok) {
+        let msg = 'Errore ' + r.status;
+        try { const e = await r.json(); msg = e.detail || JSON.stringify(e); } catch {}
+        throw new Error(msg);
+      }
+      const data = await r.json();
+      const batchId = data.batch_id;
+      cardEl.dataset.batchId = batchId;
+      state.batches[batchId] = {
+        id: batchId,
+        label: file.name,
+        mode: state.mode,
+        status: 'review',
+        findings: data.findings || [],
+        inputText: null,
+        fileId: data.files && data.files.length > 0 ? data.files[0].id : null,
+        passphrase: data.passphrase,
+        createdAt: new Date().toISOString(),
+      };
+      state.activeBatchId = batchId;
+      state.currentPassphrase = data.passphrase;
+      updateCardReady(cardEl, batchId, data);
+      addToSidebar(batchId, file.name, (data.findings || []).length);
+      saveSessionHistory(batchId, file.name, (data.findings || []).length);
+      showPassphraseModal(data.passphrase);
+    } catch (err) {
+      updateCardError(cardEl, err.message);
+      toast('Errore upload ' + file.name + ': ' + err.message, 'error');
+    }
+  }
+}
+
+// ─── REVIEW DECISIONS ────────────────────────────────────────────────────────
+
+async function submitReviewDecisions(batchId) {
+  const batch = state.batches[batchId];
+  if (!batch || !batch.findings || !batch.findings.length) return true;
+  // Legge il valore aggiornato degli input direttamente dal DOM (evita race condition con oninput)
+  const domInputs = {};
+  document.querySelectorAll('#drawer-review-body .finding-pseudonym-input').forEach(inp => {
+    if (inp.dataset.fid) domInputs[inp.dataset.fid] = inp.value;
+  });
+  const decisions = batch.findings.map(f => {
+    const domVal = domInputs[f.finding_id];
+    const pseudonym = domVal !== undefined ? domVal : (f.proposed_pseudonym || null);
+    const action = f._action || 'accept';
+    return {
+      finding_id: f.finding_id,
+      action: action.toLowerCase(),
+      modified_pseudonym: (action === 'modify' || f._modified) ? pseudonym : null,
+    };
+  });
+  const r = await fetch(API + '/api/batches/' + batchId + '/review', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ decisions: decisions }),
+  });
+  if (!r.ok) {
+    let m = 'Errore invio review ' + r.status;
+    try { const e = await r.json(); m = e.detail || m; } catch {}
+    throw new Error(m);
+  }
+  return true;
+}
+
+// ─── APPLY ───────────────────────────────────────────────────────────────────
+
+async function applyCurrentBatch() {
+  const batchId = state.activeBatchId;
+  if (!batchId) { toast('Nessun batch attivo.', 'warning'); return; }
+  const batch = state.batches[batchId];
+  if (!batch) { toast('Batch non trovato.', 'error'); return; }
+  const btn = document.getElementById('apply-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Applicazione...'; }
+  try {
+    // Invia sempre le decisions prima di apply
+    if (batch.findings && batch.findings.length > 0) {
+      await submitReviewDecisions(batchId);
+    }
+    if (batch.inputText !== undefined && batch.inputText !== null) {
+      // Flusso testo inline
+      const r = await fetch(API + '/api/console/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batch_id: batchId, file_id: batch.fileId, text: batch.inputText }),
+      });
+      if (!r.ok) {
+        let m = 'Errore ' + r.status;
+        try { const e = await r.json(); m = e.detail || m; } catch {}
+        throw new Error(m);
+      }
+      const data = await r.json();
+      batch.status = 'done';
+      updateSidebarItemDone(batchId);
+      closeDrawer();
+      showTextResult(batchId, data);
+      toast('Pseudonimizzazione completata.', 'success');
+    } else {
+      // Flusso file
+      const r = await fetch(API + '/api/batches/' + batchId + '/apply', { method: 'POST' });
+      if (!r.ok) {
+        let m = 'Errore ' + r.status;
+        try { const e = await r.json(); m = e.detail || m; } catch {}
+        throw new Error(m);
+      }
+      batch.status = 'done';
+      updateSidebarItemDone(batchId);
+      closeDrawer();
+      toast('Completato. Download in corso...', 'success');
+      const dl = await fetch(API + '/api/batches/' + batchId + '/download');
+      if (!dl.ok) throw new Error('Download fallito: ' + dl.status);
+      const blob = await dl.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'batch_' + batchId.slice(0, 8) + '.zip';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+  } catch (err) {
+    toast('Errore apply: ' + err.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '✓ Applica Pseudonimizzazione'; }
+  }
+}
+
+async function quickApply(batchId) {
+  state.activeBatchId = batchId;
+  await applyCurrentBatch();
+}
+
+// ─── RISULTATO TESTO ─────────────────────────────────────────────────────────
+
+function showTextResult(batchId, data) {
+  const cardEl = document.querySelector('[data-batch-id="' + batchId + '"]');
+  if (!cardEl) return;
+  let out = cardEl.querySelector('.card-output');
+  if (!out) { out = document.createElement('div'); cardEl.appendChild(out); }
+  out.className = 'card-output';
+  const warnings = data.residual_warnings || [];
+  const appliedCount = data.applied_count || 0;
+  out.innerHTML =
+    '<div class="output-header">' +
+      '<span class="output-label">Testo pseudonimizzato (' + appliedCount + ' sostituzioni)</span>' +
+      '<button class="btn btn-sm btn-ghost" onclick="copyOutput(\'' + batchId + '\')">&#x1F4CB; Copia</button>' +
+    '</div>' +
+    '<pre class="output-text" id="output-text-' + batchId + '">' + escHtml(data.pseudonymized_text || '') + '</pre>' +
+    (warnings.length
+      ? '<div class="output-warnings"><b>&#x26A0; Possibili residui (' + warnings.length + '):</b><ul>' +
+        warnings.map(w => '<li>' + escHtml(w) + '</li>').join('') + '</ul></div>'
+      : '<div class="output-clean">&#x2713; Nessun residuo rilevato</div>');
+}
+
+async function copyOutput(batchId) {
+  const el = document.getElementById('output-text-' + batchId);
+  if (!el) return;
+  try {
+    await navigator.clipboard.writeText(el.textContent);
+    toast('Testo copiato.', 'success');
+  } catch {
+    toast('Impossibile copiare. Seleziona manualmente.', 'warning');
+  }
+}
+
+// ─── CARD DOM ────────────────────────────────────────────────────────────────
+
+function createBatchCard(batchId, label, status) {
+  const container = document.getElementById('cards-container');
+  const empty = document.getElementById('sidebar-empty');
+  if (empty) empty.style.display = 'none';
+  const card = document.createElement('div');
+  card.className = 'batch-card batch-card-' + status;
+  if (batchId) card.dataset.batchId = batchId;
+  card._label = label;
+  card.innerHTML =
+    '<div class="card-header">' +
+      '<span class="card-label">' + escHtml(label) + '</span>' +
+      '<span class="card-status-badge badge-' + status + '">' + statusLabel(status) + '</span>' +
+    '</div>' +
+    '<div class="card-body"><div class="card-spinner">&#x23F3; Elaborazione in corso...</div></div>';
+  container.insertBefore(card, container.firstChild);
+  return card;
+}
+
+function updateCardReady(cardEl, batchId, data) {
+  const findings = data.findings || [];
+  const safety = data.safety_label || 'SAFE_TO_UPLOAD';
+  const safetyClass = safety === 'BLOCKED' ? 'safety-blocked' : safety === 'NEEDS_REVIEW' ? 'safety-review' : 'safety-ok';
+  const byType = {};
+  findings.forEach(f => { byType[f.entity_type] = (byType[f.entity_type] || 0) + 1; });
+  const chips = Object.entries(byType)
+    .sort((a, b) => b[1] - a[1])
+    .map(([t, n]) => '<span class="type-chip">' + escHtml(t) + ' <b>' + n + '</b></span>')
+    .join('');
+  const label = (state.batches[batchId] && state.batches[batchId].label) || cardEl._label || batchId.slice(0, 8);
+  cardEl.className = 'batch-card batch-card-review';
+  cardEl.dataset.batchId = batchId;
+  cardEl.innerHTML =
+    '<div class="card-header">' +
+      '<span class="card-label">' + escHtml(label) + '</span>' +
+      '<span class="safety-label ' + safetyClass + '">' + safety.replace(/_/g, ' ') + '</span>' +
+    '</div>' +
+    '<div class="card-body">' +
+      '<div class="card-stats">' +
+        '<span class="stat-main">' + findings.length + ' finding</span>' +
+        '<div class="type-chips">' +
+          (chips || '<span class="no-findings">Nessun dato sensibile rilevato</span>') +
+        '</div>' +
+      '</div>' +
+      '<div class="card-actions">' +
+        '<button class="btn btn-secondary" onclick="openReview(\'' + batchId + '\')">&#x1F50E; Rivedi</button>' +
+        '<button class="btn btn-primary" onclick="quickApply(\'' + batchId + '\')">&#x2713; Applica</button>' +
+      '</div>' +
+    '</div>';
+}
+
+function updateCardError(cardEl, msg) {
+  cardEl.className = 'batch-card batch-card-error';
+  cardEl.innerHTML =
+    '<div class="card-header"><span class="card-label">Errore</span>' +
+    '<span class="card-status-badge badge-error">&#x2717; Errore</span></div>' +
+    '<div class="card-body"><div class="card-error-msg">&#x26A0; ' + escHtml(msg) + '</div></div>';
+}
+
+function statusLabel(s) {
+  const map = {
+    scanning: '⏳ Scansione',
+    uploading: '⏳ Upload',
+    review: '🔍 Review',
+    done: '✓ Fatto',
+    error: '✗ Errore',
+  };
+  return map[s] || s;
+}
+
+// ─── SIDEBAR ─────────────────────────────────────────────────────────────────
+
+function addToSidebar(batchId, label, count) {
+  const list = document.getElementById('sidebar-list');
+  const empty = document.getElementById('sidebar-empty');
+  if (empty) empty.style.display = 'none';
+  const item = document.createElement('div');
+  item.className = 'sidebar-item';
+  item.id = 'sidebar-' + batchId;
+  item.onclick = () => { state.activeBatchId = batchId; openReview(batchId); };
+  const now = new Date();
+  const timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+  item.innerHTML =
+    '<div class="sidebar-item-main">' +
+      '<span class="sidebar-item-label" title="' + escHtml(label) + '">' + escHtml(label) + '</span>' +
+      '<span class="sidebar-item-count" id="sidebar-count-' + batchId + '">' + count + '</span>' +
+    '</div>' +
+    '<div class="sidebar-item-meta">' +
+      '<span class="sidebar-item-time">' + timeStr + '</span>' +
+    '</div>';
+  list.insertBefore(item, list.firstChild);
+}
+
+function updateSidebarItemDone(batchId) {
+  const el = document.getElementById('sidebar-' + batchId);
+  if (el) el.classList.add('sidebar-item-done');
+}
+
+async function clearAllBatches() {
+  for (const batchId of Object.keys(state.batches)) {
+    try { await fetch(API + '/api/batches/' + batchId, { method: 'DELETE' }); } catch {}
+  }
+  state.batches = {};
+  state.activeBatchId = null;
+  document.getElementById('cards-container').innerHTML = '';
+  document.getElementById('sidebar-list').innerHTML =
+    '<div class="sidebar-empty" id="sidebar-empty">Nessuna sessione attiva</div>';
+  clearSessionHistory();
+}
+
+// ─── SESSION HISTORY (localStorage) ─────────────────────────────────────────
+
+function saveSessionHistory(batchId, label, count) {
+  try {
+    const sessions = JSON.parse(localStorage.getItem(LS_SESSIONS) || '[]');
+    sessions.unshift({
+      id: batchId,
+      label: label,
+      count: count,
+      ts: new Date().toISOString(),
+    });
+    // Mantieni solo le ultime 20 sessioni
+    localStorage.setItem(LS_SESSIONS, JSON.stringify(sessions.slice(0, 20)));
+  } catch {}
+}
+
+function restoreSessionHistory() {
+  try {
+    const sessions = JSON.parse(localStorage.getItem(LS_SESSIONS) || '[]');
+    if (!sessions.length) return;
+    const histEl = document.getElementById('session-history');
+    if (!histEl) return;
+    histEl.innerHTML = '';
+    sessions.forEach(s => {
+      const d = document.createElement('div');
+      d.className = 'history-item';
+      const ts = new Date(s.ts);
+      const dateStr = ts.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }) +
+        ' ' + ts.getHours().toString().padStart(2, '0') + ':' + ts.getMinutes().toString().padStart(2, '0');
+      d.innerHTML =
+        '<span class="history-label" title="' + escHtml(s.label) + '">' + escHtml(s.label) + '</span>' +
+        '<span class="history-meta">' + s.count + ' finding &middot; ' + dateStr + '</span>';
+      histEl.appendChild(d);
+    });
+    const section = document.getElementById('session-history-section');
+    if (section) section.style.display = 'block';
+  } catch {}
+}
+
+function clearSessionHistory() {
+  localStorage.removeItem(LS_SESSIONS);
+  const histEl = document.getElementById('session-history');
+  if (histEl) histEl.innerHTML = '';
+  const section = document.getElementById('session-history-section');
+  if (section) section.style.display = 'none';
+}
+
+// ─── REVIEW DRAWER ───────────────────────────────────────────────────────────
+
+function openReview(batchId) {
+  state.activeBatchId = batchId;
+  const batch = state.batches[batchId];
+  if (!batch) return;
+  const findings = batch.findings || [];
+  const typeFilter = document.getElementById('review-type-filter');
+  const types = [...new Set(findings.map(f => f.entity_type))].sort();
+  typeFilter.innerHTML = '<option value="">Tutti i tipi</option>' +
+    types.map(t => '<option value="' + escHtml(t) + '">' + escHtml(t) + '</option>').join('');
+  findings.forEach(f => { if (!f._action) f._action = 'accept'; });
+  renderFindings(findings);
+  document.getElementById('review-count').textContent = findings.length + ' finding';
+  openDrawer('review');
+}
+
+function renderFindings(findings) {
+  var body = document.getElementById('drawer-review-body');
+  if (!findings.length) {
+    body.innerHTML = '<div class="no-findings-msg">Nessun finding.</div>';
+    return;
+  }
+  var rows = [];
+  for (var i = 0; i < findings.length; i++) {
+    var f = findings[i];
+    var action = f._action || 'accept';
+    // Classi riga
+    var rowClass = 'finding-row';
+    if (action === 'reject') rowClass += ' finding-rejected';
+    else if (action === 'accept') rowClass += ' finding-accepted';
+    if (f._modified) rowClass += ' finding-modified';
+
+    var fid = escHtml(f.finding_id);
+
+    // Colonna 1: badge tipo + confidence
+    var conf = f.confidence_score != null ? Math.round(f.confidence_score * 100) : null;
+    var confClass = conf != null ? (conf >= 90 ? 'conf-high' : conf >= 60 ? 'conf-mid' : 'conf-low') : '';
+    var confBadge = conf != null ? '<span class="finding-conf ' + confClass + '">' + conf + '%</span>' : '';
+    var entityClass = 'entity-badge entity-' + escHtml(f.entity_type);
+    var col1 = '<div class="finding-badge-cell"><span class="' + entityClass + '">' + escHtml(f.entity_type) + '</span>' + confBadge + '</div>';
+
+    // Colonna 2: valore originale (tooltip completo)
+    var col2 = '<span class="finding-original" title="' + escHtml(f.original_value) + '">' + escHtml(f.original_value) + '</span>';
+
+    // Colonna 3: input pseudonimo — usa oninput per aggiornare in tempo reale
+    var col3 = '<input class="finding-pseudonym-input" type="text" value="' + escHtml(f.proposed_pseudonym || '') +
+      '" data-fid="' + fid + '" oninput="updatePseudonym(this.dataset.fid, this.value)" />';
+
+    // Colonna 4: toggle accept/reject
+    var taClass = 'finding-toggle-accept' + (action === 'accept' ? ' active' : '');
+    var trClass = 'finding-toggle-reject' + (action === 'reject' ? ' active' : '');
+    var col4 = '<div class="finding-toggle-group">' +
+      '<button class="' + taClass + '" data-fid="' + fid + '" data-act="accept" ' +
+        'onclick="setFindingAction(this.dataset.fid, this.dataset.act)" title="Accetta">&#x2713; Acc</button>' +
+      '<button class="' + trClass + '" data-fid="' + fid + '" data-act="reject" ' +
+        'onclick="setFindingAction(this.dataset.fid, this.dataset.act)" title="Rifiuta">&#x2717; Rig</button>' +
+      '</div>';
+
+    // Colonna 5: rimuovi dal batch
+    var col5 = '<button class="finding-remove-btn" data-fid="' + fid + '" ' +
+      'onclick="removeFinding(this.dataset.fid)" title="Rimuovi">&#x2715;</button>';
+
+    // Snippet di contesto (span su tutta la griglia, visibile all'hover via CSS)
+    var snippet = f.context_snippet
+      ? '<span class="finding-snippet-row">' + escHtml(f.context_snippet) + '</span>'
+      : '';
+
+    rows.push('<div class="' + rowClass + '">' + col1 + col2 + col3 + col4 + col5 + snippet + '</div>');
+  }
+  body.innerHTML = rows.join('');
+}
+
+function filterFindings() {
+  const batch = state.batches[state.activeBatchId];
+  if (!batch) return;
+  const search = document.getElementById('review-search').value.toLowerCase();
+  const tf = document.getElementById('review-type-filter').value;
+  renderFindings(batch.findings.filter(f =>
+    (!tf || f.entity_type === tf) &&
+    (!search || f.original_value.toLowerCase().includes(search))
+  ));
+}
+
+function setFindingAction(findingId, action) {
+  const batch = state.batches[state.activeBatchId];
+  if (!batch) return;
+  const f = batch.findings.find(f => f.finding_id === findingId);
+  if (f) { f._action = action; filterFindings(); }
+}
+
+function updatePseudonym(findingId, value) {
+  const batch = state.batches[state.activeBatchId];
+  if (!batch) return;
+  const f = batch.findings.find(f => f.finding_id === findingId);
+  if (f) {
+    f.proposed_pseudonym = value;
+    f._action = 'modify';
+    f._modified = true;
+    // Aggiorna solo le classi della riga senza ri-renderizzare (preserva il focus sull'input)
+    const rows = document.querySelectorAll('#drawer-review-body .finding-row');
+    rows.forEach(row => {
+      const inp = row.querySelector('.finding-pseudonym-input');
+      if (inp && inp.dataset.fid === findingId) {
+        row.classList.add('finding-modified');
+        row.classList.remove('finding-rejected');
+      }
+    });
+  }
+}
+
+function removeFinding(findingId) {
+  const batch = state.batches[state.activeBatchId];
+  if (!batch) return;
+  batch.findings = batch.findings.filter(f => f.finding_id !== findingId);
+  filterFindings();
+}
+
+function acceptAllFindings() {
+  const batch = state.batches[state.activeBatchId];
+  if (!batch) return;
+  batch.findings.forEach(f => f._action = 'accept');
+  filterFindings();
+}
+
+function rejectAllFindings() {
+  const batch = state.batches[state.activeBatchId];
+  if (!batch) return;
+  batch.findings.forEach(f => f._action = 'reject');
+  filterFindings();
+}
+
+// ─── DRAWER ──────────────────────────────────────────────────────────────────
+
+function openDrawer(name) {
+  document.querySelectorAll('.drawer').forEach(d => d.classList.remove('open'));
+  document.getElementById('drawer-overlay').classList.add('active');
+  const el = document.getElementById('drawer-' + name);
+  if (el) el.classList.add('open');
+}
+
+function closeDrawer() {
+  document.querySelectorAll('.drawer').forEach(d => d.classList.remove('open'));
+  document.getElementById('drawer-overlay').classList.remove('active');
+}
+
+// ─── PASSPHRASE ──────────────────────────────────────────────────────────────
+
+function showPassphraseModal(pp) {
+  if (!pp) return;
+  document.getElementById('modal-passphrase-value').textContent = pp;
+  document.getElementById('modal-passphrase').style.display = 'flex';
+  const el = document.getElementById('passphrase-value');
+  if (el) {
+    el.textContent = pp;
+    el.classList.remove('passphrase-hidden');
+    state.passphraseVisible = true;
+  }
+}
+
+function closePassphraseModal() {
+  document.getElementById('modal-passphrase').style.display = 'none';
+}
+
+function copyModalPassphrase() {
+  const pp = document.getElementById('modal-passphrase-value').textContent;
+  navigator.clipboard.writeText(pp)
+    .then(() => toast('Passphrase copiata.', 'success'))
+    .catch(() => {});
+}
+
+function togglePassphraseVisibility() {
+  const el = document.getElementById('passphrase-value');
+  if (!el) return;
+  state.passphraseVisible = !state.passphraseVisible;
+  if (state.passphraseVisible) {
+    el.textContent = state.currentPassphrase || '—';
+    el.classList.remove('passphrase-hidden');
+  } else {
+    el.textContent = '••••••••••••••••••••••••';
+    el.classList.add('passphrase-hidden');
+  }
+}
+
+function copyPassphrase() {
+  if (!state.currentPassphrase) { toast('Nessuna passphrase.', 'warning'); return; }
+  navigator.clipboard.writeText(state.currentPassphrase)
+    .then(() => toast('Passphrase copiata.', 'success'))
+    .catch(() => {});
+}
+
+async function regeneratePassphrase() {
+  const batchId = state.activeBatchId;
+  if (!batchId) { toast('Nessun batch attivo.', 'warning'); return; }
+  try {
+    const r = await fetch(API + '/api/batches/' + batchId + '/passphrase/regenerate', { method: 'POST' });
+    if (!r.ok) throw new Error(await r.text());
+    const data = await r.json();
+    state.currentPassphrase = data.passphrase;
+    if (state.batches[batchId]) state.batches[batchId].passphrase = data.passphrase;
+    showPassphraseModal(data.passphrase);
+    toast('Passphrase rigenerata.', 'success');
+  } catch (err) {
+    toast('Errore: ' + err.message, 'error');
+  }
+}
+
+// ─── SETTINGS: DIZIONARI ─────────────────────────────────────────────────────
+
+async function loadDictStatus() {
+  try {
+    const r = await fetch(API + '/api/settings/dictionaries');
+    if (!r.ok) return;
+    const d = await r.json();
+    const el = document.getElementById('dict-status');
+    if (el) el.textContent = (d.total_terms || 0) + ' termini in ' + (d.files || 0) + ' file';
+  } catch {}
+}
+
+async function reloadDictionaries() {
+  try {
+    const r = await fetch(API + '/api/settings/dictionaries/reload', { method: 'POST' });
+    if (!r.ok) throw new Error(await r.text());
+    const d = await r.json();
+    const el = document.getElementById('dict-status');
+    if (el) el.textContent = (d.total_terms || 0) + ' termini in ' + (d.files || 0) + ' file';
+    toast('Dizionari ricaricati: ' + (d.total_terms || 0) + ' termini.', 'success');
+  } catch (err) {
+    toast('Errore: ' + err.message, 'error');
+  }
+}
+
+// ─── SETTINGS: LDAP ──────────────────────────────────────────────────────────
+
+function toggleLdapSection() {
+  const enabled = document.getElementById('ldap-enabled').checked;
+  document.getElementById('ldap-config-section').style.display = enabled ? 'block' : 'none';
+}
+
+function restoreLdapConfig() {
+  try {
+    const cfg = JSON.parse(localStorage.getItem(LS_LDAP) || 'null');
+    if (!cfg) return;
+    const setVal = (id, val) => { const el = document.getElementById(id); if (el) { if (el.type === 'checkbox') el.checked = !!val; else el.value = val || ''; } };
+    setVal('ldap-enabled', cfg.enabled);
+    setVal('ldap-host', cfg.host);
+    setVal('ldap-port', cfg.port || 389);
+    setVal('ldap-tls', cfg.use_tls);
+    setVal('ldap-starttls', cfg.use_starttls);
+    setVal('ldap-bind-dn', cfg.bind_dn);
+    setVal('ldap-base-dn', cfg.base_dn);
+    setVal('ldap-filter', cfg.search_filter);
+    // NON ripristinare la password per sicurezza
+    toggleLdapSection();
+  } catch {}
+}
+
+async function saveLdapConfig() {
+  const cfg = {
+    enabled: document.getElementById('ldap-enabled').checked,
+    host: document.getElementById('ldap-host').value,
+    port: parseInt(document.getElementById('ldap-port').value) || 389,
+    use_tls: document.getElementById('ldap-tls').checked,
+    use_starttls: document.getElementById('ldap-starttls').checked,
+    bind_dn: document.getElementById('ldap-bind-dn').value,
+    bind_password: document.getElementById('ldap-bind-password').value,
+    base_dn: document.getElementById('ldap-base-dn').value,
+    search_filter: document.getElementById('ldap-filter').value,
+  };
+  try {
+    const r = await fetch(API + '/api/settings/ldap', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cfg),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    // Salva in localStorage senza password
+    const cfgNoPass = Object.assign({}, cfg, { bind_password: '' });
+    localStorage.setItem(LS_LDAP, JSON.stringify(cfgNoPass));
+    toast('Configurazione LDAP salvata.', 'success');
+  } catch (err) {
+    toast('Errore: ' + err.message, 'error');
+  }
+}
+
+async function testLdapConnection() {
+  const resultEl = document.getElementById('ldap-test-result');
+  const diagEl = document.getElementById('ldap-diagnostics-panel');
+  resultEl.style.display = 'block';
+  resultEl.textContent = '⏳ Test in corso...';
+  resultEl.className = 'ldap-test-result';
+  if (diagEl) diagEl.style.display = 'none';
+  try {
+    const r = await fetch(API + '/api/settings/ldap/test', { method: 'POST' });
+    const d = await r.json();
+    resultEl.className = 'ldap-test-result ' + (d.ok ? 'ldap-ok' : 'ldap-error');
+    if (d.ok) {
+      resultEl.textContent = '✓ OK — ' + d.user_count + ' utenti';
+      if (d.diagnostics) {
+        resultEl.textContent += ' (' + (d.diagnostics.pages_count || 1) + ' pagine, ' +
+          (d.diagnostics.elapsed_ms || 0) + 'ms)';
+        if (diagEl) renderLdapDiagnostics(d.diagnostics, diagEl);
+      }
+    } else {
+      resultEl.textContent = '✗ ' + (d.error || 'Fallito');
+      if (d.diagnostics) {
+        if (d.diagnostics.error) resultEl.textContent += ' — ' + d.diagnostics.error;
+        if (diagEl) renderLdapDiagnostics(d.diagnostics, diagEl);
+      }
+    }
+  } catch (err) {
+    resultEl.className = 'ldap-test-result ldap-error';
+    resultEl.textContent = '✗ ' + err.message;
+  }
+}
+
+async function refreshLdapCache() {
+  try {
+    const r = await fetch(API + '/api/settings/ldap/refresh', { method: 'POST' });
+    const d = await r.json();
+    toast(d.ok ? 'Cache LDAP aggiornata.' : 'Errore: ' + d.message, d.ok ? 'success' : 'error');
+  } catch (err) {
+    toast('Errore: ' + err.message, 'error');
+  }
+}
+
+// ─── DRAG-AND-DROP DIRETTO ──────────────────────────────────────────────────
+
+async function handleFileUploadDirect(files) {
+  if (!files || !files.length) return;
+  for (const file of files) {
+    const cardEl = createBatchCard(null, file.name, 'uploading');
+    try {
+      const fd = new FormData();
+      fd.append('files', file);
+      fd.append('mode', state.mode);
+      const r = await fetch(API + '/api/batches', { method: 'POST', body: fd });
+      if (!r.ok) {
+        let msg = 'Errore ' + r.status;
+        try { const e = await r.json(); msg = e.detail || JSON.stringify(e); } catch {}
+        throw new Error(msg);
+      }
+      const data = await r.json();
+      const batchId = data.batch_id;
+      cardEl.dataset.batchId = batchId;
+      state.batches[batchId] = {
+        id: batchId, label: file.name, mode: state.mode, status: 'review',
+        findings: data.findings || [], inputText: null,
+        fileId: data.files && data.files.length > 0 ? data.files[0].id : null,
+        passphrase: data.passphrase, createdAt: new Date().toISOString(),
+      };
+      state.activeBatchId = batchId;
+      state.currentPassphrase = data.passphrase;
+      updateCardReady(cardEl, batchId, data);
+      addToSidebar(batchId, file.name, (data.findings || []).length);
+      saveSessionHistory(batchId, file.name, (data.findings || []).length);
+      showPassphraseModal(data.passphrase);
+    } catch (err) {
+      updateCardError(cardEl, err.message);
+      toast('Errore upload ' + file.name + ': ' + err.message, 'error');
+    }
+  }
+}
+
+// ─── SIDEBAR RENAME INLINE ───────────────────────────────────────────────────
+
+function startRename(batchId, event) {
+  event.stopPropagation();
+  const item = document.getElementById('sidebar-' + batchId);
+  if (!item) return;
+  const labelEl = item.querySelector('.sidebar-item-label');
+  const currentLabel = labelEl ? labelEl.textContent : batchId.slice(0, 8);
+  const input = document.createElement('input');
+  input.className = 'sidebar-item-rename-input';
+  input.value = currentLabel;
+  input.onclick = e => e.stopPropagation();
+  input.onkeydown = e => {
+    if (e.key === 'Enter') { commitRename(batchId, input.value); }
+    if (e.key === 'Escape') { renderSidebarItem(batchId); }
+  };
+  input.onblur = () => commitRename(batchId, input.value);
+  if (labelEl) labelEl.replaceWith(input);
+  input.focus(); input.select();
+}
+
+function commitRename(batchId, newLabel) {
+  const label = (newLabel || '').trim() || batchId.slice(0, 8);
+  if (state.batches[batchId]) state.batches[batchId].label = label;
+  // Aggiorna anche la card
+  const card = document.querySelector('[data-batch-id="' + batchId + '"]');
+  if (card) { const cl = card.querySelector('.card-label'); if (cl) cl.textContent = label; }
+  renderSidebarItem(batchId);
+}
+
+function renderSidebarItem(batchId) {
+  const item = document.getElementById('sidebar-' + batchId);
+  if (!item) return;
+  const batch = state.batches[batchId];
+  const label = (batch && batch.label) || batchId.slice(0, 8);
+  const count = (batch && batch.findings) ? batch.findings.length : 0;
+  const now = batch && batch.createdAt ? new Date(batch.createdAt) : new Date();
+  const timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+  item.innerHTML =
+    '<div class="sidebar-item-row">' +
+      '<span class="sidebar-item-label" title="' + escHtml(label) + '">' + escHtml(label) + '</span>' +
+      '<span class="sidebar-item-count" id="sidebar-count-' + batchId + '">' + count + '</span>' +
+      '<button class="icon-btn-sm" onclick="startRename(\'' + batchId + '\', event)" title="Rinomina">&#x270F;</button>' +
+    '</div>' +
+    '<div class="sidebar-item-meta"><span class="sidebar-item-time">' + timeStr + '</span></div>';
+}
+
+// ─── LDAP DIAGNOSTICS PANEL ──────────────────────────────────────────────────
+
+function renderLdapDiagnostics(diag, container) {
+  if (!diag || !container) return;
+  const rows = [
+    ['Utenti caricati', diag.users_loaded, diag.users_loaded > 0 ? 'ok' : 'warn'],
+    ['Pagine LDAP', diag.pages_count, ''],
+    ['Tempo (ms)', diag.elapsed_ms, ''],
+    ['Stato', diag.status || 'n/a', diag.status === 'ok' ? 'ok' : 'warn'],
+    ['Errore', diag.error || '—', diag.error ? 'err' : ''],
+  ];
+  container.innerHTML = rows.map(([k, v, cls]) =>
+    '<div class="ldap-diag-row">' +
+      '<span class="ldap-diag-key">' + escHtml(k) + '</span>' +
+      '<span class="ldap-diag-val ' + cls + '">' + escHtml(String(v != null ? v : '—')) + '</span>' +
+    '</div>'
+  ).join('');
+  container.style.display = 'block';
+}
+
+// ─── TOAST ───────────────────────────────────────────────────────────────────
+
+function toast(msg, type) {
+  if (!type) type = 'info';
+  const container = document.getElementById('toast-container');
+  const t = document.createElement('div');
+  t.className = 'toast toast-' + type;
+  t.textContent = msg;
+  container.appendChild(t);
+  setTimeout(() => {
+    t.classList.add('toast-fade');
+    setTimeout(() => t.remove(), 400);
+  }, 3500);
+}
+
+// ─── UTILITY ─────────────────────────────────────────────────────────────────
+
+function escHtml(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}

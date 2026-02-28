@@ -1,0 +1,23 @@
+{
+  "name": "Policy Docs",
+  "version": "1.0",
+  "description": "Preset per documenti di policy: focus su identità, CF/PIVA, contatti.",
+  "enabled_entity_types": [
+    "EMAIL",
+    "URL",
+    "HOSTNAME",
+    "PERSON",
+    "LDAP_PERSON",
+    "ACCOUNT",
+    "USERNAME",
+    "CODICE_FISCALE",
+    "PARTITA_IVA",
+    "PHONE",
+    "CUSTOM"
+  ],
+  "confidence_threshold": 0.65,
+  "ldap_detector_enabled": true,
+  "match_surname_only": true,
+  "domain_fragments_enabled": false,
+  "deobfuscation_enabled": false
+}

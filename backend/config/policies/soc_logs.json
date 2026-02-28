@@ -1,0 +1,33 @@
+{
+  "name": "SOC Logs",
+  "version": "1.0",
+  "description": "Preset per log SOC: massima copertura entità di rete, identità e path.",
+  "enabled_entity_types": [
+    "EMAIL",
+    "IPV4",
+    "IPV6",
+    "URL",
+    "HOSTNAME",
+    "UPN",
+    "LDAP_DN",
+    "WINDOWS_SID",
+    "UNC_PATH",
+    "WINDOWS_PATH",
+    "LINUX_PATH",
+    "PERSON",
+    "LDAP_PERSON",
+    "ACCOUNT",
+    "USERNAME",
+    "CODICE_FISCALE",
+    "PARTITA_IVA",
+    "PHONE",
+    "MAIL_HEADER",
+    "DOMAIN_FRAGMENT",
+    "CUSTOM"
+  ],
+  "confidence_threshold": 0.55,
+  "ldap_detector_enabled": true,
+  "match_surname_only": false,
+  "domain_fragments_enabled": true,
+  "deobfuscation_enabled": true
+}

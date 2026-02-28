@@ -1,0 +1,24 @@
+{
+  "name": "Email Headers",
+  "version": "1.0",
+  "description": "Preset per email e header: focus su indirizzi, domini, mail headers.",
+  "enabled_entity_types": [
+    "EMAIL",
+    "IPV4",
+    "IPV6",
+    "URL",
+    "HOSTNAME",
+    "UPN",
+    "MAIL_HEADER",
+    "PERSON",
+    "LDAP_PERSON",
+    "ACCOUNT",
+    "USERNAME",
+    "CUSTOM"
+  ],
+  "confidence_threshold": 0.6,
+  "ldap_detector_enabled": true,
+  "match_surname_only": false,
+  "domain_fragments_enabled": true,
+  "deobfuscation_enabled": true
+}
