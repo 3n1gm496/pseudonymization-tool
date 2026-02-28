@@ -1,19 +1,39 @@
-> **Nota importante:** Questo è un fork del README originale, aggiornato per la versione `1.0.3` con fix specifici per Windows e una procedura di installazione offline.
+# Local Pseudonymization Tool
 
-# Local Pseudonymization Tool — MVP v1.0.3
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688.svg)](https://fastapi.tiangolo.com)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-Questo tool è una web app locale (localhost) per la pseudonimizzazione di dati sensibili in documenti di testo, DOCX, XLSX, PDF e immagini. È progettato per essere eseguito in ambienti sicuri senza accesso a internet, garantendo che nessun dato lasci mai la macchina dell'utente.
+Web application locale per la pseudonimizzazione sicura di dati sensibili in documenti di testo, DOCX, XLSX, PDF e immagini. Progettato per ambienti enterprise che richiedono massima sicurezza e capacità di operare completamente offline.
 
-**Caratteristiche principali:**
-- **100% Offline**: Nessuna chiamata di rete esterna.
-- **Supporto multiformato**: TXT, CSV, MD, DOCX, XLSX, PDF (testuali), JPG, PNG.
-- **Sicurezza**: Mapping cifrato con passphrase, nessun dato sensibile nei log o nei report.
-- **Flessibilità**: Modalità `light` (solo entità di rete) e `strict` (tutte le entità).
-- **Review manuale**: Possibilità di rivedere e approvare/rifiutare ogni pseudonimo proposto.
+🔗 **Repository:** [github.com/3n1gm496/pseudonymization-tool](https://github.com/3n1gm496/pseudonymization-tool)
+
+## ✨ Caratteristiche
+
+- **🔒 100% Offline** — Nessuna chiamata di rete esterna, tutti i dati rimangono sulla macchina locale
+- **📄 Multi-formato** — Supporto per TXT, CSV, MD, DOCX, XLSX, PDF (testuali), JPG, PNG
+- **🔐 Sicurezza Avanzata** — Mapping cifrato con passphrase AES-256, zero logging di dati sensibili
+- **⚙️ Modalità Flessibili** — `light` (solo entità di rete) e `strict` (tutte le entità PII)
+- **👁️ Review Manuale** — Interfaccia per rivedere e approvare/rifiutare ogni pseudonimo proposto
+- **📊 Report Dettagliati** — HTML navigabile e JSON strutturato per audit trail
+- **🎯 Deterministico** — Stesso input = stesso output con la stessa passphrase
 
 ---
 
-## 1. Prerequisiti
+## 📋 Indice
+
+- [Prerequisiti](#-prerequisiti)
+- [Installazione](#-installazione-e-avvio)
+- [Utilizzo](#-utilizzo)
+- [Sicurezza](#-sicurezza-e-limitazioni)
+- [Sviluppo](#-sviluppo)
+- [Contributing](#-contributing)
+- [Licenza](#-licenza)
+
+---
+
+## 🔧 Prerequisiti
 
 ### 1.1. Python (Obbligatorio)
 
@@ -43,7 +63,7 @@ Questo componente è necessario **solo per processare testo contenuto in immagin
 
 ---
 
-## 2. Installazione e Avvio
+## 🚀 Installazione e Avvio
 
 ### 2.1. Modalità Online (connessione internet richiesta solo la prima volta)
 
@@ -76,7 +96,7 @@ Questa modalità permette di preparare il pacchetto su una macchina con internet
 
 ---
 
-## 3. Come Usare l'Applicazione
+## 💡 Utilizzo
 
 1. **Upload**: Trascina i file da processare nell'area di upload.
 2. **Configura**: Seleziona la modalità (`light` o `strict`) e inserisci una **passphrase robusta** (essenziale per la sicurezza del mapping).
@@ -91,9 +111,81 @@ Questa modalità permette di preparare il pacchetto su una macchina con internet
 
 ---
 
-## 4. Sicurezza e Limitazioni
+## 🔐 Sicurezza e Limitazioni
 
 - **Passphrase**: La sicurezza del mapping dipende dalla robustezza della passphrase. Usane una lunga e complessa.
 - **OCR**: La qualità dell'OCR dipende dalla risoluzione e dalla chiarezza dell'immagine. Testo sfocato o scritto a mano potrebbe non essere rilevato.
 - **Formule XLSX**: Le formule vengono ignorate e non pseudonimizzate per evitare di corrompere i fogli di calcolo.
 - **Log di Installazione**: In caso di problemi durante l'installazione delle dipendenze, il log completo viene salvato in `install.log`.
+---
+
+## 🛠️ Sviluppo
+
+### Setup Ambiente Sviluppo
+
+```bash
+# Crea virtual environment
+python3.11 -m venv .venv
+source .venv/bin/activate  # Linux/macOS
+# oppure .venv\Scripts\activate  # Windows
+
+# Installa dipendenze
+pip install -r backend/requirements.txt
+
+# Avvia backend in modalità dev
+cd backend
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### Esecuzione Test
+
+```bash
+cd backend/tests
+python test_functional.py
+```
+
+### Struttura Progetto
+
+```
+pseudonymization-tool/
+├── backend/              # FastAPI backend
+│   ├── app/
+│   │   ├── api/         # API routes
+│   │   ├── core/        # Business logic
+│   │   ├── detectors/   # Entity detection
+│   │   ├── parsers/     # Document parsers
+│   │   ├── pseudonymizer/  # Transformation engine
+│   │   └── report/      # Report generation
+│   └── config/          # Configuration files
+├── frontend/            # Static HTML/CSS/JS
+└── docs/               # Documentation
+```
+
+---
+
+## 🤝 Contributing
+
+Le contribuzioni sono benvenute! Per contribuire:
+
+1. Fork del progetto
+2. Crea un branch per la tua feature (`git checkout -b feature/AmazingFeature`)
+3. Commit delle modifiche (`git commit -m 'Add some AmazingFeature'`)
+4. Push al branch (`git push origin feature/AmazingFeature`)
+5. Apri una Pull Request
+
+Leggi la [documentazione tecnica](docs/02_Technical_Architecture.md) per comprendere l'architettura.
+
+---
+
+## 📄 Licenza
+
+Questo progetto è distribuito sotto licenza MIT. Vedi il file `LICENSE` per maggiori dettagli.
+
+---
+
+## 🙏 Riconoscimenti
+
+- **Tesseract OCR** per il riconoscimento ottico dei caratteri
+- **FastAPI** per il framework web
+- **python-docx, openpyxl, PyPDF2** per il parsing dei documenti
+- Community open source per i contributi e il feedback
