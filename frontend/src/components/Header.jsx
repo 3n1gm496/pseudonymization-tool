@@ -1,7 +1,7 @@
 import React from 'react'
 import { useTheme } from '../context/ThemeContext'
 
-const Header = ({ user, onLogout }) => {
+const Header = ({ user, onLogout, onSettingsClick }) => {
   const { isDark, toggleTheme } = useTheme()
 
   return (
@@ -14,6 +14,16 @@ const Header = ({ user, onLogout }) => {
         <div className="flex items-center gap-3">
           {user && (
             <span className="text-sm text-blue-100">{user}</span>
+          )}
+          {onSettingsClick && (
+            <button
+              onClick={onSettingsClick}
+              className="px-3 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors text-sm"
+              aria-label="Settings"
+              title="Impostazioni (LDAP, etc)"
+            >
+              ⚙️
+            </button>
           )}
           {user && onLogout && (
             <button

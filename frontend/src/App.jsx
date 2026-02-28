@@ -4,6 +4,8 @@ import Header from './components/Header'
 import Scanner from './components/Scanner'
 import FindingsTable from './components/FindingsTable'
 import Results from './components/Results'
+import RevertPanel from './components/RevertPanel'
+import SettingsPanel from './components/SettingsPanel'
 import { useToast } from './hooks/useToast'
 import LoginForm from './components/LoginForm'
 
@@ -11,11 +13,14 @@ const App = () => {
   axios.defaults.withCredentials = true
 
   const [currentStep, setCurrentStep] = useState('scanner') // scanner | findings | results
+  const [toolMode, setToolMode] = useState('pseudonymize') // pseudonymize | revert
   const [batch, setBatch] = useState(null)
   const [pseudonymizedText, setPseudonymizedText] = useState(null)
+  const [passphrase, setPassphrase] = useState(null) // Passphrase dalla pseudonimizzazione completata
   const [isLoading, setIsLoading] = useState(false)
   const [authUser, setAuthUser] = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const { showToast, ToastContainer } = useToast()
 
   useEffect(() => {
@@ -93,6 +98,13 @@ const App = () => {
     setCurrentStep('scanner')
   }
 
+  const handleSwitchMode = (mode) => {
+    setToolMode(mode)
+    if (mode === 'pseudonymize') {
+      handleReset()
+    }
+  }
+
   if (authLoading) {
     return <div className="min-h-screen bg-slate-50 dark:bg-slate-950" />
   }
@@ -100,10 +112,11 @@ const App = () => {
   if (!authUser) {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
-        <Header user={null} onLogout={null} />
+        <Header user={null} onLogout={null} onSettingsClick={() => setIsSettingsOpen(true)} />
         <main className="max-w-7xl mx-auto py-8 px-4">
           <LoginForm onLogin={handleLogin} isLoading={isLoading} />
         </main>
+        <SettingsPanel isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} showToast={showToast} />
         <ToastContainer />
       </div>
     )
@@ -111,9 +124,44 @@ const App = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
-      <Header user={authUser} onLogout={handleLogout} />
+      <Header user={authUser} onLogout={handleLogout} onSettingsClick={() => setIsSettingsOpen(true)} />
 
       <main className="max-w-7xl mx-auto py-8 px-4 space-y-8">
+        <div className="flex gap-3 justify-center">
+          <button
+            onClick={() => handleSwitchMode('pseudonymize')}
+            className={`px-4 py-2 rounded-lg font-medium ${
+              toolMode === 'pseudonymize'
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-200 dark:bg-slate-700'
+            }`}
+          >
+            Pseudonimizza
+          </button>
+          <button
+            onClick={() => handleSwitchMode('revert')}
+            className={`px-4 py-2 rounded-lg font-medium ${
+              toolMode === 'revert'
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-200 dark:bg-slate-700'
+            }`}
+          >
+            Revert
+          </button>
+        </div>
+
+        {toolMode === 'revert' && (
+          <RevertPanel
+            batch={batch}
+            pseudonymizedText={pseudonymizedText}
+            isLoading={isLoading}
+            setIsLoading={setIsLoading}
+            showToast={showToast}
+          />
+        )}
+
+        {toolMode === 'pseudonymize' && (
+          <>
         {/* Progress Bar */}
         <div className="flex items-center gap-3 justify-center mb-8" aria-label="Stato avanzamento">
           <div className={`px-4 py-2 rounded-lg font-medium ${
@@ -162,8 +210,11 @@ const App = () => {
             />
           </>
         )}
+          </>
+        )}
       </main>
 
+      <SettingsPanel isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} showToast={showToast} />
       <ToastContainer />
     </div>
   )
