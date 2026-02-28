@@ -1,0 +1,118 @@
+"""
+Health check and monitoring endpoints.
+"""
+import time
+from datetime import datetime
+from typing import Dict, Any
+
+from fastapi import APIRouter, Response, status
+from pydantic import BaseModel
+
+from app.core.logging_config import get_logger
+
+logger = get_logger(__name__)
+router = APIRouter(tags=["monitoring"])
+
+# Application start time
+START_TIME = time.time()
+
+
+class HealthResponse(BaseModel):
+    """Health check response model."""
+    status: str
+    timestamp: str
+    uptime_seconds: float
+    version: str
+
+
+class ReadinessResponse(BaseModel):
+    """Readiness check response model."""
+    ready: bool
+    checks: Dict[str, Dict[str, Any]]
+
+
+@router.get("/health", response_model=HealthResponse, status_code=status.HTTP_200_OK)
+async def health_check() -> HealthResponse:
+    """
+    Basic health check endpoint.
+    Returns 200 OK if the service is running.
+    """
+    uptime = time.time() - START_TIME
+
+    return HealthResponse(
+        status="healthy",
+        timestamp=datetime.utcnow().isoformat(),
+        uptime_seconds=round(uptime, 2),
+        version="1.0.0",
+    )
+
+
+@router.get("/ready", response_model=ReadinessResponse)
+async def readiness_check(response: Response) -> ReadinessResponse:
+    """
+    Readiness check endpoint.
+    Verifies that all dependencies are available.
+    """
+    checks = {}
+    all_ready = True
+
+    # Check filesystem access
+    try:
+        from pathlib import Path
+        import tempfile
+
+        temp_dir = Path(tempfile.gettempdir())
+        test_file = temp_dir / ".health_check"
+        test_file.write_text("test")
+        test_file.unlink()
+
+        checks["filesystem"] = {"status": "ok", "writable": True}
+    except Exception as e:
+        checks["filesystem"] = {"status": "error", "error": str(e)}
+        all_ready = False
+
+    # Check parser availability
+    try:
+        from app.parsers.factory import ParserFactory
+
+        factory = ParserFactory()
+        checks["parsers"] = {
+            "status": "ok",
+            "available": True,
+        }
+    except Exception as e:
+        checks["parsers"] = {"status": "error", "error": str(e)}
+        all_ready = False
+
+    # Check OCR availability (optional)
+    try:
+        import pytesseract
+        pytesseract.get_tesseract_version()
+        checks["ocr"] = {"status": "ok", "available": True}
+    except Exception:
+        checks["ocr"] = {"status": "warning", "available": False, "message": "Tesseract not available"}
+        # OCR is optional, so don't mark as not ready
+
+    if not all_ready:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+
+    return ReadinessResponse(
+        ready=all_ready,
+        checks=checks,
+    )
+
+
+@router.get("/metrics")
+async def metrics() -> Dict[str, Any]:
+    """
+    Basic metrics endpoint (Prometheus-compatible format can be added later).
+    Returns application metrics in JSON format.
+    """
+    uptime = time.time() - START_TIME
+
+    return {
+        "app_uptime_seconds": round(uptime, 2),
+        "app_version": "1.0.0",
+        "app_name": "pseudonymization-tool",
+        "timestamp": datetime.utcnow().isoformat(),
+    }

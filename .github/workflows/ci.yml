@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11']
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Cache pip packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r backend/requirements.txt
+        pip install pytest pytest-cov pytest-asyncio black flake8 isort bandit safety
+
+    - name: Lint with flake8
+      run: |
+        # Stop the build if there are Python syntax errors or undefined names
+        flake8 backend/app --count --select=E9,F63,F7,F82 --show-source --statistics
+        # Exit-zero treats all errors as warnings. Max line length 120
+        flake8 backend/app --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
+
+    - name: Check code formatting with black
+      run: |
+        black --check backend/app
+
+    - name: Sort imports with isort
+      run: |
+        isort --check-only backend/app
+
+    - name: Security check with bandit
+      run: |
+        bandit -r backend/app -ll
+
+    - name: Check for known security vulnerabilities
+      run: |
+        safety check --json || true
+
+    - name: Run tests with pytest
+      run: |
+        cd backend
+        pytest tests/ -v --cov=app --cov-report=xml --cov-report=html --cov-report=term-missing
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./backend/coverage.xml
+        flags: unittests
+        name: codecov-pseudonymization-tool
+        fail_ci_if_error: false
+
+  build:
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Validate project structure
+      run: |
+        test -f backend/requirements.txt
+        test -f frontend/index.html
+        test -f start.sh
+        test -f README.md
+
+    - name: Check for sensitive data
+      run: |
+        # Ensure no sensitive files are committed
+        ! find . -name "*.env" -o -name "*.pem" -o -name "*.key" | grep -v ".venv" | grep -v "node_modules"

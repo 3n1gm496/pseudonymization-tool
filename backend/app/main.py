@@ -4,24 +4,24 @@ Il server è configurato per ascoltare SOLO su 127.0.0.1 (localhost).
 """
 import logging
 import sys
+import time
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from app.api.routes import router
+from app.api.monitoring import router as monitoring_router
 from app.core.config import SERVER_HOST, SERVER_PORT
+from app.core.logging_config import configure_logging, get_logger, log_request_start, log_request_end
 
-# Configurazione logging: nessun valore sensibile nei log
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
-)
-logger = logging.getLogger(__name__)
+# Configure structured logging
+configure_logging(log_level="INFO", json_logs=False)
+logger = get_logger(__name__)
 
 
 # ─── Lifespan (startup/shutdown moderno, compatibile FastAPI >= 0.93) ─────────
@@ -64,6 +64,41 @@ app.add_middleware(
 
 # Registra i router API
 app.include_router(router)
+app.include_router(monitoring_router, prefix="/api")
+
+
+# Request logging middleware
+@app.middleware("http")
+async def logging_middleware(request: Request, call_next):
+    """Log all requests with timing and correlation ID."""
+    request_id = str(uuid.uuid4())
+    start_time = time.time()
+
+    # Add request ID to state
+    request.state.request_id = request_id
+
+    log_request_start(
+        method=request.method,
+        path=request.url.path,
+        request_id=request_id,
+    )
+
+    response = await call_next(request)
+
+    duration_ms = (time.time() - start_time) * 1000
+
+    log_request_end(
+        method=request.method,
+        path=request.url.path,
+        request_id=request_id,
+        status_code=response.status_code,
+        duration_ms=duration_ms,
+    )
+
+    # Add correlation ID to response headers
+    response.headers["X-Request-ID"] = request_id
+
+    return response
 
 # Serve i file statici del frontend
 FRONTEND_DIR = Path(__file__).resolve().parent.parent.parent / "frontend"
