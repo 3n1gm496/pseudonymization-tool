@@ -16,16 +16,27 @@ const Scanner = ({ onScan, isLoading }) => {
       return
     }
 
+    // ✅ FIX #14: Add timeout handling for text scan
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 30000)  // 30 second timeout
+
     setScanLoading(true)  // ✅ Set local loading state
     try {
-      const response = await axios.post('/api/console/scan', {
-        text,
-      })
+      const response = await axios.post(
+        '/api/console/scan',
+        { text },
+        { signal: controller.signal }
+      )
       onScan({ ...response.data, is_text_input: true, source_text: text })
       showToast('Scan completato', 'success')
     } catch (error) {
-      showToast(error.response?.data?.detail || 'Errore durante lo scan', 'error')
+      if (error.code === 'ECONNABORTED') {
+        showToast('Timeout dello scan dopo 30 secondi', 'error')
+      } else {
+        showToast(error.response?.data?.detail || 'Errore durante lo scan', 'error')
+      }
     } finally {
+      clearTimeout(timeoutId)
       setScanLoading(false)  // ✅ Always reset loading state on error or success
     }
   }
@@ -37,13 +48,33 @@ const Scanner = ({ onScan, isLoading }) => {
       return
     }
 
+    // ✅ FIX #11a: Check file size before uploading
+    const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024  // 100MB
+    if (uploadedFile.size > MAX_FILE_SIZE_BYTES) {
+      const fileSizeMB = (uploadedFile.size / 1024 / 1024).toFixed(1)
+      const maxSizeMB = (MAX_FILE_SIZE_BYTES / 1024 / 1024).toFixed(0)
+      showToast(
+        `File troppo grande: ${fileSizeMB}MB (massimo ${maxSizeMB}MB)`,
+        'error'
+      )
+      return
+    }
+
     setScanLoading(true)  // ✅ Set local loading state
     try {
       const formData = new FormData()
       formData.append('files', uploadedFile)
 
+      // ✅ FIX #11b: Add upload progress tracking
       const response = await axios.post('/api/batches', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: (progressEvent) => {
+          // Could add progress bar here if needed
+          const percentComplete = Math.round(
+            (progressEvent.loaded * 100) / progressEvent.total
+          )
+          // TODO: Update progress UI if implemented
+        },
       })
       onScan({ ...response.data, is_text_input: false })
       showToast('File scansionato', 'success')

@@ -9,6 +9,13 @@ import SettingsPanel from './components/SettingsPanel'
 import { useToast } from './hooks/useToast'
 import LoginForm from './components/LoginForm'
 
+// ✅ FIX #13: Memoize heavy components to prevent unnecessary re-renders
+const MemoizedScanner = React.memo(Scanner)
+const MemoizedFindingsTable = React.memo(FindingsTable)
+const MemoizedResults = React.memo(Results)
+const MemoizedRevertPanel = React.memo(RevertPanel)
+const MemoizedSettingsPanel = React.memo(SettingsPanel)
+
 const App = () => {
   axios.defaults.withCredentials = true
 
@@ -116,7 +123,7 @@ const App = () => {
         <main className="max-w-7xl mx-auto py-8 px-4">
           <LoginForm onLogin={handleLogin} isLoading={isLoading} />
         </main>
-        <SettingsPanel isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} showToast={showToast} />
+        <MemoizedSettingsPanel isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} showToast={showToast} />
         <ToastContainer />
       </div>
     )
@@ -151,7 +158,7 @@ const App = () => {
         </div>
 
         {toolMode === 'revert' && (
-          <RevertPanel
+          <MemoizedRevertPanel
             batch={batch}
             pseudonymizedText={pseudonymizedText}
             isLoading={isLoading}
@@ -185,7 +192,7 @@ const App = () => {
 
         {/* Scanner Step */}
         {currentStep === 'scanner' && (
-          <Scanner
+          <MemoizedScanner
             onScan={handleScan}
             isLoading={isLoading}
           />
@@ -193,7 +200,7 @@ const App = () => {
 
         {/* Findings Review Step */}
         {currentStep === 'findings' && batch && (
-          <FindingsTable
+          <MemoizedFindingsTable
             batch={batch}
             onApply={handleApply}
             isLoading={isLoading}
@@ -203,7 +210,7 @@ const App = () => {
         {/* Results Step */}
         {currentStep === 'results' && batch && (
           <>
-            <Results
+            <MemoizedResults
               batch={batch}
               pseudonymizedText={pseudonymizedText}
               onNewScan={handleReset}
@@ -214,7 +221,7 @@ const App = () => {
         )}
       </main>
 
-      <SettingsPanel isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} showToast={showToast} />
+      <MemoizedSettingsPanel isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} showToast={showToast} />
       <ToastContainer />
     </div>
   )

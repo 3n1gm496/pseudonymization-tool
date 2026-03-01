@@ -51,7 +51,7 @@ const Results = ({ batch, pseudonymizedText, onNewScan }) => {
         <div className="p-6 border-b border-slate-200 dark:border-slate-700">
           <h2 className="text-lg font-semibold mb-2">Risultato Pseudonimizzazione</h2>
           <p className="text-sm text-slate-600 dark:text-slate-400">
-            Batch ID: <code className="bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded text-xs">{batch.batch_id.slice(0, 12)}...</code>
+            Batch ID: <code className="font-mono text-xs bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded">{batch.batch_id.slice(0, 8)}...{batch.batch_id.slice(-8)}</code>
           </p>
         </div>
 

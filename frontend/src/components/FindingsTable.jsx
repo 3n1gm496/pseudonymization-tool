@@ -106,58 +106,82 @@ const FindingsTable = ({ batch, onApply, isLoading }) => {
                 <th scope="col" className="px-4 py-3 text-left font-semibold">Azione</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-              {batch.findings.map((finding) => (
-                <tr key={finding.finding_id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                  <td className="px-4 py-3 font-medium text-blue-600 dark:text-blue-400">
-                    {finding.entity_type}
-                  </td>
-                  <td className="px-4 py-3 text-slate-600 dark:text-slate-400 font-mono text-xs">
-                    {finding.original_value}
-                  </td>
-                  <td className="px-4 py-3 text-green-600 dark:text-green-400 font-mono text-xs">
-                    {finding.proposed_pseudonym}
-                  </td>
-                  <td className="px-4 py-3">
-                    <input
-                      type="text"
-                      value={decisions[finding.finding_id]?.custom_pseudonym || ''}
-                      onChange={(e) =>
-                        handleCustomPseudonymChange(finding.finding_id, e.target.value)
-                      }
-                      className="w-full px-2 py-1 text-xs border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Personalizza..."
-                      disabled={isLoading}
-                      aria-label={`Pseudonimo personalizzato per ${finding.entity_type}`}
-                    />
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`px-2 py-1 rounded text-xs font-medium ${getConfidenceColor(
-                        finding.confidence_score
-                      )}`}
-                    >
-                      {(finding.confidence_score * 100).toFixed(0)}%
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <select
-                      value={decisions[finding.finding_id]?.action || 'accept'}
-                      onChange={(e) =>
-                        handleActionChange(finding.finding_id, e.target.value)
-                      }
-                      className="px-2 py-1 text-xs border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      disabled={isLoading}
-                      aria-label={`Azione review per ${finding.entity_type}`}
-                    >
-                      <option value="accept">Accetta</option>
-                      <option value="reject">Rifiuta</option>
-                      <option value="modify">Modifica</option>
-                    </select>
+            {batch.findings.length === 0 ? (
+              <tbody>
+                <tr>
+                  <td colSpan="6" className="px-4 py-8 text-center text-slate-500 dark:text-slate-400">
+                    Nessuna entità trovata nel testo.
                   </td>
                 </tr>
-              ))}
-            </tbody>
+              </tbody>
+            ) : (
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                {batch.findings.map((finding) => (
+                  <tr key={finding.finding_id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                    <td className="px-4 py-3 font-medium text-blue-600 dark:text-blue-400">
+                      {finding.entity_type}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-400 font-mono text-xs">
+                      {finding.original_value}
+                    </td>
+                    <td className="px-4 py-3 text-green-600 dark:text-green-400 font-mono text-xs">
+                      {finding.proposed_pseudonym}
+                    </td>
+                    <td className="px-4 py-3">
+                      <input
+                        type="text"
+                        name={`pseudonym-${finding.finding_id}`}
+                        value={decisions[finding.finding_id]?.custom_pseudonym || ''}
+                        onChange={(e) =>
+                          handleCustomPseudonymChange(finding.finding_id, e.target.value)
+                        }
+                        className="w-full px-2 py-1 text-xs border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Personalizza..."
+                        disabled={isLoading}
+                        aria-label={`Pseudonimo personalizzato per ${finding.entity_type}: ${finding.original_value}`}
+                        aria-describedby={`pseudonym-help-${finding.finding_id}`}
+                      />
+                      <span id={`pseudonym-help-${finding.finding_id}`} className="sr-only">
+                        Inserisci uno pseudonimo personalizzato per questo valore
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`px-2 py-1 rounded text-xs font-medium ${getConfidenceColor(
+                          finding.confidence_score
+                        )}`}
+                        title={`Confidence score: ${(finding.confidence_score * 100).toFixed(0)}%`}
+                        aria-label={`Punteggio di confidenza: ${(finding.confidence_score * 100).toFixed(0)}%`}
+                      >
+                        {finding.confidence_score >= 0.8 && '✓ '}
+                        {finding.confidence_score < 0.6 && '⚠ '}
+                        {(finding.confidence_score * 100).toFixed(0)}%
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <select
+                        name={`action-${finding.finding_id}`}
+                        value={decisions[finding.finding_id]?.action || 'accept'}
+                        onChange={(e) =>
+                          handleActionChange(finding.finding_id, e.target.value)
+                        }
+                        className="px-2 py-1 text-xs border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        disabled={isLoading}
+                        aria-label={`Azione review per ${finding.entity_type}: ${finding.original_value}`}
+                        aria-describedby={`action-help-${finding.finding_id}`}
+                      >
+                        <option value="accept">Accetta</option>
+                        <option value="reject">Rifiuta</option>
+                        <option value="modify">Modifica</option>
+                      </select>
+                      <span id={`action-help-${finding.finding_id}`} className="sr-only">
+                        Scegli l'azione di review: Accetta, Rifiuta, o Modifica con uno pseudonimo personalizzato
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            )}
           </table>
         </div>
 
