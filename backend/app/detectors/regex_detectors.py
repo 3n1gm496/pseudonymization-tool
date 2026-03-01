@@ -75,7 +75,7 @@ class RegexDetector(BaseDetector):
 
 
 # Reti da escludere dalla pseudonimizzazione (non sensibili)
-_IPV4_EXCLUDED = {
+_IPV4_EXCLUDED = {  # nosec B104 - detector data set, not a bind address usage
     "127.0.0.1",  # Loopback
     "0.0.0.0",  # Null
     "255.255.255.255",  # Broadcast
