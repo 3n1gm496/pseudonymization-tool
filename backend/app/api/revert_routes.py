@@ -12,27 +12,12 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, File, Form, HTTPException, Request, Response, UploadFile
 
 from app.core.config import MAX_CONSOLE_TEXT_CHARS, MAX_FILE_SIZE_BYTES
+from app.core.rate_limit import enforce_rate_limit
 from app.core.revert import preview_revert, apply_revert, preview_revert_text, apply_revert_text
 
 
 router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
-_rate_buckets: Dict[str, List[float]] = {}
-
-
-def _enforce_rate_limit(request: Request, scope: str, limit: int, window_seconds: int = 60) -> None:
-    client_ip = request.client.host if request.client else "unknown"
-    now = time.time()
-    bucket_key = f"{scope}:{client_ip}"
-    timestamps = _rate_buckets.get(bucket_key, [])
-    timestamps = [t for t in timestamps if now - t < window_seconds]
-    if len(timestamps) >= limit:
-        raise HTTPException(
-            status_code=429,
-            detail=f"Troppe richieste per '{scope}'. Riprova tra pochi secondi.",
-        )
-    timestamps.append(now)
-    _rate_buckets[bucket_key] = timestamps
 
 
 def _scrub_sensitive(value: Any) -> Any:
@@ -65,7 +50,7 @@ async def revert_preview(
     archive: UploadFile = File(...),
     passphrase: str = Form(...),
 ):
-    _enforce_rate_limit(request, "revert_preview", limit=15)
+    enforce_rate_limit(request, "revert_preview", limit=15)
     if not archive.filename or not archive.filename.lower().endswith(".zip"):
         raise HTTPException(status_code=400, detail="Carica un archivio ZIP valido.")
     if not passphrase.strip():
@@ -96,7 +81,7 @@ async def revert_apply(
     archive: UploadFile = File(...),
     passphrase: str = Form(...),
 ):
-    _enforce_rate_limit(request, "revert_apply", limit=10)
+    enforce_rate_limit(request, "revert_apply", limit=10)
     if not archive.filename or not archive.filename.lower().endswith(".zip"):
         raise HTTPException(status_code=400, detail="Carica un archivio ZIP valido.")
     if not passphrase.strip():
@@ -138,7 +123,7 @@ async def revert_text_preview(
     passphrase: str = Form(...),
     text: str = Form(...),
 ):
-    _enforce_rate_limit(request, "revert_text_preview", limit=25)
+    enforce_rate_limit(request, "revert_text_preview", limit=25)
     if not passphrase.strip():
         raise HTTPException(status_code=400, detail="La passphrase è obbligatoria.")
     if len(text) > MAX_CONSOLE_TEXT_CHARS:
@@ -175,7 +160,7 @@ async def revert_text_apply(
     passphrase: str = Form(...),
     text: str = Form(...),
 ):
-    _enforce_rate_limit(request, "revert_text_apply", limit=25)
+    enforce_rate_limit(request, "revert_text_apply", limit=25)
     if not passphrase.strip():
         raise HTTPException(status_code=400, detail="La passphrase è obbligatoria.")
     if len(text) > MAX_CONSOLE_TEXT_CHARS:

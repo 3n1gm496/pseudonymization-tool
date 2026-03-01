@@ -37,6 +37,7 @@ from app.core.config import (
 )
 from app.core.pipeline import apply_review_decisions, run_apply_pipeline, run_scan_pipeline
 from app.core.policies import get_enabled_entity_types, get_policy
+from app.core.rate_limit import enforce_rate_limit
 from app.models.schemas import (
     Batch,
     BatchConfig,
@@ -56,7 +57,6 @@ import math
 
 router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
-_rate_buckets: Dict[str, List[float]] = {}
 _batch_start_times: dict = {}
 
 # File di stato server-side (no password, no PII)
@@ -150,21 +150,6 @@ def _resolve_preset(raw_value: str) -> PresetName:
         if preset.value.lower() == value.lower():
             return preset
     raise HTTPException(status_code=400, detail=f"Preset non valido: '{raw_value}'.")
-
-
-def _enforce_rate_limit(request: Request, scope: str, limit: int, window_seconds: int = 60) -> None:
-    client_ip = request.client.host if request.client else "unknown"
-    now = time.time()
-    bucket_key = f"{scope}:{client_ip}"
-    timestamps = _rate_buckets.get(bucket_key, [])
-    timestamps = [t for t in timestamps if now - t < window_seconds]
-    if len(timestamps) >= limit:
-        raise HTTPException(
-            status_code=429,
-            detail=f"Troppe richieste per '{scope}'. Riprova tra pochi secondi.",
-        )
-    timestamps.append(now)
-    _rate_buckets[bucket_key] = timestamps
 
 
 def _scrub_sensitive(value: Any) -> Any:
@@ -327,7 +312,7 @@ async def create_new_batch(
     Crea un nuovo batch con i file allegati.
     Orchestrazione: validazione → creazione batch → caricamento file → scansione.
     """
-    _enforce_rate_limit(request, "batch_create", limit=20)
+    enforce_rate_limit(request, "batch_create", limit=20)
 
     # Step 1: Validazione input
     batch_mode, batch_preset = _validate_upload_input(files, mode, preset, passphrase)
@@ -480,7 +465,7 @@ async def apply_batch(batch_id: str, request: Request):
     """
     Applica le sostituzioni usando le decisions persistite.
     """
-    _enforce_rate_limit(request, "batch_apply", limit=20)
+    enforce_rate_limit(request, "batch_apply", limit=20)
 
     batch = get_batch(batch_id)
     if not batch:

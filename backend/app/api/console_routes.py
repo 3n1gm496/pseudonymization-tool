@@ -26,12 +26,12 @@ from app.core.batch_manager import (
 from app.core.config import API_HEAVY_TIMEOUT_SECONDS, MAX_CONSOLE_TEXT_CHARS
 from app.core.console_pipeline import run_text_apply, run_text_scan
 from app.core.pipeline import apply_review_decisions
+from app.core.rate_limit import enforce_rate_limit
 from app.models.schemas import Batch, BatchConfig, BatchMode, PresetName, ReviewAction
 
 
 router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
-_rate_buckets: Dict[str, List[float]] = {}
 _batch_start_times: dict = {}
 
 
@@ -41,21 +41,6 @@ def _resolve_preset(raw_value: str) -> PresetName:
         if preset.value.lower() == value.lower():
             return preset
     raise HTTPException(status_code=400, detail=f"Preset non valido: '{raw_value}'.")
-
-
-def _enforce_rate_limit(request: Request, scope: str, limit: int, window_seconds: int = 60) -> None:
-    client_ip = request.client.host if request.client else "unknown"
-    now = time.time()
-    bucket_key = f"{scope}:{client_ip}"
-    timestamps = _rate_buckets.get(bucket_key, [])
-    timestamps = [t for t in timestamps if now - t < window_seconds]
-    if len(timestamps) >= limit:
-        raise HTTPException(
-            status_code=429,
-            detail=f"Troppe richieste per '{scope}'. Riprova tra pochi secondi.",
-        )
-    timestamps.append(now)
-    _rate_buckets[bucket_key] = timestamps
 
 
 def _scrub_sensitive(value: Any) -> Any:
@@ -144,7 +129,7 @@ async def console_scan(req: dict, request: Request):
     Accetta: { text, mode }
     Restituisce: batch_id, passphrase, findings, safety_label
     """
-    _enforce_rate_limit(request, "console_scan", limit=30)
+    enforce_rate_limit(request, "console_scan", limit=30)
 
     text = req.get("text", "").strip()
     mode_str = "strict"
@@ -215,7 +200,7 @@ async def console_apply(req: dict, request: Request):
     Accetta: { batch_id, file_id, text }
     Restituisce: pseudonymized_text, passphrase, safety_label, mapping.
     """
-    _enforce_rate_limit(request, "console_apply", limit=30)
+    enforce_rate_limit(request, "console_apply", limit=30)
 
     # Step 1: Validazione input
     batch_id = req.get("batch_id")

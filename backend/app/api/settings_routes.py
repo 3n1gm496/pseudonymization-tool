@@ -26,11 +26,11 @@ from app.models.schemas import (
 )
 from app.core.config import CONFIG_DIR
 from app.core.policies import get_policy, get_enabled_entity_types
+from app.core.rate_limit import enforce_rate_limit
 
 router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
 
-_rate_buckets: Dict[str, List[float]] = {}
 _STATE_FILE = CONFIG_DIR / "state.json"
 
 
@@ -45,22 +45,6 @@ def _resolve_preset(raw_value: str) -> PresetName:
         if preset.value.lower() == value.lower():
             return preset
     raise HTTPException(status_code=400, detail=f"Preset non valido: '{raw_value}'.")
-
-
-def _enforce_rate_limit(request: Request, scope: str, limit: int, window_seconds: int = 60) -> None:
-    """Rate limit per client IP e scope."""
-    client_ip = request.client.host if request.client else "unknown"
-    now = time.time()
-    bucket_key = f"{scope}:{client_ip}"
-    timestamps = _rate_buckets.get(bucket_key, [])
-    timestamps = [t for t in timestamps if now - t < window_seconds]
-    if len(timestamps) >= limit:
-        raise HTTPException(
-            status_code=429,
-            detail=f"Troppe richieste per '{scope}'. Riprova tra pochi secondi.",
-        )
-    timestamps.append(now)
-    _rate_buckets[bucket_key] = timestamps
 
 
 def _scrub_sensitive(value: Any) -> Any:
