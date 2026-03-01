@@ -1,12 +1,13 @@
 """
 Parser per file di testo semplice: .txt, .md, .csv
 """
+
 import logging
 from pathlib import Path
 from typing import List
 
-from app.parsers.base import BaseParser, ParseResult, TextChunk
 from app.core.exceptions import FileEncodingError, ParsingError
+from app.parsers.base import BaseParser, ParseResult, TextChunk
 
 logger = logging.getLogger(__name__)
 
@@ -32,10 +33,7 @@ class TextParser(BaseParser):
                         f"Potrebbero esserci caratteri non corretti."
                     )
                 except Exception as fallback_err:
-                    raise FileEncodingError(
-                        str(file_path),
-                        "UTF-8 + latin-1 fallback"
-                    ) from fallback_err
+                    raise FileEncodingError(str(file_path), "UTF-8 + latin-1 fallback") from fallback_err
 
             # Suddividi il testo riga per riga per avere informazioni di posizione
             for line_num, line in enumerate(content.splitlines(), start=1):

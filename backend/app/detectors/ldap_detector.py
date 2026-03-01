@@ -16,23 +16,24 @@ Architettura:
 - ldap_client.py: LdapClient (connessione, querying, parsing)
 - ldap_detector.py: LdapCache (caching, refresh loop), LdapPersonDetector (detection)
 """
+
 import logging
 import re
 import threading
 import time
-from typing import List, Dict, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from app.detectors.base import BaseDetector, RawFinding
 from app.detectors.ldap_client import (
     LdapClient,
-    LdapEntry,
     LdapDiagnostics,
+    LdapEntry,
+    _parse_cn_from_dn,
     canonicalize_account,
     canonicalize_person_name,
-    _parse_cn_from_dn,
 )
-from app.parsers.base import TextChunk
 from app.models.schemas import EntityType, LdapConfig
+from app.parsers.base import TextChunk
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,7 @@ logger = logging.getLogger(__name__)
 # ─────────────────────────────────────────────────────────────
 # Cache LDAP enterprise
 # ─────────────────────────────────────────────────────────────
+
 
 class LdapCache:
     """
@@ -77,11 +79,7 @@ class LdapCache:
         if self._refresh_thread and self._refresh_thread.is_alive():
             return
         self._stop_event.clear()
-        self._refresh_thread = threading.Thread(
-            target=self._refresh_loop,
-            daemon=True,
-            name='ldap-refresh'
-        )
+        self._refresh_thread = threading.Thread(target=self._refresh_loop, daemon=True, name="ldap-refresh")
         self._refresh_thread.start()
 
     def _refresh_loop(self) -> None:
@@ -89,7 +87,7 @@ class LdapCache:
             try:
                 self._do_refresh()
             except Exception as e:
-                logger.warning('LDAP refresh fallito: %s', type(e).__name__)
+                logger.warning("LDAP refresh fallito: %s", type(e).__name__)
             interval = (self._config.refresh_interval_minutes if self._config else 60) * 60
             self._stop_event.wait(interval)
 
@@ -106,7 +104,7 @@ class LdapCache:
         entries, diag = client.query_users()
 
         if diag.error:
-            logger.warning('LDAP query fallita: %s', diag.error)
+            logger.warning("LDAP query fallita: %s", diag.error)
             return diag
 
         # Costruisci le strutture di lookup O(1)
@@ -134,10 +132,7 @@ class LdapCache:
             self._last_refresh = time.time()
             self._last_diagnostics = diag
 
-        logger.info(
-            'LDAP cache: %d utenti, %d pagine, %dms',
-            len(entries), diag.pages_count, diag.elapsed_ms
-        )
+        logger.info("LDAP cache: %d utenti, %d pagine, %dms", len(entries), diag.pages_count, diag.elapsed_ms)
         return diag
 
     # ── Accesso dati ──────────────────────────────────────────
@@ -164,21 +159,21 @@ class LdapCache:
         """Forza refresh immediato. Restituisce (success, message, diagnostics)."""
         try:
             diag = self._do_refresh()
-            return True, f'Cache aggiornata: {diag.parsed_users_count_total} utenti', diag.to_dict()
+            return True, f"Cache aggiornata: {diag.parsed_users_count_total} utenti", diag.to_dict()
         except Exception as e:
             diag = self._last_diagnostics
-            return False, f'{type(e).__name__}: {str(e)[:100]}', diag.to_dict() if diag else None
+            return False, f"{type(e).__name__}: {str(e)[:100]}", diag.to_dict() if diag else None
 
     def test_connection(self) -> Tuple[bool, str, Optional[int], Optional[dict]]:
         """Testa connessione LDAP. Restituisce (success, message, count, diagnostics)."""
         if not self._config or not self._config.enabled:
-            return False, 'LDAP non configurato o disabilitato', None, None
+            return False, "LDAP non configurato o disabilitato", None, None
         try:
             diag = self._do_refresh()
-            return True, 'Connessione riuscita', diag.parsed_users_count_total, diag.to_dict()
+            return True, "Connessione riuscita", diag.parsed_users_count_total, diag.to_dict()
         except Exception as e:
             diag = self._last_diagnostics
-            return False, f'{type(e).__name__}: {str(e)[:100]}', None, diag.to_dict() if diag else None
+            return False, f"{type(e).__name__}: {str(e)[:100]}", None, diag.to_dict() if diag else None
 
     def stop(self) -> None:
         self._stop_event.set()
@@ -211,20 +206,18 @@ def get_ldap_config() -> Optional[LdapConfig]:
 # ─────────────────────────────────────────────────────────────
 
 # Pattern per tokenizzare il testo: mantiene underscore/dot/hyphen nei token
-_TOKEN_RE = re.compile(r'[A-Za-z0-9_.\-\u00C0-\u024F]+', re.UNICODE)
+_TOKEN_RE = re.compile(r"[A-Za-z0-9_.\-\u00C0-\u024F]+", re.UNICODE)
 
 
 def _tokenize_with_spans(text: str):
     """Restituisce lista di (token_lower, start, end)."""
-    return [
-        (m.group(0).casefold(), m.start(), m.end())
-        for m in _TOKEN_RE.finditer(text)
-    ]
+    return [(m.group(0).casefold(), m.start(), m.end()) for m in _TOKEN_RE.finditer(text)]
 
 
 # ─────────────────────────────────────────────────────────────
 # Detector
 # ─────────────────────────────────────────────────────────────
+
 
 class LdapPersonDetector(BaseDetector):
     """
@@ -242,7 +235,7 @@ class LdapPersonDetector(BaseDetector):
 
     @property
     def name(self) -> str:
-        return 'LdapPersonDetector'
+        return "LdapPersonDetector"
 
     def _is_enabled(self) -> bool:
         cfg = self._config or _ldap_config
@@ -252,9 +245,7 @@ class LdapPersonDetector(BaseDetector):
         if chunk.is_formula or not self._is_enabled():
             return []
 
-        accounts_set, fullname_set, fullname_reverse_map, account_to_canonical = (
-            _ldap_cache.get_lookup_sets()
-        )
+        accounts_set, fullname_set, fullname_reverse_map, account_to_canonical = _ldap_cache.get_lookup_sets()
         if not accounts_set and not fullname_set:
             return []
 
@@ -267,22 +258,24 @@ class LdapPersonDetector(BaseDetector):
             if tok_lower in accounts_set:
                 original = text[start:end]
                 canonical = account_to_canonical.get(tok_lower, tok_lower)
-                findings.append(RawFinding(
-                    entity_type=EntityType.ACCOUNT,
-                    original_value=original,
-                    canonical_value=canonical,
-                    source_chunk=chunk,
-                    confidence_score=0.92,
-                    detector_name=self.name,
-                    start_pos=start,
-                    end_pos=end,
-                ))
+                findings.append(
+                    RawFinding(
+                        entity_type=EntityType.ACCOUNT,
+                        original_value=original,
+                        canonical_value=canonical,
+                        source_chunk=chunk,
+                        confidence_score=0.92,
+                        detector_name=self.name,
+                        start_pos=start,
+                        end_pos=end,
+                    )
+                )
 
         # ── Fullname matching (bigramma) ──────────────────────
         for i in range(len(tokens) - 1):
             tok1_lower, start1, _ = tokens[i]
             tok2_lower, _, end2 = tokens[i + 1]
-            bigram = f'{tok1_lower} {tok2_lower}'
+            bigram = f"{tok1_lower} {tok2_lower}"
 
             canonical_fn = None
             if bigram in fullname_set:
@@ -292,15 +285,17 @@ class LdapPersonDetector(BaseDetector):
 
             if canonical_fn:
                 original = text[start1:end2]
-                findings.append(RawFinding(
-                    entity_type=EntityType.LDAP_PERSON,
-                    original_value=original,
-                    canonical_value=canonical_fn,
-                    source_chunk=chunk,
-                    confidence_score=0.95,
-                    detector_name=self.name,
-                    start_pos=start1,
-                    end_pos=end2,
-                ))
+                findings.append(
+                    RawFinding(
+                        entity_type=EntityType.LDAP_PERSON,
+                        original_value=original,
+                        canonical_value=canonical_fn,
+                        source_chunk=chunk,
+                        confidence_score=0.95,
+                        detector_name=self.name,
+                        start_pos=start1,
+                        end_pos=end2,
+                    )
+                )
 
         return findings

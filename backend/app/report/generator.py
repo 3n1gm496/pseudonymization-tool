@@ -2,14 +2,15 @@
 Generatore di report finali in formato JSON e HTML.
 Il report NON include i valori originali dei dati sensibili.
 """
+
 import json
 import logging
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Any
-from collections import Counter
+from typing import Any, Dict, List
 
-from app.models.schemas import Batch, Finding, FileRecord, FileStatus, ReviewAction
+from app.models.schemas import Batch, FileRecord, FileStatus, Finding, ReviewAction
 
 logger = logging.getLogger(__name__)
 
@@ -131,22 +132,22 @@ def build_report_data(
     findings_by_type = Counter(f.entity_type.value for f in findings)
 
     # Conta le sostituzioni effettivamente applicate
-    entities_applied = sum(
-        1 for f in findings if f.review_action != ReviewAction.REJECT
-    )
+    entities_applied = sum(1 for f in findings if f.review_action != ReviewAction.REJECT)
 
     # Dettaglio file
     files_detail = []
     for file_rec in batch.files:
         file_findings = [f for f in findings if f.file_id == file_rec.file_id]
-        files_detail.append({
-            "file_id": file_rec.file_id,
-            "original_name": file_rec.original_name,
-            "status": file_rec.status.value,
-            "findings_count": len(file_findings),
-            "warnings": file_rec.warnings,
-            "error_message": file_rec.error_message,
-        })
+        files_detail.append(
+            {
+                "file_id": file_rec.file_id,
+                "original_name": file_rec.original_name,
+                "status": file_rec.status.value,
+                "findings_count": len(file_findings),
+                "warnings": file_rec.warnings,
+                "error_message": file_rec.error_message,
+            }
+        )
 
     # Warning globali
     global_warnings = []
@@ -184,10 +185,7 @@ def build_report_data(
 
 def generate_json_report(report_data: Dict[str, Any], output_path: Path) -> None:
     """Salva il report in formato JSON."""
-    output_path.write_text(
-        json.dumps(report_data, ensure_ascii=False, indent=2),
-        encoding="utf-8"
-    )
+    output_path.write_text(json.dumps(report_data, ensure_ascii=False, indent=2), encoding="utf-8")
     logger.info("Report JSON generato: %s", output_path)
 
 
@@ -212,14 +210,16 @@ def generate_html_report(report_data: Dict[str, Any], output_path: Path) -> None
             f'<span class="type-name">{entity_type}</span>'
             f'<div class="bar" style="width:{bar_width}px"></div>'
             f'<span class="count">{count}</span>'
-            f'</div>'
+            f"</div>"
         )
     findings_by_type_html = "\n".join(type_bars) if type_bars else "<p>Nessuna entità rilevata.</p>"
 
     # Righe tabella file
     files_rows = []
     for fd in report_data.get("files_detail", []):
-        note = fd.get("error_message") or ("; ".join(fd.get("warnings", []))[:100] + "..." if fd.get("warnings") else "—")
+        note = fd.get("error_message") or (
+            "; ".join(fd.get("warnings", []))[:100] + "..." if fd.get("warnings") else "—"
+        )
         files_rows.append(
             f"<tr>"
             f"<td>{fd['original_name']}</td>"
@@ -238,13 +238,19 @@ def generate_html_report(report_data: Dict[str, Any], output_path: Path) -> None
 
     safety_label = report_data.get("safety_label", "SAFE_TO_UPLOAD")
     residual_warnings = report_data.get("residual_warnings", [])
-    risk_cls = "risk-safe" if safety_label == "SAFE_TO_UPLOAD" else ("risk-warn" if safety_label == "SAFE_WITH_WARNINGS" else "")
-    residual_rows = "" if not residual_warnings else "<ul>" + "".join(f"<li>{w}</li>" for w in residual_warnings) + "</ul>"
+    risk_cls = (
+        "risk-safe"
+        if safety_label == "SAFE_TO_UPLOAD"
+        else ("risk-warn" if safety_label == "SAFE_WITH_WARNINGS" else "")
+    )
+    residual_rows = (
+        "" if not residual_warnings else "<ul>" + "".join(f"<li>{w}</li>" for w in residual_warnings) + "</ul>"
+    )
     residual_risk_section = (
         f'<div class="card"><h2>Residual Risk</h2>'
         f'<div class="risk-box {risk_cls}"><b>Safety Label:</b> {safety_label}</div>'
         f'{residual_rows if residual_rows else "<p>Nessun residual warning rilevato.</p>"}'
-        f'</div>'
+        f"</div>"
     )
 
     html = HTML_TEMPLATE.format(

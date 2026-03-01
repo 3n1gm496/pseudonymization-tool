@@ -2,6 +2,7 @@
 Coda asincrona per l'esecuzione delle scansioni batch.
 Gestisce concorrenza limitata e deduplicazione dei job.
 """
+
 from __future__ import annotations
 
 import logging

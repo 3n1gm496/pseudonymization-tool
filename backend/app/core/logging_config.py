@@ -2,6 +2,7 @@
 Structured logging configuration for the application.
 Provides JSON-formatted logs with correlation IDs and request context.
 """
+
 import logging
 import sys
 from typing import Any
@@ -78,30 +79,14 @@ def get_logger(name: str) -> structlog.stdlib.BoundLogger:
     return structlog.get_logger(name)
 
 
-def log_request_start(
-    method: str,
-    path: str,
-    request_id: str,
-    **kwargs: Any
-) -> None:
+def log_request_start(method: str, path: str, request_id: str, **kwargs: Any) -> None:
     """Log the start of a request."""
     logger = get_logger("app.request")
-    logger.info(
-        "request_started",
-        method=method,
-        path=path,
-        request_id=request_id,
-        **kwargs
-    )
+    logger.info("request_started", method=method, path=path, request_id=request_id, **kwargs)
 
 
 def log_request_end(
-    method: str,
-    path: str,
-    request_id: str,
-    status_code: int,
-    duration_ms: float,
-    **kwargs: Any
+    method: str, path: str, request_id: str, status_code: int, duration_ms: float, **kwargs: Any
 ) -> None:
     """Log the end of a request."""
     logger = get_logger("app.request")
@@ -112,20 +97,11 @@ def log_request_end(
         request_id=request_id,
         status_code=status_code,
         duration_ms=round(duration_ms, 2),
-        **kwargs
+        **kwargs,
     )
 
 
-def log_error(
-    error_type: str,
-    error_message: str,
-    **kwargs: Any
-) -> None:
+def log_error(error_type: str, error_message: str, **kwargs: Any) -> None:
     """Log an error with context."""
     logger = get_logger("app.error")
-    logger.error(
-        "error_occurred",
-        error_type=error_type,
-        error_message=error_message,
-        **kwargs
-    )
+    logger.error("error_occurred", error_type=error_type, error_message=error_message, **kwargs)

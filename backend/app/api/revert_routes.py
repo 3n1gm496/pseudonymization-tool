@@ -9,12 +9,10 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, Request, Response, UploadFile
-
 from app.core.config import MAX_CONSOLE_TEXT_CHARS, MAX_FILE_SIZE_BYTES
 from app.core.rate_limit import enforce_rate_limit
-from app.core.revert import preview_revert, apply_revert, preview_revert_text, apply_revert_text
-
+from app.core.revert import apply_revert, apply_revert_text, preview_revert, preview_revert_text
+from fastapi import APIRouter, File, Form, HTTPException, Request, Response, UploadFile
 
 router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
@@ -25,7 +23,9 @@ def _scrub_sensitive(value: Any) -> Any:
         cleaned = {}
         for key, item in value.items():
             key_l = str(key).lower()
-            if any(token in key_l for token in ("password", "passphrase", "secret", "token", "api_key", "bind_password")):
+            if any(
+                token in key_l for token in ("password", "passphrase", "secret", "token", "api_key", "bind_password")
+            ):
                 continue
             cleaned[key] = _scrub_sensitive(item)
         return cleaned

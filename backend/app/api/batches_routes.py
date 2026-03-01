@@ -4,15 +4,13 @@ Separato dal router monolitico per ridurre blast radius e accoppiamento.
 """
 
 import asyncio
+import json
 import logging
+import math
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-
-from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Request, UploadFile
-from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse
 
 from app.core.batch_manager import (
     cleanup_batch,
@@ -50,10 +48,9 @@ from app.models.schemas import (
     SafetyLabel,
     SubmitReviewRequest,
 )
-
-import json
-import math
-
+from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import FileResponse
 
 router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
@@ -83,7 +80,7 @@ def _validate_passphrase(passphrase: str) -> None:
     Security Fix #7: Weak password prevention
     """
     try:
-        from app.core.config import MIN_PASSPHRASE_LENGTH, MIN_PASSPHRASE_ENTROPY
+        from app.core.config import MIN_PASSPHRASE_ENTROPY, MIN_PASSPHRASE_LENGTH
     except:
         MIN_PASSPHRASE_LENGTH = 12
         MIN_PASSPHRASE_ENTROPY = 2.5
@@ -157,7 +154,9 @@ def _scrub_sensitive(value: Any) -> Any:
         cleaned = {}
         for key, item in value.items():
             key_l = str(key).lower()
-            if any(token in key_l for token in ("password", "passphrase", "secret", "token", "api_key", "bind_password")):
+            if any(
+                token in key_l for token in ("password", "passphrase", "secret", "token", "api_key", "bind_password")
+            ):
                 continue
             cleaned[key] = _scrub_sensitive(item)
         return cleaned
@@ -177,6 +176,7 @@ def _audit_event(request: Optional[Request], action: str, **details: Any) -> Non
 
 
 # ─── Batch Input Validation & File Processing (Helper Functions) ───────────────
+
 
 def _validate_upload_input(
     files: List[UploadFile],
@@ -296,8 +296,6 @@ async def _run_batch_scan_safe(batch_id: str) -> Batch:
 
 
 # ─── Batch (Upload File) ──────────────────────────────────────────────────────
-
-
 
 
 @router.post("/batches")
@@ -524,7 +522,9 @@ async def apply_batch(batch_id: str, request: Request):
 
     updated_batch = get_batch(batch_id)
     download_ready = bool(
-        updated_batch and updated_batch.status == BatchStatus.DONE and updated_batch.safety_label == SafetyLabel.SAFE_TO_UPLOAD
+        updated_batch
+        and updated_batch.status == BatchStatus.DONE
+        and updated_batch.safety_label == SafetyLabel.SAFE_TO_UPLOAD
     )
 
     return {
@@ -559,10 +559,7 @@ async def download_batch(batch_id: str, background_tasks: BackgroundTasks, reque
     if batch.safety_label != SafetyLabel.SAFE_TO_UPLOAD:
         raise HTTPException(
             status_code=409,
-            detail=(
-                "Export bloccato: safety_label non sicura "
-                f"({batch.safety_label.value})."
-            ),
+            detail=("Export bloccato: safety_label non sicura " f"({batch.safety_label.value})."),
         )
     batch_dir = get_batch_dir(batch_id)
     zip_files = list(batch_dir.glob("*.zip"))

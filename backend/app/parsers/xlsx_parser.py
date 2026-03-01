@@ -2,12 +2,13 @@
 Parser per file .xlsx (Microsoft Excel).
 Legge solo celle testuali; ignora formule e celle non-stringa.
 """
+
 import logging
 from pathlib import Path
 from typing import List
 
-from app.parsers.base import BaseParser, ParseResult, TextChunk
 from app.core.exceptions import XlsxParsingError
+from app.parsers.base import BaseParser, ParseResult, TextChunk
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ class XlsxParser(BaseParser):
 
         try:
             import openpyxl
+
             try:
                 # data_only=True legge i valori calcolati, non le formule.
                 # Tuttavia, per identificare le formule, dobbiamo leggere anche con data_only=False.

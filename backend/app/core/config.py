@@ -1,6 +1,7 @@
 """
 Configurazione centrale dell'applicazione.
 """
+
 import os
 import tempfile
 from pathlib import Path

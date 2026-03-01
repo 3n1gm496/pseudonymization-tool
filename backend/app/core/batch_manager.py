@@ -6,24 +6,25 @@ Mantiene lo stato di tutti i batch attivi durante la sessione del server.
 - Decisions persistite per batch (accept/reject/modify)
 - Timeout/cleanup automatico per inattività
 """
-import shutil
+
 import logging
+import shutil
 import threading
 import time
-from typing import Dict, List, Optional, Any
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-from app.models.schemas import Batch, BatchStatus, BatchMode
-from app.core.config import TEMP_BASE_DIR, BATCH_INACTIVITY_TTL_HOURS
+from app.core.config import BATCH_INACTIVITY_TTL_HOURS, TEMP_BASE_DIR
+from app.models.schemas import Batch, BatchMode, BatchStatus
 
 logger = logging.getLogger(__name__)
 
 # ─── Store in-memory ──────────────────────────────────────────────────────────
 _batches: Dict[str, Batch] = {}
-_passphrases: Dict[str, str] = {}           # batch_id -> passphrase (mai su disco)
-_engines: Dict[str, object] = {}            # batch_id -> PseudonymEngine (persistente)
+_passphrases: Dict[str, str] = {}  # batch_id -> passphrase (mai su disco)
+_engines: Dict[str, object] = {}  # batch_id -> PseudonymEngine (persistente)
 _decisions: Dict[str, Dict[str, Any]] = {}  # batch_id -> {finding_id -> decision_dict}
-_last_activity: Dict[str, float] = {}       # batch_id -> timestamp ultima attività
+_last_activity: Dict[str, float] = {}  # batch_id -> timestamp ultima attività
 
 # Timeout di inattività (configurabile)
 BATCH_INACTIVITY_TIMEOUT_SECONDS = max(300, BATCH_INACTIVITY_TTL_HOURS * 3600)
@@ -33,6 +34,7 @@ _cleanup_lock = threading.Lock()
 
 # ─── Generazione passphrase ───────────────────────────────────────────────────
 
+
 def generate_passphrase(length: int = 32) -> str:
     """
     Genera una passphrase crittograficamente sicura (32 caratteri, ~190 bit entropia).
@@ -40,10 +42,12 @@ def generate_passphrase(length: int = 32) -> str:
     Non viene mai salvata su disco.
     """
     from app.mapping.crypto import generate_passphrase as _gen
+
     return _gen(length)
 
 
 # ─── CRUD batch ───────────────────────────────────────────────────────────────
+
 
 def create_batch(batch: Batch) -> Batch:
     """Registra un nuovo batch e crea la sua directory temporanea."""
@@ -83,6 +87,7 @@ def list_batches() -> List[Batch]:
 
 # ─── Passphrase ───────────────────────────────────────────────────────────────
 
+
 def store_passphrase(batch_id: str, passphrase: str) -> None:
     """Memorizza la passphrase in memoria (mai su disco)."""
     _passphrases[batch_id] = passphrase
@@ -108,6 +113,7 @@ def regenerate_passphrase(batch_id: str) -> Optional[str]:
 
 # ─── Decisions persistite ─────────────────────────────────────────────────────
 
+
 def store_decisions(batch_id: str, decisions: List[Dict[str, Any]]) -> Dict[str, int]:
     """
     Persiste le decisioni di review per un batch.
@@ -117,22 +123,22 @@ def store_decisions(batch_id: str, decisions: List[Dict[str, Any]]) -> Dict[str,
     if batch_id not in _decisions:
         _decisions[batch_id] = {}
 
-    counts = {'accepted': 0, 'rejected': 0, 'modified': 0}
+    counts = {"accepted": 0, "rejected": 0, "modified": 0}
     for d in decisions:
-        fid = d.get('finding_id')
-        action = d.get('action', 'ACCEPT').upper()
+        fid = d.get("finding_id")
+        action = d.get("action", "ACCEPT").upper()
         if not fid:
             continue
         _decisions[batch_id][fid] = {
-            'action': action,
-            'custom_pseudonym': d.get('custom_pseudonym'),
+            "action": action,
+            "custom_pseudonym": d.get("custom_pseudonym"),
         }
-        if action == 'REJECT':
-            counts['rejected'] += 1
-        elif action == 'MODIFY':
-            counts['modified'] += 1
+        if action == "REJECT":
+            counts["rejected"] += 1
+        elif action == "MODIFY":
+            counts["modified"] += 1
         else:
-            counts['accepted'] += 1
+            counts["accepted"] += 1
 
     _last_activity[batch_id] = time.time()
     return counts
@@ -150,6 +156,7 @@ def clear_decisions(batch_id: str) -> None:
 
 # ─── PseudonymEngine persistente ─────────────────────────────────────────────
 
+
 def get_or_create_engine(batch_id: str, mode: BatchMode) -> object:
     """
     Restituisce il PseudonymEngine per il batch, creandolo se non esiste.
@@ -157,6 +164,7 @@ def get_or_create_engine(batch_id: str, mode: BatchMode) -> object:
     la consistenza dei pseudonimi tra scan multipli.
     """
     from app.pseudonymizer.engine import PseudonymEngine
+
     if batch_id not in _engines:
         _engines[batch_id] = PseudonymEngine(mode=mode)
         logger.info("PseudonymEngine creato per batch %s", batch_id)
@@ -169,6 +177,7 @@ def get_engine(batch_id: str) -> Optional[object]:
 
 
 # ─── Cleanup ──────────────────────────────────────────────────────────────────
+
 
 def cleanup_batch(batch_id: str) -> None:
     """
@@ -187,6 +196,7 @@ def cleanup_batch(batch_id: str) -> None:
         _passphrases.pop(batch_id, None)
     try:
         from app.core.pipeline import _clear_parse_results
+
         _clear_parse_results(batch_id)
     except Exception:
         pass
@@ -200,10 +210,7 @@ def cleanup_inactive_batches() -> int:
     """Rimuove i batch inattivi. Restituisce il numero di batch rimossi."""
     with _cleanup_lock:
         now = time.time()
-        expired = [
-            bid for bid, last in _last_activity.items()
-            if now - last > BATCH_INACTIVITY_TIMEOUT_SECONDS
-        ]
+        expired = [bid for bid, last in _last_activity.items() if now - last > BATCH_INACTIVITY_TIMEOUT_SECONDS]
         for bid in expired:
             logger.info("Cleanup batch inattivo: %s", bid)
             cleanup_batch(bid)
@@ -212,6 +219,7 @@ def cleanup_inactive_batches() -> int:
 
 def start_cleanup_scheduler() -> None:
     """Avvia il thread di cleanup automatico (ogni 10 minuti)."""
+
     def _loop():
         while True:
             time.sleep(600)

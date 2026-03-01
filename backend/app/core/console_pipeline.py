@@ -2,21 +2,27 @@
 Pipeline per testo inline (console/clipboard-first) v2.
 Gestisce scan e apply su testo puro senza file fisici.
 """
+
 import logging
 import uuid
 from datetime import datetime
 from typing import List, Optional
 
+from app.core.batch_manager import get_batch, get_engine, get_or_create_engine, update_batch
+from app.core.policies import get_confidence_threshold, get_enabled_entity_types
+from app.core.safety import compute_residual_warnings, compute_safety_label
+from app.detectors.engine import build_extra_detectors, detect_in_text, residual_scan
 from app.models.schemas import (
-    Batch, BatchStatus, FileRecord, FileStatus, Finding,
-    SafetyLabel, PresetName, ReviewAction, EntityType
+    Batch,
+    BatchStatus,
+    EntityType,
+    FileRecord,
+    FileStatus,
+    Finding,
+    PresetName,
+    ReviewAction,
+    SafetyLabel,
 )
-from app.core.batch_manager import (
-    get_batch, update_batch, get_or_create_engine, get_engine,
-)
-from app.core.policies import get_enabled_entity_types, get_confidence_threshold
-from app.core.safety import compute_safety_label, compute_residual_warnings
-from app.detectors.engine import detect_in_text, residual_scan, build_extra_detectors
 from app.pseudonymizer.transformer import apply_pseudonyms_to_text
 
 logger = logging.getLogger(__name__)
@@ -40,6 +46,7 @@ def run_text_scan(
 
     # Extra detectors basati sulla policy
     from app.core.policies import is_ldap_enabled_for_preset
+
     ldap_enabled = is_ldap_enabled_for_preset(batch.config.preset)
     extra_detectors = build_extra_detectors(ldap_enabled=ldap_enabled)
 
@@ -62,10 +69,7 @@ def run_text_scan(
     # Filtra per policy
     enabled = set(get_enabled_entity_types(batch.config.preset))
     threshold = get_confidence_threshold(batch.config.preset)
-    findings = [
-        f for f in findings
-        if f.entity_type.value in enabled and f.confidence_score >= threshold
-    ]
+    findings = [f for f in findings if f.entity_type.value in enabled and f.confidence_score >= threshold]
 
     # Marca i finding come testo inline
     for f in findings:
@@ -89,10 +93,7 @@ def run_text_scan(
         batch.status = BatchStatus.REVIEW
     update_batch(batch)
 
-    logger.info(
-        "Text scan completato per batch %s, file_id=%s: %d finding",
-        batch_id, file_id, len(findings)
-    )
+    logger.info("Text scan completato per batch %s, file_id=%s: %d finding", batch_id, file_id, len(findings))
     return file_id, findings, safety
 
 
@@ -111,22 +112,16 @@ def run_text_apply(
         raise ValueError(f"Batch non trovato: {batch_id}")
 
     # Recupera i finding per questo file
-    file_findings = [
-        f for f in batch.findings
-        if f.file_id == file_id
-    ]
+    file_findings = [f for f in batch.findings if f.file_id == file_id]
 
     # Applica le sostituzioni
-    pseudonymized_text, applied_count = apply_pseudonyms_to_text(
-        original_text, file_findings
-    )
+    pseudonymized_text, applied_count = apply_pseudonyms_to_text(original_text, file_findings)
 
     # Residual scan con whitelist dei valori sintetici (evita falsi positivi)
     extra_detectors = build_extra_detectors(ldap_enabled=False)
     # Costruisci la whitelist dai pseudonimi generati
     synthetic_whitelist = {
-        f.proposed_pseudonym for f in file_findings
-        if f.proposed_pseudonym and f.review_action != 'reject'
+        f.proposed_pseudonym for f in file_findings if f.proposed_pseudonym and f.review_action != "reject"
     }
     residual_raw = residual_scan(
         pseudonymized_text,
@@ -135,13 +130,11 @@ def run_text_apply(
     )
 
     # Filtra residual per policy
-    from app.core.policies import get_enabled_entity_types, get_confidence_threshold
+    from app.core.policies import get_confidence_threshold, get_enabled_entity_types
+
     enabled = set(get_enabled_entity_types(batch.config.preset))
     threshold = get_confidence_threshold(batch.config.preset)
-    residual_filtered = [
-        r for r in residual_raw
-        if r.entity_type.value in enabled and r.confidence_score >= threshold
-    ]
+    residual_filtered = [r for r in residual_raw if r.entity_type.value in enabled and r.confidence_score >= threshold]
 
     residual_warnings = compute_residual_warnings(residual_filtered)
 

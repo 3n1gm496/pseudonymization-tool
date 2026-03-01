@@ -9,10 +9,6 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse
-
 from app.core.batch_manager import (
     cleanup_batch,
     create_batch,
@@ -28,7 +24,9 @@ from app.core.console_pipeline import run_text_apply, run_text_scan
 from app.core.pipeline import apply_review_decisions
 from app.core.rate_limit import enforce_rate_limit
 from app.models.schemas import Batch, BatchConfig, BatchMode, PresetName, ReviewAction
-
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import FileResponse
 
 router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
@@ -48,7 +46,9 @@ def _scrub_sensitive(value: Any) -> Any:
         cleaned = {}
         for key, item in value.items():
             key_l = str(key).lower()
-            if any(token in key_l for token in ("password", "passphrase", "secret", "token", "api_key", "bind_password")):
+            if any(
+                token in key_l for token in ("password", "passphrase", "secret", "token", "api_key", "bind_password")
+            ):
                 continue
             cleaned[key] = _scrub_sensitive(item)
         return cleaned
@@ -69,6 +69,7 @@ def _audit_event(request: Optional[Request], action: str, **details: Any) -> Non
 
 # ─── Console Apply Helpers ────────────────────────────────────────────────────
 
+
 def _process_stored_decisions(batch_id: str) -> None:
     """
     Recupera e applica decisions persistite sulla batch.
@@ -76,21 +77,23 @@ def _process_stored_decisions(batch_id: str) -> None:
     decisions_map = get_decisions(batch_id)
     if not decisions_map:
         return
-    
+
     from app.models.schemas import ReviewDecisionItem
-    
+
     decision_items = []
     for fid, dec in decisions_map.items():
         try:
             action = ReviewAction(dec["action"])
         except (ValueError, KeyError):
             action = ReviewAction.ACCEPT
-        decision_items.append(ReviewDecisionItem(
-            finding_id=fid,
-            action=action,
-            modified_pseudonym=dec.get("custom_pseudonym"),
-        ))
-    
+        decision_items.append(
+            ReviewDecisionItem(
+                finding_id=fid,
+                action=action,
+                modified_pseudonym=dec.get("custom_pseudonym"),
+            )
+        )
+
     apply_review_decisions(batch_id, decision_items)
 
 
@@ -102,7 +105,7 @@ def _generate_and_save_mapping(batch_id: str, file_id: str, passphrase: str) -> 
     batch = get_batch(batch_id)
     if not batch:
         raise ValueError(f"Batch non trovato: {batch_id}")
-    
+
     file_findings = [f for f in batch.findings if f.file_id == file_id]
     mapping_data = {"mapping": {}}
     for finding in file_findings:
@@ -111,9 +114,9 @@ def _generate_and_save_mapping(batch_id: str, file_id: str, passphrase: str) -> 
             canon = finding.canonical_value or finding.original_value
             if pseudo not in mapping_data["mapping"]:
                 mapping_data["mapping"][pseudo] = canon
-    
+
     from app.mapping.crypto import save_encrypted_mapping
-    
+
     batch_dir = get_batch_dir(batch_id)
     mapping_path = batch_dir / "mapping.enc"
     save_encrypted_mapping(mapping_data, passphrase, mapping_path)
@@ -121,6 +124,7 @@ def _generate_and_save_mapping(batch_id: str, file_id: str, passphrase: str) -> 
 
 
 # ─── Console Scan ────────────────────────────────────────────────────────────
+
 
 @router.post("/console/scan")
 async def console_scan(req: dict, request: Request):

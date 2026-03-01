@@ -23,6 +23,7 @@ Usage:
         enforce_rate_limit(request, scope="endpoint_name", limit=25)
         # ... endpoint logic
 """
+
 import logging
 import os
 import threading
@@ -30,12 +31,8 @@ import time
 from collections import OrderedDict
 from typing import Dict, List
 
+from app.core.config import RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SECONDS
 from fastapi import HTTPException, Request
-
-from app.core.config import (
-    RATE_LIMIT_REQUESTS,
-    RATE_LIMIT_WINDOW_SECONDS,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -48,18 +45,18 @@ RATE_LIMIT_CLEANUP_INTERVAL_SECONDS = int(os.environ.get("RATE_LIMIT_CLEANUP_INT
 class RateLimiter:
     """
     Thread-safe in-memory rate limiter with automatic cleanup and memory bounds.
-    
+
     Design goals:
       - No memory leak on long uptime (cleanup old buckets)
       - Bounded memory (max 5000 clients, LRU eviction)
       - Thread-safe for concurrent requests
       - Minimal overhead (O(1) bucket access, O(window_size) timestamp filtering)
-    
+
     Cleanup strategy:
       - Background thread runs every 60 seconds
       - Removes buckets with no requests in last 300 seconds (TTL)
       - Enforces max client limit (LRU eviction if exceeded)
-    
+
     Bucket structure:
       {
         "scope:client_ip": {
@@ -81,9 +78,9 @@ class RateLimiter:
         if self._running:
             logger.warning("Rate limiter cleanup thread already running")
             return
-        
+
         self._running = True
-        
+
         def _cleanup_loop():
             logger.info(
                 "Rate limiter cleanup thread started (TTL=%ds, interval=%ds, max_clients=%d)",
@@ -97,12 +94,8 @@ class RateLimiter:
                     self._cleanup()
                 except Exception as e:  # QG-EXEMPT: cleanup thread should never crash
                     logger.error("Rate limiter cleanup error: %s", e, exc_info=True)
-        
-        self._cleanup_thread = threading.Thread(
-            target=_cleanup_loop,
-            daemon=True,
-            name="rate-limit-cleanup"
-        )
+
+        self._cleanup_thread = threading.Thread(target=_cleanup_loop, daemon=True, name="rate-limit-cleanup")
         self._cleanup_thread.start()
 
     def stop_cleanup_thread(self) -> None:
@@ -119,28 +112,22 @@ class RateLimiter:
         with self._lock:
             now = time.time()
             ttl_threshold = now - RATE_LIMIT_CLEANUP_TTL_SECONDS
-            
+
             # Step 1: Remove expired buckets (no activity for TTL seconds)
-            expired_keys = [
-                key for key, bucket in self._buckets.items()
-                if bucket["last_access"] < ttl_threshold
-            ]
+            expired_keys = [key for key, bucket in self._buckets.items() if bucket["last_access"] < ttl_threshold]
             for key in expired_keys:
                 del self._buckets[key]
-            
+
             if expired_keys:
                 logger.debug("Rate limiter cleanup: removed %d expired buckets", len(expired_keys))
-            
+
             # Step 2: Enforce max client limit (LRU eviction)
             if len(self._buckets) > RATE_LIMIT_MAX_CLIENTS:
                 excess = len(self._buckets) - RATE_LIMIT_MAX_CLIENTS
                 for _ in range(excess):
                     # OrderedDict.popitem(last=False) removes oldest entry (FIFO/LRU)
                     self._buckets.popitem(last=False)
-                logger.warning(
-                    "Rate limiter: enforced max client limit, evicted %d oldest buckets",
-                    excess
-                )
+                logger.warning("Rate limiter: enforced max client limit, evicted %d oldest buckets", excess)
 
     def check_limit(
         self,
@@ -151,20 +138,20 @@ class RateLimiter:
     ) -> None:
         """
         Enforce rate limit for a request. Raises HTTPException(429) if limit exceeded.
-        
+
         Args:
             request: FastAPI Request object (to extract client IP)
             scope: Rate limit scope (e.g., "batch_create", "console_scan")
             limit: Maximum requests allowed in window
             window_seconds: Time window in seconds (default 60)
-        
+
         Raises:
             HTTPException: 429 Too Many Requests if limit exceeded
         """
         client_ip = request.client.host if request.client else "unknown"
         now = time.time()
         bucket_key = f"{scope}:{client_ip}"
-        
+
         with self._lock:
             # Step 1: Get or create bucket
             if bucket_key in self._buckets:
@@ -174,11 +161,11 @@ class RateLimiter:
             else:
                 bucket = {"timestamps": [], "last_access": now}
                 self._buckets[bucket_key] = bucket
-            
+
             # Step 2: Filter old timestamps (outside window)
             cutoff = now - window_seconds
             bucket["timestamps"] = [t for t in bucket["timestamps"] if t >= cutoff]
-            
+
             # Step 3: Check limit
             if len(bucket["timestamps"]) >= limit:
                 logger.warning(
@@ -193,7 +180,7 @@ class RateLimiter:
                     status_code=429,
                     detail=f"Troppe richieste per '{scope}'. Riprova tra pochi secondi.",
                 )
-            
+
             # Step 4: Add current timestamp
             bucket["timestamps"].append(now)
             bucket["last_access"] = now
@@ -223,16 +210,16 @@ def enforce_rate_limit(
 ) -> None:
     """
     Enforce rate limit for a request (convenience function).
-    
+
     Args:
         request: FastAPI Request object
         scope: Rate limit scope (e.g., "batch_create", "console_scan")
         limit: Maximum requests allowed in window
         window_seconds: Time window in seconds (default 60)
-    
+
     Raises:
         HTTPException: 429 Too Many Requests if limit exceeded
-    
+
     Example:
         @router.post("/api/batches")
         async def create_batch(request: Request, ...):

@@ -7,12 +7,9 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, HTTPException, Request, Response
-
-from app.core.config import CONFIG_DIR
 from app.core.auth import (
-    AUTH_ENABLED,
     ADMIN_USERNAME,
+    AUTH_ENABLED,
     SESSION_COOKIE_NAME,
     SESSION_COOKIE_SECURE,
     SESSION_TTL_SECONDS,
@@ -23,7 +20,8 @@ from app.core.auth import (
     validate_session,
     verify_credentials,
 )
-
+from app.core.config import CONFIG_DIR
+from fastapi import APIRouter, HTTPException, Request, Response
 
 router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
@@ -34,7 +32,9 @@ def _scrub_sensitive(value: Any) -> Any:
         cleaned = {}
         for key, item in value.items():
             key_l = str(key).lower()
-            if any(token in key_l for token in ("password", "passphrase", "secret", "token", "api_key", "bind_password")):
+            if any(
+                token in key_l for token in ("password", "passphrase", "secret", "token", "api_key", "bind_password")
+            ):
                 continue
             cleaned[key] = _scrub_sensitive(item)
         return cleaned

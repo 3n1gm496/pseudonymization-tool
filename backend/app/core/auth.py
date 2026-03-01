@@ -10,11 +10,13 @@ from typing import Optional, Tuple
 # Lazy import to avoid circular dependency
 _config_cache = None
 
+
 def _get_config():
     """Lazy-load config to avoid circular imports."""
     global _config_cache
     if _config_cache is None:
         from app.core.profiles import get_config
+
         _config_cache = get_config()
     return _config_cache
 

@@ -2,13 +2,14 @@
 Gestione dei preset e delle policy di pseudonimizzazione.
 Ogni policy è versionata e il suo SHA256 viene incluso nel report.
 """
+
 import hashlib
 import json
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
 
-from app.models.schemas import PresetName, EntityType
+from app.models.schemas import EntityType, PresetName
 
 logger = logging.getLogger(__name__)
 
@@ -25,11 +26,27 @@ _DEFAULT_POLICIES: Dict[str, Dict[str, Any]] = {
         "version": "1.0",
         "description": "Preset per log SOC: massima copertura entità di rete, identità e path.",
         "enabled_entity_types": [
-            "EMAIL", "IPV4", "IPV6", "URL", "HOSTNAME",
-            "UPN", "LDAP_DN", "WINDOWS_SID", "UNC_PATH", "WINDOWS_PATH", "LINUX_PATH",
-            "PERSON", "LDAP_PERSON", "ACCOUNT", "USERNAME",
-            "CODICE_FISCALE", "PARTITA_IVA", "PHONE",
-            "MAIL_HEADER", "DOMAIN_FRAGMENT", "CUSTOM",
+            "EMAIL",
+            "IPV4",
+            "IPV6",
+            "URL",
+            "HOSTNAME",
+            "UPN",
+            "LDAP_DN",
+            "WINDOWS_SID",
+            "UNC_PATH",
+            "WINDOWS_PATH",
+            "LINUX_PATH",
+            "PERSON",
+            "LDAP_PERSON",
+            "ACCOUNT",
+            "USERNAME",
+            "CODICE_FISCALE",
+            "PARTITA_IVA",
+            "PHONE",
+            "MAIL_HEADER",
+            "DOMAIN_FRAGMENT",
+            "CUSTOM",
         ],
         "confidence_threshold": 0.55,
         "ldap_detector_enabled": True,
@@ -42,9 +59,16 @@ _DEFAULT_POLICIES: Dict[str, Dict[str, Any]] = {
         "version": "1.0",
         "description": "Preset per documenti di policy: focus su identità, CF/PIVA, contatti.",
         "enabled_entity_types": [
-            "EMAIL", "URL", "HOSTNAME",
-            "PERSON", "LDAP_PERSON", "ACCOUNT", "USERNAME",
-            "CODICE_FISCALE", "PARTITA_IVA", "PHONE",
+            "EMAIL",
+            "URL",
+            "HOSTNAME",
+            "PERSON",
+            "LDAP_PERSON",
+            "ACCOUNT",
+            "USERNAME",
+            "CODICE_FISCALE",
+            "PARTITA_IVA",
+            "PHONE",
             "CUSTOM",
         ],
         "confidence_threshold": 0.65,
@@ -58,9 +82,17 @@ _DEFAULT_POLICIES: Dict[str, Dict[str, Any]] = {
         "version": "1.0",
         "description": "Preset per email e header: focus su indirizzi, domini, mail headers.",
         "enabled_entity_types": [
-            "EMAIL", "IPV4", "IPV6", "URL", "HOSTNAME",
-            "UPN", "MAIL_HEADER",
-            "PERSON", "LDAP_PERSON", "ACCOUNT", "USERNAME",
+            "EMAIL",
+            "IPV4",
+            "IPV6",
+            "URL",
+            "HOSTNAME",
+            "UPN",
+            "MAIL_HEADER",
+            "PERSON",
+            "LDAP_PERSON",
+            "ACCOUNT",
+            "USERNAME",
             "CUSTOM",
         ],
         "confidence_threshold": 0.60,
@@ -87,6 +119,7 @@ def get_policy(preset: PresetName) -> Dict[str, Any]:
                 else:
                     try:
                         import yaml
+
                         return yaml.safe_load(policy_file.read_text(encoding="utf-8"))
                     except ImportError:
                         pass
@@ -135,10 +168,7 @@ def save_default_policies() -> None:
         policy_file = POLICIES_DIR / f"{preset.value.lower().replace(' ', '_')}.json"
         if not policy_file.exists():
             try:
-                policy_file.write_text(
-                    json.dumps(policy, indent=2, ensure_ascii=False),
-                    encoding="utf-8"
-                )
+                policy_file.write_text(json.dumps(policy, indent=2, ensure_ascii=False), encoding="utf-8")
                 logger.info("Policy salvata: %s", policy_file.name)
             except Exception as e:
                 logger.warning("Impossibile salvare la policy '%s': %s", policy_file, e)

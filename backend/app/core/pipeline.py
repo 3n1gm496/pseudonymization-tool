@@ -3,32 +3,42 @@ Pipeline principale di orchestrazione del processo di pseudonimizzazione v2.
 Coordina: parsing -> detection -> pseudonimizzazione -> trasformazione -> report.
 Usa PseudonymEngine persistente per batch, canonical_value, policy hash, safety label.
 """
+
 import logging
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import Dict, List, Optional
 
-from app.models.schemas import (
-    Batch, BatchStatus, FileRecord, FileStatus, Finding,
-    ReviewDecisionItem, ReviewAction, BatchMode, SafetyLabel, PresetName
-)
 from app.core.batch_manager import (
-    get_batch, update_batch, get_batch_dir, get_passphrase,
-    get_or_create_engine, get_engine,
+    get_batch,
+    get_batch_dir,
+    get_engine,
+    get_or_create_engine,
+    get_passphrase,
+    update_batch,
 )
-from app.core.policies import get_policy_hash, get_enabled_entity_types, get_confidence_threshold
-from app.core.safety import compute_safety_label, compute_residual_warnings
-from app.parsers.factory import parse_file
-from app.parsers.base import ParseResult
-from app.detectors.engine import detect_in_parse_result, residual_scan, build_extra_detectors
-from app.pseudonymizer.transformer import transform_file
+from app.core.exceptions import ApplyPipelineError, BatchStateError, ParsingError, ScanPipelineError, TransformError
+from app.core.policies import get_confidence_threshold, get_enabled_entity_types, get_policy_hash
+from app.core.safety import compute_residual_warnings, compute_safety_label
+from app.detectors.engine import build_extra_detectors, detect_in_parse_result, residual_scan
 from app.mapping.crypto import save_encrypted_mapping
-from app.report.generator import build_report_data, generate_json_report, generate_html_report
-from app.core.exceptions import (
-    ScanPipelineError, ApplyPipelineError, BatchStateError,
-    ParsingError, TransformError
+from app.models.schemas import (
+    Batch,
+    BatchMode,
+    BatchStatus,
+    FileRecord,
+    FileStatus,
+    Finding,
+    PresetName,
+    ReviewAction,
+    ReviewDecisionItem,
+    SafetyLabel,
 )
+from app.parsers.base import ParseResult
+from app.parsers.factory import parse_file
+from app.pseudonymizer.transformer import transform_file
+from app.report.generator import build_report_data, generate_html_report, generate_json_report
 
 logger = logging.getLogger(__name__)
 
@@ -56,10 +66,7 @@ def _filter_findings_by_policy(
     """Filtra i finding in base alla policy: tipi abilitati e soglia di confidenza."""
     enabled = set(get_enabled_entity_types(preset))
     threshold = get_confidence_threshold(preset)
-    return [
-        f for f in findings
-        if f.entity_type.value in enabled and f.confidence_score >= threshold
-    ]
+    return [f for f in findings if f.entity_type.value in enabled and f.confidence_score >= threshold]
 
 
 def run_scan_pipeline(batch_id: str) -> Batch:
@@ -80,6 +87,7 @@ def run_scan_pipeline(batch_id: str) -> Batch:
 
     # Extra detectors (LDAP, domain fragments) basati sulla policy
     from app.core.policies import is_ldap_enabled_for_preset
+
     ldap_enabled = is_ldap_enabled_for_preset(batch.config.preset)
     extra_detectors = build_extra_detectors(ldap_enabled=ldap_enabled)
 
@@ -142,7 +150,9 @@ def run_scan_pipeline(batch_id: str) -> Batch:
 
     logger.info(
         "Scansione completata per batch %s: %d finding totali in %d file.",
-        batch_id, len(batch.findings), len(batch.files)
+        batch_id,
+        len(batch.findings),
+        len(batch.files),
     )
     return batch
 
@@ -230,7 +240,7 @@ def run_apply_pipeline(batch_id: str, started_at: str) -> Path:
                 "mode": batch.config.mode.value,
                 "preset": batch.config.preset.value,
                 "policy_hash": batch.policy_hash,
-                "mapping": {}
+                "mapping": {},
             }
             for finding in batch.findings:
                 if finding.review_action != ReviewAction.REJECT:
@@ -283,8 +293,7 @@ def run_apply_pipeline(batch_id: str, started_at: str) -> Path:
                 zf.write(str(mapping_path), "mapping.enc")
 
         failed_files = [
-            file_rec for file_rec in batch.files
-            if not file_rec.is_text_input and file_rec.status == FileStatus.FAILED
+            file_rec for file_rec in batch.files if not file_rec.is_text_input and file_rec.status == FileStatus.FAILED
         ]
         batch.status = BatchStatus.DONE_WITH_ERRORS if failed_files else BatchStatus.DONE
         update_batch(batch)

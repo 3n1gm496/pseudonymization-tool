@@ -1,6 +1,7 @@
 """
 Cache per i risultati dei detector con TTL e LRU eviction.
 """
+
 import hashlib
 import logging
 import time
@@ -8,11 +9,7 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from typing import List, Optional
 
-from app.core.config import (
-    DETECTOR_CACHE_ENABLED,
-    DETECTOR_CACHE_TTL_SECONDS,
-    DETECTOR_CACHE_MAX_SIZE,
-)
+from app.core.config import DETECTOR_CACHE_ENABLED, DETECTOR_CACHE_MAX_SIZE, DETECTOR_CACHE_TTL_SECONDS
 from app.detectors.base import RawFinding
 
 logger = logging.getLogger(__name__)
@@ -21,6 +18,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class CacheEntry:
     """Entry del cache con TTL."""
+
     findings: List[RawFinding]
     timestamp: float
     hits: int = 0
@@ -43,7 +41,7 @@ class DetectorCache:
     def _compute_key(self, text: str, chunk_id: str) -> str:
         """Genera una chiave hash per il testo del chunk."""
         combined = f"{chunk_id}:{text}"
-        return hashlib.sha256(combined.encode('utf-8')).hexdigest()
+        return hashlib.sha256(combined.encode("utf-8")).hexdigest()
 
     def _is_expired(self, entry: CacheEntry) -> bool:
         """Verifica se l'entry è scaduta."""
@@ -92,11 +90,7 @@ class DetectorCache:
             logger.debug("Cache eviction: rimosso %s (size: %d)", oldest_key[:8], len(self._cache))
 
         # Aggiungi o aggiorna entry
-        entry = CacheEntry(
-            findings=findings,
-            timestamp=time.time(),
-            hits=0
-        )
+        entry = CacheEntry(findings=findings, timestamp=time.time(), hits=0)
         self._cache[key] = entry
         self._cache.move_to_end(key)
 
@@ -132,6 +126,10 @@ def get_detector_cache() -> DetectorCache:
     global _cache_instance
     if _cache_instance is None:
         _cache_instance = DetectorCache()
-        logger.info("Detector cache inizializzato (enabled: %s, max_size: %d, ttl: %ds)",
-                    DETECTOR_CACHE_ENABLED, DETECTOR_CACHE_MAX_SIZE, DETECTOR_CACHE_TTL_SECONDS)
+        logger.info(
+            "Detector cache inizializzato (enabled: %s, max_size: %d, ttl: %ds)",
+            DETECTOR_CACHE_ENABLED,
+            DETECTOR_CACHE_MAX_SIZE,
+            DETECTOR_CACHE_TTL_SECONDS,
+        )
     return _cache_instance

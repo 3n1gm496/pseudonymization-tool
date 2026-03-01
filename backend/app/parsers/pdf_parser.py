@@ -2,12 +2,13 @@
 Parser per file .pdf (solo PDF nativamente testuali).
 I PDF basati su immagini o cifrati vengono segnalati con warning.
 """
+
 import logging
 from pathlib import Path
 from typing import List
 
-from app.parsers.base import BaseParser, ParseResult, TextChunk
 from app.core.exceptions import PDFParsingError
+from app.parsers.base import BaseParser, ParseResult, TextChunk
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,7 @@ class PdfParser(BaseParser):
     def parse_stream(self, file_path: Path, chunk_size: int = 1000):
         """Parse PDF in streaming, processando pagina per pagina."""
         from pypdf import PdfReader
+
         try:
             reader = PdfReader(str(file_path))
             if reader.is_encrypted:
@@ -50,6 +52,7 @@ class PdfParser(BaseParser):
         result = ParseResult(file_path=file_path)
         try:
             from pypdf import PdfReader
+
             try:
                 reader = PdfReader(str(file_path))
             except Exception as read_err:

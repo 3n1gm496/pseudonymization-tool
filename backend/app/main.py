@@ -2,31 +2,26 @@
 Punto di ingresso dell'applicazione Local Pseudonymization Tool.
 Il server è configurato per ascoltare SOLO su 127.0.0.1 (localhost).
 """
+
 import logging
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-from fastapi.responses import JSONResponse
-
-from app.api.routes import router as api_router
 from app.api.auth_routes import router as auth_router
+from app.api.batches_routes import router as batches_router
 from app.api.console_routes import router as console_router
 from app.api.revert_routes import router as revert_router
-from app.api.batches_routes import router as batches_router
+from app.api.routes import router as api_router
 from app.api.settings_routes import router as settings_router
-from app.core.config import SERVER_HOST, SERVER_PORT, TEMP_BASE_DIR
+from app.core.auth import auth_uses_default_password, extract_token_from_request, validate_session
 from app.core.batch_manager import start_cleanup_scheduler
-from app.core.auth import (
-    auth_uses_default_password,
-    extract_token_from_request,
-    validate_session,
-)
+from app.core.config import SERVER_HOST, SERVER_PORT, TEMP_BASE_DIR
 from app.core.profiles import get_config, print_profile_info
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 # Get deployment profile configuration
 _profile_config = get_config()
@@ -49,6 +44,7 @@ logger = logging.getLogger(__name__)
 
 # ─── Lifespan (startup/shutdown moderno, compatibile FastAPI >= 0.93) ─────────
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
@@ -59,11 +55,13 @@ async def lifespan(app: FastAPI):
     TEMP_BASE_DIR.mkdir(parents=True, exist_ok=True)
     try:
         from app.core.policies import save_default_policies
+
         save_default_policies()
     except Exception as e:
         logger.warning("Impossibile salvare le policy di default: %s", e)
     try:
         from app.detectors.dictionary_detector import get_dictionary_detector
+
         detector = get_dictionary_detector()
         logger.info("DictionaryDetector: %d termini caricati.", detector.loaded_terms_count)
     except Exception as e:
@@ -132,6 +130,7 @@ async def auth_middleware(request: Request, call_next):
 
     return await call_next(request)
 
+
 # Registra i router API
 app.include_router(auth_router)
 app.include_router(console_router)
@@ -160,24 +159,24 @@ if frontend_dir and frontend_dir.exists():
     # Mount static files if exists
     if (frontend_dir / "assets").exists():
         app.mount("/assets", StaticFiles(directory=str(frontend_dir / "assets")), name="assets")
-    
+
     # SPA routing: serve index.html for unknown routes (client-side routing)
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
         """Serve React SPA with client-side routing fallback."""
         if full_path.startswith("api/"):
             raise HTTPException(status_code=404, detail="Not Found")
-        
+
         requested_path = frontend_dir / full_path
         if requested_path.exists() and requested_path.is_file():
             return FileResponse(str(requested_path))
-        
+
         index_path = frontend_dir / "index.html"
         if index_path.exists():
             return FileResponse(str(index_path))
-        
+
         raise HTTPException(status_code=404, detail="Not Found")
-    
+
     @app.get("/")
     async def serve_root():
         """Serve the main application."""
@@ -185,7 +184,9 @@ if frontend_dir and frontend_dir.exists():
         if index_path.exists():
             return FileResponse(str(index_path))
         raise HTTPException(status_code=404, detail="Frontend not configured yet")
+
 else:
+
     @app.get("/")
     async def serve_placeholder():
         return {"message": "Frontend not found. Ensure frontend/ directory exists."}
@@ -193,6 +194,7 @@ else:
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(
         "app.main:app",
         host=SERVER_HOST,

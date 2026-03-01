@@ -3,8 +3,10 @@ Calcolo del SafetyLabel per batch e card.
 SAFE_TO_UPLOAD / SAFE_WITH_WARNINGS / NOT_SAFE
 Il label è solo informativo e non blocca copy/export.
 """
+
 from typing import List
-from app.models.schemas import SafetyLabel, Finding, FileRecord, FileStatus, ReviewAction
+
+from app.models.schemas import FileRecord, FileStatus, Finding, ReviewAction, SafetyLabel
 
 
 def compute_safety_label(
@@ -38,10 +40,7 @@ def compute_safety_label(
                 return SafetyLabel.NOT_SAFE
 
     # NOT_SAFE: finding high-confidence con REJECT (utente ha escluso entità critiche)
-    high_conf_rejected = [
-        f for f in findings
-        if f.review_action == ReviewAction.REJECT and f.confidence_score >= 0.85
-    ]
+    high_conf_rejected = [f for f in findings if f.review_action == ReviewAction.REJECT and f.confidence_score >= 0.85]
     if len(high_conf_rejected) > 3:  # Soglia: più di 3 entità critiche escluse
         return SafetyLabel.NOT_SAFE
 
@@ -76,7 +75,7 @@ def compute_residual_warnings(residual_findings: List) -> List[str]:
     warnings = []
     by_type: dict = {}
     for f in residual_findings:
-        t = f.entity_type.value if hasattr(f.entity_type, 'value') else str(f.entity_type)
+        t = f.entity_type.value if hasattr(f.entity_type, "value") else str(f.entity_type)
         by_type[t] = by_type.get(t, 0) + 1
 
     total = len(residual_findings)

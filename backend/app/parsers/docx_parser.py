@@ -2,12 +2,13 @@
 Parser per file .docx (Microsoft Word).
 Estrae testo da paragrafi, tabelle, header e footer.
 """
+
 import logging
 from pathlib import Path
 from typing import List
 
-from app.parsers.base import BaseParser, ParseResult, TextChunk
 from app.core.exceptions import DocxParsingError
+from app.parsers.base import BaseParser, ParseResult, TextChunk
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,7 @@ class DocxParser(BaseParser):
     def parse_stream(self, file_path: Path, chunk_size: int = 1000):
         """Parse DOCX in streaming, processando elemento per elemento."""
         from docx import Document
+
         try:
             doc = Document(str(file_path))
             for i, para in enumerate(doc.paragraphs):
@@ -60,6 +62,7 @@ class DocxParser(BaseParser):
         result = ParseResult(file_path=file_path)
         try:
             from docx import Document
+
             try:
                 doc = Document(str(file_path))
             except Exception as open_err:

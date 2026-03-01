@@ -2,15 +2,16 @@
 Detector basato su dizionari custom configurabili.
 Carica termini da file di testo nella directory config/dictionaries/.
 """
-import re
-import logging
-from pathlib import Path
-from typing import List, Dict, Tuple
 
-from app.detectors.base import BaseDetector, RawFinding
-from app.parsers.base import TextChunk
-from app.models.schemas import EntityType
+import logging
+import re
+from pathlib import Path
+from typing import Dict, List, Tuple
+
 from app.core.config import DICTIONARIES_DIR
+from app.detectors.base import BaseDetector, RawFinding
+from app.models.schemas import EntityType
+from app.parsers.base import TextChunk
 
 logger = logging.getLogger(__name__)
 
@@ -56,8 +57,7 @@ class DictionaryDetector(BaseDetector):
                         self._terms.append((term, entity_type, dict_file.stem))
                         terms_loaded += 1
                 logger.info(
-                    "Dizionario '%s' caricato: %d termini (tipo: %s)",
-                    dict_file.name, terms_loaded, entity_type.value
+                    "Dizionario '%s' caricato: %d termini (tipo: %s)", dict_file.name, terms_loaded, entity_type.value
                 )
             except Exception as e:
                 logger.error("Errore nel caricamento del dizionario '%s': %s", dict_file.name, e)
@@ -110,7 +110,7 @@ class DictionaryDetector(BaseDetector):
                     findings.append(
                         RawFinding(
                             entity_type=entity_type,
-                            original_value=chunk.text[idx:idx + len(term)],
+                            original_value=chunk.text[idx : idx + len(term)],
                             source_chunk=chunk,
                             confidence_score=0.95,
                             detector_name=f"DictionaryDetector[{dict_name}]",

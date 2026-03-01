@@ -2,13 +2,11 @@ import io
 import json
 import zipfile
 from pathlib import Path
-from typing import Dict, Any, Tuple, List
+from typing import Any, Dict, List, Tuple
 
 from app.mapping.crypto import decrypt_mapping
 
-TEXT_EXTENSIONS = {
-    ".txt", ".md", ".csv", ".log", ".json", ".xml", ".html", ".htm", ".yaml", ".yml", ".conf"
-}
+TEXT_EXTENSIONS = {".txt", ".md", ".csv", ".log", ".json", ".xml", ".html", ".htm", ".yaml", ".yml", ".conf"}
 
 
 def _is_text_file(name: str) -> bool:
@@ -58,13 +56,13 @@ def _validate_mapping_file(mapping_bytes: bytes) -> None:
         raise ValueError("Il file mapping.enc è vuoto")
     if len(mapping_bytes) < 5:
         raise ValueError("Il file è troppo piccolo per essere un mapping.enc valido")
-    if not mapping_bytes.startswith(b'\x50\x53\x4D\x32'):  # PSM2 magic header
+    if not mapping_bytes.startswith(b"\x50\x53\x4D\x32"):  # PSM2 magic header
         raise ValueError("Il file non è un mapping.enc valido (magic header non riconosciuto)")
 
 
 def extract_mapping_from_encrypted(mapping_bytes: bytes, passphrase: str) -> Dict[str, Any]:
     from cryptography.exceptions import InvalidTag
-    
+
     _validate_mapping_file(mapping_bytes)
     if not passphrase.strip():
         raise ValueError("La passphrase è obbligatoria")
@@ -111,7 +109,7 @@ def preview_revert_text(text: str, mapping_bytes: bytes, passphrase: str) -> Dic
 def apply_revert_text(text: str, mapping_bytes: bytes, passphrase: str) -> Dict[str, Any]:
     mapping_data = extract_mapping_from_encrypted(mapping_bytes, passphrase)
     sub_map = _build_sub_map(mapping_data)
-    
+
     if not text:
         return {
             "reverted_text": "",
@@ -120,7 +118,7 @@ def apply_revert_text(text: str, mapping_bytes: bytes, passphrase: str) -> Dict[
             "input_chars": 0,
             "output_chars": 0,
         }
-    
+
     reverted_text, replacements = _replace_all(text, sub_map)
     return {
         "reverted_text": reverted_text,

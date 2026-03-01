@@ -12,21 +12,19 @@ Flussi:
   - GET /api/settings/policies        → lista preset policy
   - GET /api/settings/policies/{name} → dettagli policy specifiche
 """
+
 import json
 import logging
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional, Any, Dict
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Request
-
-from app.models.schemas import (
-    LdapConfig, PresetName, EntityType
-)
 from app.core.config import CONFIG_DIR
-from app.core.policies import get_policy, get_enabled_entity_types
+from app.core.policies import get_enabled_entity_types, get_policy
 from app.core.rate_limit import enforce_rate_limit
+from app.models.schemas import EntityType, LdapConfig, PresetName
+from fastapi import APIRouter, HTTPException, Request
 
 router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
@@ -37,6 +35,7 @@ _STATE_FILE = CONFIG_DIR / "state.json"
 # ═══════════════════════════════════════════════════════════════════════════════
 # HELPERS
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 def _resolve_preset(raw_value: str) -> PresetName:
     """Resolve preset name from user input."""
@@ -53,7 +52,9 @@ def _scrub_sensitive(value: Any) -> Any:
         cleaned = {}
         for key, item in value.items():
             key_l = str(key).lower()
-            if any(token in key_l for token in ("password", "passphrase", "secret", "token", "api_key", "bind_password")):
+            if any(
+                token in key_l for token in ("password", "passphrase", "secret", "token", "api_key", "bind_password")
+            ):
                 continue
             cleaned[key] = _scrub_sensitive(item)
         return cleaned
@@ -74,6 +75,7 @@ def _audit_event(request: Optional[Request], action: str, **details: Any) -> Non
 
 
 # ─── Settings: Persistenza server-side ────────────────────────────────────────
+
 
 @router.get("/settings/state")
 async def get_server_state():
@@ -106,10 +108,12 @@ async def save_server_state(state: dict):
 
 # ─── Settings: Dizionari ──────────────────────────────────────────────────────
 
+
 @router.get("/settings/dictionaries")
 async def get_dictionaries_status():
     """List available dictionaries and their status."""
     from app.detectors.dictionary_detector import get_dictionary_detector
+
     detector = get_dictionary_detector()
     return {"total_terms": detector.loaded_terms_count, "files": 3}
 
@@ -118,6 +122,7 @@ async def get_dictionaries_status():
 async def reload_dictionaries():
     """Reload all dictionaries from disk."""
     from app.detectors.dictionary_detector import get_dictionary_detector
+
     detector = get_dictionary_detector()
     detector.reload()
     return {"total_terms": detector.loaded_terms_count, "message": "Dizionari ricaricati."}
@@ -125,10 +130,13 @@ async def reload_dictionaries():
 
 # ─── Settings: LDAP ───────────────────────────────────────────────────────────
 
+
 @router.get("/settings/ldap")
 async def get_ldap_config():
     """Get current LDAP configuration (password redacted)."""
-    from app.detectors.ldap_detector import get_ldap_config as _get, get_ldap_cache
+    from app.detectors.ldap_detector import get_ldap_cache
+    from app.detectors.ldap_detector import get_ldap_config as _get
+
     cfg = _get()
     cache = get_ldap_cache()
     diag = cache.get_diagnostics()
@@ -145,6 +153,7 @@ async def get_ldap_config():
 async def set_ldap_config(config: LdapConfig):
     """Configure LDAP settings."""
     from app.detectors.ldap_detector import configure_ldap
+
     configure_ldap(config)
     return {"ok": True, "message": f"LDAP configurato: {config.host}:{config.port}"}
 
@@ -155,6 +164,7 @@ async def test_ldap():
     Test LDAP connection and return diagnostics.
     """
     from app.detectors.ldap_detector import get_ldap_cache
+
     cache = get_ldap_cache()
     success, message, count, diag = cache.test_connection()
     return {
@@ -171,6 +181,7 @@ async def refresh_ldap():
     Force LDAP cache refresh and return diagnostics.
     """
     from app.detectors.ldap_detector import get_ldap_cache
+
     cache = get_ldap_cache()
     success, message, diag = cache.refresh_now()
     return {"ok": success, "message": message, "diagnostics": diag}
@@ -178,18 +189,15 @@ async def refresh_ldap():
 
 # ─── Settings: Entity Types ───────────────────────────────────────────────────
 
+
 @router.get("/settings/entity-types")
 async def get_entity_types():
     """Get list of available entity types."""
-    return {
-        "entity_types": [
-            {"value": et.value, "label": et.value.replace("_", " ").title()}
-            for et in EntityType
-        ]
-    }
+    return {"entity_types": [{"value": et.value, "label": et.value.replace("_", " ").title()} for et in EntityType]}
 
 
 # ─── Settings: Policies ───────────────────────────────────────────────────────
+
 
 @router.get("/settings/policies")
 async def get_policies():

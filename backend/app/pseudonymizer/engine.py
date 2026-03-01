@@ -2,13 +2,14 @@
 Motore di pseudonimizzazione.
 Genera pseudonimi consistenti per batch in modalità Light e Strict.
 """
-import re
+
 import logging
-from typing import Dict, List, Optional
+import re
 from collections import defaultdict
+from typing import Dict, List, Optional
 
 from app.detectors.base import RawFinding
-from app.models.schemas import EntityType, BatchMode, Finding, FindingLocation
+from app.models.schemas import BatchMode, EntityType, Finding, FindingLocation
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ class PseudonymEngine:
         # Normalize email to lowercase for consistency
         if entity_type == EntityType.EMAIL:
             original_value = original_value.lower()
-        
+
         key = (entity_type, original_value)
         if key not in self._mapping:
             pseudonym = self._generate_pseudonym(entity_type, original_value)

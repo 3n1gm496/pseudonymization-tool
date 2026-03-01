@@ -3,13 +3,14 @@ Parser per immagini .jpg/.png.
 Esegue OCR locale con Tesseract, estrae testo e bounding box,
 e rimuove i metadati EXIF.
 """
+
 import logging
 from pathlib import Path
 from typing import List, Optional
 
-from app.parsers.base import BaseParser, ParseResult, TextChunk
 from app.core.config import OCR_LANGUAGES
 from app.core.exceptions import ImageParsingError
+from app.parsers.base import BaseParser, ParseResult, TextChunk
 
 logger = logging.getLogger(__name__)
 
@@ -43,9 +44,7 @@ class ImageParser(BaseParser):
             # Esegui OCR con bounding box per parola
             try:
                 ocr_data = pytesseract.image_to_data(
-                    clean_image,
-                    lang=OCR_LANGUAGES,
-                    output_type=pytesseract.Output.DICT
+                    clean_image, lang=OCR_LANGUAGES, output_type=pytesseract.Output.DICT
                 )
             except Exception as ocr_err:
                 result.success = False
@@ -156,8 +155,9 @@ class ImageParser(BaseParser):
         Crea una copia dell'immagine senza metadati EXIF.
         Questo viene fatto ricreando l'immagine da zero dai dati pixel.
         """
-        from PIL import Image
         import io
+
+        from PIL import Image
 
         # Metodo robusto: salva in buffer senza metadati e ricarica
         buffer = io.BytesIO()

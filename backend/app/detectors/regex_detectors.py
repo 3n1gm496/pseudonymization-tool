@@ -1,13 +1,14 @@
 """
 Detector basati su espressioni regolari per entità con pattern strutturati.
 """
-import re
+
 import logging
+import re
 from typing import List
 
 from app.detectors.base import BaseDetector, RawFinding
-from app.parsers.base import TextChunk
 from app.models.schemas import EntityType
+from app.parsers.base import TextChunk
 
 logger = logging.getLogger(__name__)
 
@@ -50,15 +51,15 @@ class RegexDetector(BaseDetector):
                 value = match.group(0)
                 start = match.start()
                 end = match.end()
-            
+
             # Applica il validatore se presente
             if self._validator and not self._validator(value):
                 continue
-            
+
             # Applica il normalizer se presente (es. lowercase per email)
             if self._normalizer:
                 value = self._normalizer(value)
-            
+
             findings.append(
                 RawFinding(
                     entity_type=self._entity_type,
@@ -75,8 +76,8 @@ class RegexDetector(BaseDetector):
 
 # Reti da escludere dalla pseudonimizzazione (non sensibili)
 _IPV4_EXCLUDED = {
-    "127.0.0.1",   # Loopback
-    "0.0.0.0",     # Null
+    "127.0.0.1",  # Loopback
+    "0.0.0.0",  # Null
     "255.255.255.255",  # Broadcast
 }
 
@@ -105,9 +106,7 @@ def _validate_codice_fiscale(value: str) -> bool:
     cf = value.upper()
     if len(cf) != 16:
         return False
-    pattern = re.compile(
-        r"^[A-Z]{6}[0-9]{2}[A-EHLMPRST][0-9]{2}[A-Z][0-9]{3}[A-Z]$"
-    )
+    pattern = re.compile(r"^[A-Z]{6}[0-9]{2}[A-EHLMPRST][0-9]{2}[A-Z][0-9]{3}[A-Z]$")
     return bool(pattern.match(cf))
 
 
@@ -150,10 +149,10 @@ IPV6_DETECTOR = RegexDetector(
     entity_type=EntityType.IPV6,
     # Pattern che copre le forme più comuni di IPv6
     pattern=(
-        r"\b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b"           # Full
-        r"|\b(?:[0-9a-fA-F]{1,4}:){1,7}:\b"                         # Trailing ::
-        r"|\b::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}\b"       # Leading ::
-        r"|\b(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}\b"        # Mixed
+        r"\b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b"  # Full
+        r"|\b(?:[0-9a-fA-F]{1,4}:){1,7}:\b"  # Trailing ::
+        r"|\b::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}\b"  # Leading ::
+        r"|\b(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}\b"  # Mixed
         r"|\b(?:[0-9a-fA-F]{1,4}:){1,5}(?::[0-9a-fA-F]{1,4}){1,2}\b"
         r"|\b(?:[0-9a-fA-F]{1,4}:){1,4}(?::[0-9a-fA-F]{1,4}){1,3}\b"
         r"|\b(?:[0-9a-fA-F]{1,4}:){1,3}(?::[0-9a-fA-F]{1,4}){1,4}\b"
@@ -229,12 +228,12 @@ USERNAME_DETECTOR = RegexDetector(
 
 # Lista ordinata di tutti i detector regex (l'ordine influenza la priorità)
 ALL_REGEX_DETECTORS = [
-    EMAIL_DETECTOR,        # Alta priorità: pattern specifico
+    EMAIL_DETECTOR,  # Alta priorità: pattern specifico
     CODICE_FISCALE_DETECTOR,
     PARTITA_IVA_DETECTOR,
     IPV4_DETECTOR,
     IPV6_DETECTOR,
-    URL_DETECTOR,          # Prima di HOSTNAME per catturare URL completi
+    URL_DETECTOR,  # Prima di HOSTNAME per catturare URL completi
     HOSTNAME_DETECTOR,
     PHONE_DETECTOR,
     USERNAME_DETECTOR,

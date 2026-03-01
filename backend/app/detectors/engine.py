@@ -2,17 +2,18 @@
 Motore di detection v2: orchestra tutti i detector e gestisce le sovrapposizioni
 con priorità per tipo di entità (SOC-grade).
 """
+
 import logging
 from typing import List, Optional
 
-from app.detectors.base import RawFinding
-from app.detectors.regex_detectors import ALL_REGEX_DETECTORS
-from app.detectors.dictionary_detector import get_dictionary_detector
-from app.detectors.soc_detectors import SOC_DETECTORS, DomainFragmentDetector
-from app.detectors.ldap_detector import LdapPersonDetector
-from app.parsers.base import ParseResult, TextChunk
-from app.models.schemas import EntityType
 from app.core.exceptions import DetectionError, DictionaryDetectionError, LDAPDetectionError
+from app.detectors.base import RawFinding
+from app.detectors.dictionary_detector import get_dictionary_detector
+from app.detectors.ldap_detector import LdapPersonDetector
+from app.detectors.regex_detectors import ALL_REGEX_DETECTORS
+from app.detectors.soc_detectors import SOC_DETECTORS, DomainFragmentDetector
+from app.models.schemas import EntityType
+from app.parsers.base import ParseResult, TextChunk
 
 logger = logging.getLogger(__name__)
 
@@ -62,13 +63,7 @@ def _resolve_overlaps(findings: List[RawFinding]) -> List[RawFinding]:
     # Ordina per posizione di inizio, poi per priorità decrescente,
     # poi per lunghezza decrescente, poi per confidenza decrescente
     sorted_findings = sorted(
-        findings,
-        key=lambda f: (
-            f.start_pos,
-            -_get_priority(f),
-            -(f.end_pos - f.start_pos),
-            -f.confidence_score
-        )
+        findings, key=lambda f: (f.start_pos, -_get_priority(f), -(f.end_pos - f.start_pos), -f.confidence_score)
     )
 
     resolved = []
@@ -88,9 +83,7 @@ def _resolve_overlaps(findings: List[RawFinding]) -> List[RawFinding]:
 
                 # Sostituisci se il nuovo ha priorità più alta,
                 # o stessa priorità ma è più lungo
-                if new_priority > current_priority or (
-                    new_priority == current_priority and new_len > current_len
-                ):
+                if new_priority > current_priority or (new_priority == current_priority and new_len > current_len):
                     resolved[-1] = finding
                     last_end = finding.end_pos
 
@@ -184,8 +177,9 @@ def detect_in_text(
     Esegue la detection su testo puro (per console/clipboard input).
     Crea un TextChunk virtuale.
     """
-    from app.parsers.base import TextChunk as TC
     from pathlib import Path
+
+    from app.parsers.base import TextChunk as TC
 
     # Crea un ParseResult virtuale con un singolo chunk
     chunk = TC(text=text, line_number=1)
@@ -210,9 +204,9 @@ def residual_scan(
         return all_findings
     # Filtra i finding il cui valore originale è nella whitelist sintetica
     return [
-        f for f in all_findings
-        if f.original_value not in synthetic_whitelist
-        and f.canonical_value not in synthetic_whitelist
+        f
+        for f in all_findings
+        if f.original_value not in synthetic_whitelist and f.canonical_value not in synthetic_whitelist
     ]
 
 
@@ -227,6 +221,7 @@ def build_extra_detectors(ldap_enabled: bool = True) -> List:
     if ldap_enabled:
         try:
             from app.detectors.ldap_detector import LdapPersonDetector, _ldap_config
+
             if _ldap_config and _ldap_config.enabled:
                 detectors.append(LdapPersonDetector())
         except Exception as e:
@@ -235,12 +230,13 @@ def build_extra_detectors(ldap_enabled: bool = True) -> List:
     # Domain fragments
     try:
         from app.core.config import DICTIONARIES_DIR
+
         frag_file = DICTIONARIES_DIR / "domain_fragments.txt"
         if frag_file.exists():
             fragments = [
                 line.strip()
-                for line in frag_file.read_text(encoding='utf-8').splitlines()
-                if line.strip() and not line.startswith('#')
+                for line in frag_file.read_text(encoding="utf-8").splitlines()
+                if line.strip() and not line.startswith("#")
             ]
             if fragments:
                 detectors.append(DomainFragmentDetector(fragments))
@@ -254,6 +250,7 @@ def get_ml_detector():
     """Compatibility accessor for ML detector integrations/tests."""
     try:
         from app.detectors.ml_detector import MLNERDetector
+
         return MLNERDetector()
     except Exception as e:
         logger.warning("ML detector non disponibile: %s", e)
