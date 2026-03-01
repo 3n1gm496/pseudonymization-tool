@@ -8,7 +8,7 @@ import logging
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
@@ -191,25 +191,18 @@ def _audit_event(request: Optional[Request], action: str, **details: Any) -> Non
     logger.info("AUDIT action=%s user=%s ip=%s details=%s", action, user, ip, cleaned)
 
 
-# ─── Batch (Upload File) ──────────────────────────────────────────────────────
+# ─── Batch Input Validation & File Processing (Helper Functions) ───────────────
 
-
-@router.post("/batches")
-async def create_new_batch(
-    request: Request,
-    files: List[UploadFile] = File(...),
-    mode: str = Form("strict"),
-    preset: str = Form("SOC Logs"),
-    passphrase: str = Form(""),
-):
+def _validate_upload_input(
+    files: List[UploadFile],
+    mode: str,
+    preset: str,
+    passphrase: str,
+) -> Tuple[BatchMode, PresetName]:
     """
-    Crea un nuovo batch con i file allegati.
-    Integra Security Fix #7: Passphrase entropy validation
-    Integra Security Fix #3: File magic bytes validation
-    Restituisce batch_id, passphrase generata, findings e safety_label.
+    Valida e trasforma input del batch.
+    Solleva HTTPException se non valido.
     """
-    _enforce_rate_limit(request, "batch_create", limit=20)
-
     if len(files) > MAX_UPLOAD_FILES_PER_BATCH:
         raise HTTPException(
             status_code=400,
@@ -225,7 +218,121 @@ async def create_new_batch(
         batch_mode = BatchMode.STRICT
 
     batch_preset = _resolve_preset(preset)
+    return batch_mode, batch_preset
 
+
+async def _process_uploaded_files(
+    batch_id: str,
+    files: List[UploadFile],
+) -> Tuple[int, List[str], List]:
+    """
+    Processa i file caricati: validazione, storage, deduplica.
+    Restituisce (files_stored_count, warning_messages, file_records).
+    """
+    batch_dir = get_batch_dir(batch_id)
+    upload_dir = batch_dir / "uploads"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    files_stored = 0
+    warnings = []
+    file_records = []
+
+    for upload_file in files:
+        if not upload_file.filename:
+            continue
+
+        file_path = Path(upload_file.filename)
+        ext = file_path.suffix.lower()
+
+        # Validazione estensione
+        if ext not in SUPPORTED_EXTENSIONS:
+            logger.warning("File ignorato (formato non supportato): %s", upload_file.filename)
+            warnings.append(f"File '{upload_file.filename}': formato non supportato")
+            continue
+
+        # Validazione dimensione
+        content = await upload_file.read()
+        if len(content) > MAX_FILE_SIZE_BYTES:
+            logger.warning("File troppo grande: %s (%d bytes)", upload_file.filename, len(content))
+            warnings.append(f"File '{upload_file.filename}': dimensione > {MAX_FILE_SIZE_BYTES} bytes")
+            continue
+
+        # Validazione magic bytes
+        try:
+            detected_ext = _validate_file_magic_bytes(content, upload_file.filename)
+            if detected_ext not in SUPPORTED_EXTENSIONS:
+                logger.warning("File ignorato (magic bytes non corrisponde): %s", upload_file.filename)
+                warnings.append(f"File '{upload_file.filename}': magic bytes non corrispondono")
+                continue
+        except Exception as e:
+            logger.warning("Errore validazione magic bytes per %s: %s", upload_file.filename, e)
+            warnings.append(f"File '{upload_file.filename}': errore validazione {e}")
+            continue
+
+        # Storage con deduplicazione
+        safe_name = file_path.name
+        dest_path = upload_dir / safe_name
+        counter = 1
+        while dest_path.exists():
+            dest_path = upload_dir / f"{file_path.stem}_{counter}{file_path.suffix}"
+            counter += 1
+
+        dest_path.write_bytes(content)
+        file_rec = FileRecord(
+            original_name=upload_file.filename,
+            stored_path=str(dest_path),
+        )
+        file_records.append(file_rec)
+        files_stored += 1
+
+    return files_stored, warnings, file_records
+
+
+async def _run_batch_scan_safe(batch_id: str) -> Batch:
+    """
+    Esegue la scan pipeline con timeout e error handling.
+    Solleva HTTPException in caso di timeout o errore critico.
+    """
+    try:
+        batch = await asyncio.wait_for(
+            run_in_threadpool(run_scan_pipeline, batch_id),
+            timeout=API_HEAVY_TIMEOUT_SECONDS,
+        )
+        return batch
+    except asyncio.TimeoutError:
+        cleanup_batch(batch_id)
+        raise HTTPException(
+            status_code=504,
+            detail="Timeout durante la scansione del batch. Riduci dimensione o numero file.",
+        )
+    except Exception as e:
+        logger.error("Errore scansione batch %s: %s", batch_id, e)
+        raise HTTPException(status_code=500, detail=f"Errore durante la scansione: {e}")
+
+
+# ─── Batch (Upload File) ──────────────────────────────────────────────────────
+
+
+
+
+@router.post("/batches")
+async def create_new_batch(
+    request: Request,
+    files: List[UploadFile] = File(...),
+    mode: str = Form("strict"),
+    preset: str = Form("SOC Logs"),
+    passphrase: str = Form(""),
+):
+    """
+    Crea un nuovo batch con i file allegati.
+    Orchestrazione: validazione → creazione batch → caricamento file → scansione.
+    """
+    _enforce_rate_limit(request, "batch_create", limit=20)
+
+    # Step 1: Validazione input
+    batch_mode, batch_preset = _validate_upload_input(files, mode, preset, passphrase)
+
+    # Step 2: Creazione batch e storage passphrase
     config = BatchConfig(mode=batch_mode, preset=batch_preset)
     batch = Batch(config=config)
     batch = create_batch(batch)
@@ -233,45 +340,11 @@ async def create_new_batch(
     store_passphrase(batch.batch_id, pp)
     _batch_start_times[batch.batch_id] = datetime.now(timezone.utc).isoformat()
 
-    batch_dir = get_batch_dir(batch.batch_id)
-    upload_dir = batch_dir / "uploads"
-    upload_dir.mkdir(parents=True, exist_ok=True)
+    # Step 3: Caricamento file (con validazione)
+    files_stored, warnings, file_records = await _process_uploaded_files(batch.batch_id, files)
+    batch.files = file_records
 
-    for upload_file in files:
-        if not upload_file.filename:
-            continue
-        file_path = Path(upload_file.filename)
-        ext = file_path.suffix.lower()
-        if ext not in SUPPORTED_EXTENSIONS:
-            logger.warning("File ignorato (formato non supportato): %s", upload_file.filename)
-            continue
-        content = await upload_file.read()
-        if len(content) > MAX_FILE_SIZE_BYTES:
-            logger.warning("File troppo grande: %s (%d bytes)", upload_file.filename, len(content))
-            continue
-
-        try:
-            detected_ext = _validate_file_magic_bytes(content, upload_file.filename)
-            if detected_ext not in SUPPORTED_EXTENSIONS:
-                logger.warning("File ignorato (magic bytes non corrisponde): %s", upload_file.filename)
-                continue
-        except Exception as e:
-            logger.warning("Errore validazione magic bytes per %s: %s", upload_file.filename, e)
-            continue
-
-        safe_name = Path(upload_file.filename).name
-        dest_path = upload_dir / safe_name
-        counter = 1
-        while dest_path.exists():
-            dest_path = upload_dir / f"{file_path.stem}_{counter}{file_path.suffix}"
-            counter += 1
-        dest_path.write_bytes(content)
-        file_rec = FileRecord(
-            original_name=upload_file.filename,
-            stored_path=str(dest_path),
-        )
-        batch.files.append(file_rec)
-
+    # Step 4: Verifica batch non vuoto
     if not batch.files:
         cleanup_batch(batch.batch_id)
         raise HTTPException(
@@ -282,21 +355,10 @@ async def create_new_batch(
     update_batch(batch)
     _batch_start_times[batch.batch_id] = datetime.now(timezone.utc).isoformat()
 
-    try:
-        batch = await asyncio.wait_for(
-            run_in_threadpool(run_scan_pipeline, batch.batch_id),
-            timeout=API_HEAVY_TIMEOUT_SECONDS,
-        )
-    except asyncio.TimeoutError:
-        cleanup_batch(batch.batch_id)
-        raise HTTPException(
-            status_code=504,
-            detail="Timeout durante la scansione del batch. Riduci dimensione o numero file.",
-        )
-    except Exception as e:
-        logger.error("Errore scansione batch %s: %s", batch.batch_id, e)
-        raise HTTPException(status_code=500, detail=f"Errore durante la scansione: {e}")
+    # Step 5: Scansione batch con timeout
+    batch = await _run_batch_scan_safe(batch.batch_id)
 
+    # Step 6: Audit log
     _audit_event(
         request,
         "batch_scan_completed",

@@ -82,6 +82,61 @@ def _audit_event(request: Optional[Request], action: str, **details: Any) -> Non
     logger.info("AUDIT action=%s user=%s ip=%s details=%s", action, user, ip, cleaned)
 
 
+# ─── Console Apply Helpers ────────────────────────────────────────────────────
+
+def _process_stored_decisions(batch_id: str) -> None:
+    """
+    Recupera e applica decisions persistite sulla batch.
+    """
+    decisions_map = get_decisions(batch_id)
+    if not decisions_map:
+        return
+    
+    from app.models.schemas import ReviewDecisionItem
+    
+    decision_items = []
+    for fid, dec in decisions_map.items():
+        try:
+            action = ReviewAction(dec["action"])
+        except (ValueError, KeyError):
+            action = ReviewAction.ACCEPT
+        decision_items.append(ReviewDecisionItem(
+            finding_id=fid,
+            action=action,
+            modified_pseudonym=dec.get("custom_pseudonym"),
+        ))
+    
+    apply_review_decisions(batch_id, decision_items)
+
+
+def _generate_and_save_mapping(batch_id: str, file_id: str, passphrase: str) -> None:
+    """
+    Genera mapping criptato da findings e lo salva.
+    Solleva Exception se fallisce.
+    """
+    batch = get_batch(batch_id)
+    if not batch:
+        raise ValueError(f"Batch non trovato: {batch_id}")
+    
+    file_findings = [f for f in batch.findings if f.file_id == file_id]
+    mapping_data = {"mapping": {}}
+    for finding in file_findings:
+        if finding.review_action != ReviewAction.REJECT:
+            pseudo = finding.final_pseudonym
+            canon = finding.canonical_value or finding.original_value
+            if pseudo not in mapping_data["mapping"]:
+                mapping_data["mapping"][pseudo] = canon
+    
+    from app.mapping.crypto import save_encrypted_mapping
+    
+    batch_dir = get_batch_dir(batch_id)
+    mapping_path = batch_dir / "mapping.enc"
+    save_encrypted_mapping(mapping_data, passphrase, mapping_path)
+    logger.info("Console mapping.enc salvato per batch %s", batch_id)
+
+
+# ─── Console Scan ────────────────────────────────────────────────────────────
+
 @router.post("/console/scan")
 async def console_scan(req: dict, request: Request):
     """
@@ -156,12 +211,13 @@ async def console_scan(req: dict, request: Request):
 @router.post("/console/apply")
 async def console_apply(req: dict, request: Request):
     """
-    Applica sostituzioni al testo inline, rispettando le decisions persistite.
+    Applica sostituzioni al testo inline con decisions persistite.
     Accetta: { batch_id, file_id, text }
-    Restituisce: batch_id (per scaricamento mapping.enc successivo)
+    Restituisce: pseudonymized_text, passphrase, safety_label, mapping.
     """
     _enforce_rate_limit(request, "console_apply", limit=30)
 
+    # Step 1: Validazione input
     batch_id = req.get("batch_id")
     file_id = req.get("file_id")
     text = req.get("text", "")
@@ -171,41 +227,29 @@ async def console_apply(req: dict, request: Request):
     if len(text) > MAX_CONSOLE_TEXT_CHARS:
         raise HTTPException(
             status_code=400,
-            detail=f"Testo troppo lungo ({len(text)} caratteri). Massimo consentito: {MAX_CONSOLE_TEXT_CHARS}.",
+            detail=f"Testo troppo lungo ({len(text)} caratteri). Massimo: {MAX_CONSOLE_TEXT_CHARS}.",
         )
 
     batch = get_batch(batch_id)
     if not batch:
         raise HTTPException(status_code=404, detail="Batch non trovato")
 
-    decisions_map = get_decisions(batch_id)
-    if decisions_map:
-        from app.models.schemas import ReviewDecisionItem
+    # Step 2: Applica decisioni persistite
+    _process_stored_decisions(batch_id)
 
-        decision_items = []
-        for fid, dec in decisions_map.items():
-            try:
-                action = ReviewAction(dec["action"])
-            except (ValueError, KeyError):
-                action = ReviewAction.ACCEPT
-            decision_items.append(ReviewDecisionItem(
-                finding_id=fid,
-                action=action,
-                modified_pseudonym=dec.get("custom_pseudonym"),
-            ))
-        apply_review_decisions(batch_id, decision_items)
-
+    # Step 3: Applica pseudonimizzazione su testo
     try:
         pseudo_text, safety, residual_warnings, applied_count = await asyncio.wait_for(
             run_in_threadpool(run_text_apply, batch_id, file_id, text),
             timeout=API_HEAVY_TIMEOUT_SECONDS,
         )
     except asyncio.TimeoutError:
-        raise HTTPException(status_code=504, detail="Timeout durante l'applicazione sul testo inline.")
+        raise HTTPException(status_code=504, detail="Timeout durante l'applicazione sul testo.")
     except Exception as e:
         logger.error("Errore console/apply batch %s: %s", batch_id, e)
         raise HTTPException(status_code=500, detail=str(e))
 
+    # Step 4: Audit log
     _audit_event(
         request,
         "console_apply_completed",
@@ -215,26 +259,12 @@ async def console_apply(req: dict, request: Request):
         safety_label=safety.value if hasattr(safety, "value") else str(safety),
     )
 
+    # Step 5: Genera e salva mapping criptato
     passphrase = get_passphrase(batch_id)
-
     try:
-        file_findings = [f for f in batch.findings if f.file_id == file_id]
-        mapping_data = {"mapping": {}}
-        for finding in file_findings:
-            if finding.review_action != ReviewAction.REJECT:
-                pseudo = finding.final_pseudonym
-                canon = finding.canonical_value or finding.original_value
-                if pseudo not in mapping_data["mapping"]:
-                    mapping_data["mapping"][pseudo] = canon
-
-        from app.mapping.crypto import save_encrypted_mapping
-
-        batch_dir = get_batch_dir(batch_id)
-        mapping_path = batch_dir / "mapping.enc"
-        save_encrypted_mapping(mapping_data, passphrase, mapping_path)
-        logger.info("Console batch mapping.enc salvato per batch %s", batch_id)
+        _generate_and_save_mapping(batch_id, file_id, passphrase)
     except Exception as e:
-        logger.error("Errore nel salvataggio mapping per console batch %s: %s", batch_id, e)
+        logger.error("Errore salvataggio mapping per console batch %s: %s", batch_id, e)
 
     return {
         "batch_id": batch_id,

@@ -152,6 +152,100 @@ def transform_xlsx_file(
     return warnings
 
 
+# ─── PDF Transformation Helpers ───────────────────────────────────────────────
+
+def _extract_pdf_text_by_page(original_path: Path) -> tuple:
+    """
+    Estrae testo da PDF, pagina per pagina.
+    Gestisce PDF cifrati, non testuali.
+    Restituisce (pages_text, warnings, is_encrypted, is_empty).
+    """
+    from pypdf import PdfReader
+    
+    warnings = []
+    pages_text = []
+    
+    reader = PdfReader(str(original_path))
+    
+    if reader.is_encrypted:
+        return [], ["PDF è cifrato/protetto."], True, False
+    
+    for page_num, page in enumerate(reader.pages, start=1):
+        try:
+            text = page.extract_text() or ""
+            pages_text.append(text)
+        except Exception as pe:
+            pages_text.append("")
+            warnings.append(f"Errore estrazione pagina {page_num}: {pe}")
+    
+    is_empty = not any(t.strip() for t in pages_text)
+    return pages_text, warnings, False, is_empty
+
+
+def _rebuild_pdf_from_pages(pages_pseudo: List[str], output_path: Path) -> List[str]:
+    """
+    Ricostruisce PDF da pagine di testo pseudonimizzato.
+    Tenta fpdf2, fallback a reportlab.
+    Restituisce lista di warning.
+    """
+    warnings = []
+    
+    # Tentativo primario: fpdf2
+    try:
+        from fpdf import FPDF
+        
+        pdf = FPDF()
+        pdf.set_auto_page_break(auto=True, margin=15)
+        pdf.set_margins(15, 15, 15)
+        pdf.set_title("")
+        pdf.set_author("")
+        pdf.set_creator("Local Pseudonymization Tool")
+        pdf.set_subject("")
+        
+        for page_text in pages_pseudo:
+            pdf.add_page()
+            pdf.set_font("Helvetica", size=10)
+            for line in page_text.splitlines():
+                safe_line = line.encode("latin-1", errors="replace").decode("latin-1")
+                pdf.multi_cell(0, 5, safe_line)
+        
+        pdf.output(str(output_path))
+        warnings.append("PDF rebuild completato. Layout potrebbe differire.")
+        return warnings
+    
+    except Exception as fpdf_err:
+        warnings.append(f"fpdf2 fallito ({fpdf_err}), tentativo reportlab...")
+    
+    # Fallback: reportlab
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib.units import mm
+        
+        styles = getSampleStyleSheet()
+        story = []
+        for page_text in pages_pseudo:
+            for line in page_text.splitlines():
+                safe = line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                if safe.strip():
+                    story.append(Paragraph(safe, styles["Normal"]))
+                else:
+                    story.append(Spacer(1, 3 * mm))
+            story.append(Spacer(1, 10 * mm))
+        
+        doc_rl = SimpleDocTemplate(str(output_path), pagesize=A4)
+        doc_rl.build(story)
+        warnings.append("PDF rebuild (reportlab) ok. Layout differente.")
+        return warnings
+    
+    except Exception as rl_err:
+        warnings.append(f"Errore reportlab: {rl_err}")
+        return warnings
+
+
+# ─── transform_pdf_file ──────────────────────────────────────────────────────
+
 def transform_pdf_file(
     original_path: Path,
     output_path: Path,
@@ -159,109 +253,51 @@ def transform_pdf_file(
     strict: bool = False,
 ) -> List[str]:
     """
-    Trasforma un PDF testuale in un PDF pseudonimizzato (PDF→PDF rebuild).
-    Strategia: estrae testo pagina per pagina, applica sostituzioni, ricostruisce PDF.
-    Il layout originale non è preservato (avviso sempre incluso).
-    In strict: rimuove metadata PDF.
-    Se il PDF non è testuale o è cifrato: output = copia .pdf con warning.
+    Trasforma PDF testuale in PDF pseudonimizzato (PDF→PDF).
+    Estrategia: testo → sostituzioni → rebuild.
+    Layout non preservato. Se cifrato/non-testuale: copia + warning.
     """
     warnings = []
     sub_map = _build_substitution_map(findings)
 
-    # Assicura che l'output sia sempre .pdf
+    # Assicura output .pdf
     if output_path.suffix.lower() != ".pdf":
         output_path = output_path.with_suffix(".pdf")
 
     try:
-        from pypdf import PdfReader
-        reader = PdfReader(str(original_path))
-
-        if reader.is_encrypted:
+        # Step 1: Estrai testo per pagina
+        pages_text, extract_warnings, is_encrypted, is_empty = _extract_pdf_text_by_page(original_path)
+        warnings.extend(extract_warnings)
+        
+        # Step 2: Gestisci PDF cifrato o non-testuale
+        if is_encrypted:
             warnings.append(
-                "Il PDF è cifrato/protetto da password: impossibile estrarre il testo. "
-                "Il file NON è stato pseudonimizzato. Etichetta: NOT_SAFE."
+                "PDF cifrato/protetto: impossibile estrarre testo. "
+                "File NON pseudonimizzato. Etichetta: NOT_SAFE."
             )
             shutil.copy2(str(original_path), str(output_path))
             return warnings
-
-        # Estrai testo per pagina
-        pages_text = []
-        for page_num, page in enumerate(reader.pages, start=1):
-            try:
-                text = page.extract_text() or ""
-                pages_text.append(text)
-            except Exception as pe:
-                pages_text.append("")
-                warnings.append(f"Errore estrazione testo pagina {page_num}: {pe}")
-
-        if not any(t.strip() for t in pages_text):
+        
+        if is_empty:
             warnings.append(
-                "Il PDF non contiene testo estraibile (possibile PDF scansionato). "
-                "Il file NON è stato pseudonimizzato. Etichetta: SAFE_WITH_WARNINGS."
+                "PDF non testuale (scansionato?). File NON pseudonimizzato. "
+                "Etichetta: SAFE_WITH_WARNINGS."
             )
             shutil.copy2(str(original_path), str(output_path))
             return warnings
-
-        # Applica sostituzioni
+        
+        # Step 3: Applica sostituzioni
         pages_pseudo = [_apply_substitutions_to_text(t, sub_map) for t in pages_text]
-
-        # Rebuild PDF con fpdf2 (primario)
-        try:
-            from fpdf import FPDF
-
-            pdf = FPDF()
-            pdf.set_auto_page_break(auto=True, margin=15)
-            pdf.set_margins(15, 15, 15)
-            pdf.set_title("")
-            pdf.set_author("")
-            pdf.set_creator("Local Pseudonymization Tool")
-            pdf.set_subject("")
-
-            for page_text in pages_pseudo:
-                pdf.add_page()
-                pdf.set_font("Helvetica", size=10)
-                for line in page_text.splitlines():
-                    safe_line = line.encode("latin-1", errors="replace").decode("latin-1")
-                    pdf.multi_cell(0, 5, safe_line)
-
-            pdf.output(str(output_path))
-            warnings.append(
-                "PDF rebuild completato. Il layout originale potrebbe differire dall'originale."
-            )
-
-        except Exception as fpdf_err:
-            warnings.append(f"fpdf2 rebuild fallito ({fpdf_err}), tentativo con reportlab...")
-            try:
-                from reportlab.lib.pagesizes import A4
-                from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-                from reportlab.lib.styles import getSampleStyleSheet
-                from reportlab.lib.units import mm
-
-                styles = getSampleStyleSheet()
-                story = []
-                for page_text in pages_pseudo:
-                    for line in page_text.splitlines():
-                        safe = line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                        if safe.strip():
-                            story.append(Paragraph(safe, styles["Normal"]))
-                        else:
-                            story.append(Spacer(1, 3 * mm))
-                    story.append(Spacer(1, 10 * mm))
-
-                doc_rl = SimpleDocTemplate(str(output_path), pagesize=A4)
-                doc_rl.build(story)
-                warnings.append(
-                    "PDF rebuild (reportlab) completato. Il layout originale potrebbe differire."
-                )
-            except Exception as rl_err:
-                warnings.append(
-                    f"Errore rebuild PDF con reportlab: {rl_err}. "
-                    "Output: copia del file originale non pseudonimizzata."
-                )
-                shutil.copy2(str(original_path), str(output_path))
-
+        
+        # Step 4: Ricostruisci PDF
+        rebuild_warnings = _rebuild_pdf_from_pages(pages_pseudo, output_path)
+        warnings.extend(rebuild_warnings)
+        
+        if not rebuild_warnings or "fallito" in rebuild_warnings[0]:
+            shutil.copy2(str(original_path), str(output_path))
+        
     except Exception as e:
-        warnings.append(f"Errore generale trasformazione PDF: {e}")
+        warnings.append(f"Errore trasformazione PDF: {e}")
         shutil.copy2(str(original_path), str(output_path))
 
     return warnings
