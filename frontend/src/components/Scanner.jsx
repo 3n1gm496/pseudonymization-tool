@@ -74,7 +74,7 @@ const Scanner = ({ onScan, isLoading }) => {
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto p-6 space-y-6">
+    <div className="w-full mx-auto p-6 space-y-6">
       {/* Text Input */}
       <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-6">
         <h2 className="text-lg font-semibold mb-4">Testo Diretto</h2>

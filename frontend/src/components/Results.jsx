@@ -45,7 +45,7 @@ const Results = ({ batch, pseudonymizedText, onNewScan }) => {
   const canShowText = typeof pseudonymizedText === 'string' && pseudonymizedText.length > 0
 
   return (
-    <div className="w-full max-w-4xl mx-auto p-6 space-y-6">
+    <div className="w-full mx-auto p-6 space-y-6">
       <div className="bg-white dark:bg-slate-800 rounded-lg shadow overflow-hidden">
         <div className="p-6 border-b border-slate-200 dark:border-slate-700">
           <h2 className="text-lg font-semibold mb-2">Risultato Pseudonimizzazione</h2>

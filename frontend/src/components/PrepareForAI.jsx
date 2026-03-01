@@ -52,7 +52,7 @@ const PrepareForAI = ({ batch, pseudonymizedText, isLoading, setIsLoading, showT
 
   if (!batch || !pseudonymizedText) {
     return (
-      <div className="w-full max-w-4xl mx-auto p-6 bg-white dark:bg-slate-800 rounded-lg shadow">
+      <div className="w-full mx-auto p-6 bg-white dark:bg-slate-800 rounded-lg shadow">
         <h2 className="text-xl font-semibold mb-2">Prepara per AI</h2>
         <p className="text-sm text-slate-600 dark:text-slate-400">
           Completa il flusso di pseudonimizzazione (Scansione → Revisione → Apply) per preparare il testo.
@@ -62,7 +62,7 @@ const PrepareForAI = ({ batch, pseudonymizedText, isLoading, setIsLoading, showT
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto p-6 space-y-6">
+    <div className="w-full mx-auto p-6 space-y-6">
       {/* INFO SECTION */}
       <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg p-4">
         <h3 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">ℹ️ Come procedere</h3>

@@ -121,7 +121,7 @@ def run_text_apply(
     extra_detectors = build_extra_detectors(ldap_enabled=False)
     # Costruisci la whitelist dai pseudonimi generati
     synthetic_whitelist = {
-        f.proposed_pseudonym for f in file_findings if f.proposed_pseudonym and f.review_action != "reject"
+        f.proposed_pseudonym for f in file_findings if f.proposed_pseudonym and f.review_action != ReviewAction.REJECT
     }
     residual_raw = residual_scan(
         pseudonymized_text,

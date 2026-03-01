@@ -71,7 +71,7 @@ const FindingsTable = ({ batch, onApply, isLoading }) => {
   }
 
   return (
-    <div className="w-full max-w-6xl mx-auto p-6 space-y-6">
+    <div className="w-full mx-auto p-6 space-y-6">
       <div className="bg-white dark:bg-slate-800 rounded-lg shadow overflow-hidden">
         <div className="p-6 border-b border-slate-200 dark:border-slate-700">
           <div className="flex justify-between items-center gap-4">

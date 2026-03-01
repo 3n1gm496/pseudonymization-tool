@@ -70,7 +70,7 @@ const DecipherAIResponse = ({ isLoading, setIsLoading, showToast }) => {
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto p-6 space-y-6">
+    <div className="w-full mx-auto p-6 space-y-6">
       {/* INFO */}
       <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg p-4">
         <h3 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">ℹ️ Decifratura risposta AI</h3>
