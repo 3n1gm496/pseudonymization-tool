@@ -203,7 +203,7 @@ Avvia sia backend che frontend in parallelo con HMR (Hot Module Reload). Backend
 
 Alternativamente, manuale:
 ```bash
-./dev-stack.sh  # se preferisci lo script legacy
+./scripts/dev-stack.sh  # se preferisci lo script diretto
 ```
 
 #### Caratteristiche Frontend
@@ -296,6 +296,8 @@ pseudonymization-tool/
 │   ├── vite.config.js
 │   └── tailwind.config.js
 ├── scripts/
+│   ├── dev-stack.sh           # Development mode helper
+│   ├── verify_features.py     # Feature verification script
 │   └── legacy/                # Venv-based startup scripts (air-gapped)
 │       ├── start.sh           # Linux/macOS startup
 │       ├── start.bat          # Windows startup
@@ -304,7 +306,6 @@ pseudonymization-tool/
 │       └── README.md          # Legacy installation guide
 ├── docs/                      # Documentation & Roadmap
 ├── Makefile                   # Universal command interface
-├── dev-stack.sh               # Development mode helper
 ├── docker-compose.yml         # Docker orchestration
 └── README.md
 ```

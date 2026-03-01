@@ -59,7 +59,7 @@ dev: ## Start dev mode (frontend hot reload on :5173, backend on :8000)
 	@echo "   Frontend: http://localhost:5173 (hot reload)"
 	@echo "   Backend:  http://127.0.0.1:8000"
 	@echo ""
-	./dev-stack.sh
+	./scripts/dev-stack.sh
 
 install-dev: ## Install dev dependencies (backend venv + frontend npm)
 	@echo "📦 Installing backend dependencies..."
