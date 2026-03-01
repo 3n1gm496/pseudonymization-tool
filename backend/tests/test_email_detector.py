@@ -1,10 +1,10 @@
 """
 Unit tests for email detector.
 """
-import pytest
 
-from app.models.schemas import EntityType
+import pytest
 from app.detectors.regex_detectors import EMAIL_DETECTOR
+from app.models.schemas import EntityType
 from app.parsers.base import TextChunk
 
 
@@ -27,10 +27,7 @@ class TestEmailDetector:
 
     def test_email_detection_multiple(self):
         """Test detection of multiple emails in text."""
-        chunk = TextChunk(
-            text="Emails: user1@example.com, user2@test.org, admin@company.it",
-            source_ref="test-2"
-        )
+        chunk = TextChunk(text="Emails: user1@example.com, user2@test.org, admin@company.it", source_ref="test-2")
         findings = self.detector.detect(chunk)
 
         assert len(findings) == 3
@@ -49,10 +46,7 @@ class TestEmailDetector:
 
     def test_email_false_positive_rejection(self):
         """Test that common false positives are rejected."""
-        chunk = TextChunk(
-            text="These are not emails: mario@, @example.com, mario.example.com",
-            source_ref="test-4"
-        )
+        chunk = TextChunk(text="These are not emails: mario@, @example.com, mario.example.com", source_ref="test-4")
         findings = self.detector.detect(chunk)
 
         assert len(findings) == 0
@@ -72,12 +66,15 @@ class TestEmailDetector:
 
         assert len(findings) == 0
 
-    @pytest.mark.parametrize("email", [
-        "simple@example.org",
-        "first.last@company.com",
-        "user+filter@subdomain.example.com",
-        "admin@test-domain.co.uk",
-    ])
+    @pytest.mark.parametrize(
+        "email",
+        [
+            "simple@example.org",
+            "first.last@company.com",
+            "user+filter@subdomain.example.com",
+            "admin@test-domain.co.uk",
+        ],
+    )
     def test_email_patterns(self, email):
         """Test various valid email patterns."""
         chunk = TextChunk(text=f"Email: {email}", source_ref="test-param")

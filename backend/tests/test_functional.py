@@ -2,12 +2,13 @@
 Test funzionali completi per il Local Pseudonymization Tool.
 Copertura: detector, parser, pseudonimizzatore, pipeline, cifratura.
 """
-import sys
+
 import json
+import sys
 import time
 import traceback
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -17,6 +18,7 @@ RESULTS = []
 
 def test(name):
     """Decoratore/context manager per i test."""
+
     def decorator(fn):
         def wrapper():
             start = time.time()
@@ -34,16 +36,20 @@ def test(name):
                 RESULTS.append({"name": name, "status": "ERROR", "elapsed": round(elapsed, 3), "error": str(e)})
                 print(f"  ! ERR   {name}: {e}")
                 traceback.print_exc()
+
         return wrapper
+
     return decorator
 
 
 # ─── Test Detector ────────────────────────────────────────────────────────────
 
+
 @test("Detector: Email valide rilevate")
 def test_email_detection():
     from app.detectors.regex_detectors import EMAIL_DETECTOR as detector
     from app.parsers.base import TextChunk
+
     chunk = TextChunk(text="Contatto: mario.rossi@ente.gov.it e anna.bianchi@comune.it", source_ref="test.txt")
     findings = detector.detect(chunk)
     assert len(findings) == 2, f"Attesi 2 finding, trovati {len(findings)}: {[f.original_value for f in findings]}"
@@ -51,26 +57,32 @@ def test_email_detection():
     assert "mario.rossi@ente.gov.it" in values
     assert "anna.bianchi@comune.it" in values
 
+
 @test("Detector: Email non valide non rilevate")
 def test_email_false_positives():
     from app.detectors.regex_detectors import EMAIL_DETECTOR as detector
     from app.parsers.base import TextChunk
+
     chunk = TextChunk(text="Testo senza email. Numero: 123@456. Niente.", source_ref="test.txt")
     findings = detector.detect(chunk)
     assert len(findings) == 0, f"Attesi 0 finding, trovati {len(findings)}: {[f.original_value for f in findings]}"
+
 
 @test("Detector: IPv4 rilevati")
 def test_ipv4_detection():
     from app.detectors.regex_detectors import IPV4_DETECTOR as detector
     from app.parsers.base import TextChunk
+
     chunk = TextChunk(text="Sorgente: 10.24.8.15, Destinazione: 192.168.1.100", source_ref="test.txt")
     findings = detector.detect(chunk)
     assert len(findings) == 2, f"Attesi 2, trovati {len(findings)}"
+
 
 @test("Detector: IPv4 privati e loopback non rilevati in strict")
 def test_ipv4_private_excluded():
     from app.detectors.regex_detectors import IPV4_DETECTOR as detector
     from app.parsers.base import TextChunk
+
     # 127.0.0.1 e 0.0.0.0 non devono essere rilevati
     chunk = TextChunk(text="Loopback: 127.0.0.1, Null: 0.0.0.0", source_ref="test.txt")
     findings = detector.detect(chunk)
@@ -78,75 +90,94 @@ def test_ipv4_private_excluded():
     assert "127.0.0.1" not in values, "127.0.0.1 non deve essere rilevato"
     assert "0.0.0.0" not in values, "0.0.0.0 non deve essere rilevato"
 
+
 @test("Detector: IPv6 rilevato")
 def test_ipv6_detection():
     from app.detectors.regex_detectors import IPV6_DETECTOR as detector
     from app.parsers.base import TextChunk
+
     chunk = TextChunk(text="Indirizzo: 2001:0db8:85a3:0000:0000:8a2e:0370:7334", source_ref="test.txt")
     findings = detector.detect(chunk)
     assert len(findings) == 1, f"Atteso 1, trovato {len(findings)}"
+
 
 @test("Detector: URL rilevati")
 def test_url_detection():
     from app.detectors.regex_detectors import URL_DETECTOR as detector
     from app.parsers.base import TextChunk
-    chunk = TextChunk(text="Accesso a https://intranet.ente.gov.it/admin e http://malicious.example.com/payload", source_ref="test.txt")
+
+    chunk = TextChunk(
+        text="Accesso a https://intranet.ente.gov.it/admin e http://malicious.example.com/payload",
+        source_ref="test.txt",
+    )
     findings = detector.detect(chunk)
     assert len(findings) == 2, f"Attesi 2, trovati {len(findings)}"
+
 
 @test("Detector: Codice Fiscale rilevato")
 def test_cf_detection():
     from app.detectors.regex_detectors import CODICE_FISCALE_DETECTOR as detector
     from app.parsers.base import TextChunk
+
     chunk = TextChunk(text="CF: RSSMRA80A01H501A e FRRLGU75B12F205X", source_ref="test.txt")
     findings = detector.detect(chunk)
     assert len(findings) == 2, f"Attesi 2, trovati {len(findings)}"
+
 
 @test("Detector: Partita IVA rilevata")
 def test_piva_detection():
     from app.detectors.regex_detectors import PARTITA_IVA_DETECTOR as detector
     from app.parsers.base import TextChunk
+
     chunk = TextChunk(text="P.IVA: 12345678901 del fornitore", source_ref="test.txt")
     findings = detector.detect(chunk)
     assert len(findings) == 1, f"Atteso 1, trovato {len(findings)}"
+
 
 @test("Detector: Telefono rilevato")
 def test_phone_detection():
     from app.detectors.regex_detectors import PHONE_DETECTOR as detector
     from app.parsers.base import TextChunk
+
     chunk = TextChunk(text="Contatto: +39 333 1234567 oppure 06 1234 5678", source_ref="test.txt")
     findings = detector.detect(chunk)
     assert len(findings) >= 1, f"Atteso almeno 1, trovato {len(findings)}"
+
 
 @test("Detector: Hostname FQDN rilevato")
 def test_hostname_detection():
     from app.detectors.regex_detectors import HOSTNAME_DETECTOR as detector
     from app.parsers.base import TextChunk
+
     chunk = TextChunk(text="Server: srv-dc-01.ente.local e srv-mail-01.ente.gov.it", source_ref="test.txt")
     findings = detector.detect(chunk)
     assert len(findings) >= 1, f"Atteso almeno 1, trovato {len(findings)}"
+
 
 @test("Detector: Nessuna sovrapposizione tra URL e Email")
 def test_no_overlap_url_email():
     from app.detectors.engine import detect_in_chunk
     from app.parsers.base import TextChunk
+
     chunk = TextChunk(
-        text="Accesso: https://intranet.ente.gov.it/admin da mario.rossi@ente.gov.it",
-        source_ref="test.txt"
+        text="Accesso: https://intranet.ente.gov.it/admin da mario.rossi@ente.gov.it", source_ref="test.txt"
     )
     findings = detect_in_chunk(chunk)
     # Verifica che non ci siano sovrapposizioni
     sorted_f = sorted(findings, key=lambda f: f.start_pos)
     for i in range(len(sorted_f) - 1):
-        assert sorted_f[i].end_pos <= sorted_f[i+1].start_pos, \
-            f"Sovrapposizione tra '{sorted_f[i].original_value}' e '{sorted_f[i+1].original_value}'"
+        assert (
+            sorted_f[i].end_pos <= sorted_f[i + 1].start_pos
+        ), f"Sovrapposizione tra '{sorted_f[i].original_value}' e '{sorted_f[i+1].original_value}'"
 
 
 # ─── Test Parser ──────────────────────────────────────────────────────────────
 
+
 @test("Parser: TXT — parsing corretto")
 def test_txt_parser():
     from app.parsers.text_parser import TextParser
+
     parser = TextParser()
     result = parser.parse(TEST_DATA_DIR / "test_log.txt")
     assert result.success, f"Parsing fallito: {result.error_message}"
@@ -154,27 +185,33 @@ def test_txt_parser():
     full_text = " ".join(c.text for c in result.chunks)
     assert "mario.rossi@ente.gov.it" in full_text
 
+
 @test("Parser: CSV — parsing corretto")
 def test_csv_parser():
     from app.parsers.text_parser import TextParser
+
     parser = TextParser()
     result = parser.parse(TEST_DATA_DIR / "test_users.csv")
     assert result.success
     full_text = " ".join(c.text for c in result.chunks)
     assert "mario.rossi@ente.gov.it" in full_text
 
+
 @test("Parser: DOCX — parsing corretto")
 def test_docx_parser():
     from app.parsers.docx_parser import DocxParser
+
     parser = DocxParser()
     result = parser.parse(TEST_DATA_DIR / "test_report.docx")
     assert result.success, f"Parsing fallito: {result.error_message}"
     full_text = " ".join(c.text for c in result.chunks)
     assert "mario.rossi@ente.gov.it" in full_text or "10.24.8.1" in full_text
 
+
 @test("Parser: XLSX — parsing corretto, formule ignorate")
 def test_xlsx_parser():
     from app.parsers.xlsx_parser import XlsxParser
+
     parser = XlsxParser()
     result = parser.parse(TEST_DATA_DIR / "test_data.xlsx")
     assert result.success, f"Parsing fallito: {result.error_message}"
@@ -185,26 +222,32 @@ def test_xlsx_parser():
     full_text = " ".join(c.text for c in result.chunks if not c.is_formula)
     assert "mario.rossi@ente.gov.it" in full_text, f"Email non trovata nel testo XLSX. Testo: {full_text[:200]}"
 
+
 @test("Parser: PDF — parsing corretto")
 def test_pdf_parser():
     from app.parsers.pdf_parser import PdfParser
+
     parser = PdfParser()
     result = parser.parse(TEST_DATA_DIR / "test_document.pdf")
     assert result.success, f"Parsing fallito: {result.error_message}"
     assert len(result.chunks) > 0
 
+
 @test("Parser: PNG — OCR e stripping EXIF")
 def test_image_parser():
     from app.parsers.image_parser import ImageParser
+
     parser = ImageParser()
     result = parser.parse(TEST_DATA_DIR / "test_screenshot.png")
     assert result.success, f"Parsing fallito: {result.error_message}"
     # L'OCR potrebbe non trovare tutto ma non deve crashare
     assert len(result.chunks) >= 0
 
+
 @test("Parser: JPG con EXIF — stripping metadati")
 def test_jpg_exif_stripping():
     from app.parsers.image_parser import ImageParser
+
     parser = ImageParser()
     result = parser.parse(TEST_DATA_DIR / "test_screenshot_exif.jpg")
     assert result.success, f"Parsing fallito: {result.error_message}"
@@ -212,20 +255,22 @@ def test_jpg_exif_stripping():
     if result.image_path and result.image_path.exists():
         try:
             import piexif
+
             exif_data = piexif.load(str(result.image_path))
             artist = exif_data.get("0th", {}).get(piexif.ImageIFD.Artist, b"")
             assert b"mario.rossi" not in artist, "EXIF con dati sensibili non rimosso"
         except Exception:
             pass  # Se piexif non riesce a leggere, i metadati sono stati rimossi
 
+
 @test("Parser: Factory — selezione parser corretta")
 def test_parser_factory():
-    from app.parsers.factory import get_parser
-    from app.parsers.text_parser import TextParser
     from app.parsers.docx_parser import DocxParser
-    from app.parsers.xlsx_parser import XlsxParser
-    from app.parsers.pdf_parser import PdfParser
+    from app.parsers.factory import get_parser
     from app.parsers.image_parser import ImageParser
+    from app.parsers.pdf_parser import PdfParser
+    from app.parsers.text_parser import TextParser
+    from app.parsers.xlsx_parser import XlsxParser
 
     assert isinstance(get_parser(Path("test.txt")), TextParser)
     assert isinstance(get_parser(Path("test.md")), TextParser)
@@ -239,10 +284,11 @@ def test_parser_factory():
 
 # ─── Test Safety Label (Critical Module) ───────────────────────────────────────
 
+
 @test("Safety: Light mode — nessun findings = GREEN")
 def test_safety_light_no_findings():
-    from app.models.schemas import SafetyLabel, Batch, BatchConfig, BatchMode
     from app.core.safety import compute_safety_label
+    from app.models.schemas import Batch, BatchConfig, BatchMode, SafetyLabel
 
     config = BatchConfig(mode=BatchMode.LIGHT)
     batch = Batch(config=config)
@@ -250,56 +296,47 @@ def test_safety_light_no_findings():
     batch.files = []
 
     safety = compute_safety_label(
-        findings=batch.findings,
-        file_records=batch.files,
-        residual_warnings=[],
-        global_warnings=[]
+        findings=batch.findings, file_records=batch.files, residual_warnings=[], global_warnings=[]
     )
     assert safety == SafetyLabel.GREEN, f"No findings deve essere GREEN, got {safety}"
 
 
 @test("Safety: Strict mode — findings = YELLOW/RED based on file failures")
 def test_safety_strict_with_findings():
-    from app.models.schemas import (
-        SafetyLabel, Batch, BatchConfig, BatchMode, FileRecord, FileStatus, Finding
-    )
     from app.core.safety import compute_safety_label
+    from app.models.schemas import Batch, BatchConfig, BatchMode, FileRecord, FileStatus, Finding, SafetyLabel
 
     config = BatchConfig(mode=BatchMode.STRICT)
     batch = Batch(config=config)
-    
+
     # Crea un finding
-    finding = Finding(
-        file_id="file-001",
-        original_value="mario.rossi@ente.gov.it",
-        entity_type__name="EMAIL"
-    )
+    finding = Finding(file_id="file-001", original_value="mario.rossi@ente.gov.it", entity_type__name="EMAIL")
     batch.findings = [finding]
-    
+
     # Crea un file record con status PROCESSED
     file_rec = FileRecord(original_name="test.txt", stored_path="/tmp/test.txt")
     file_rec.status = FileStatus.PROCESSED
     batch.files = [file_rec]
 
     safety = compute_safety_label(
-        findings=batch.findings,
-        file_records=batch.files,
-        residual_warnings=[],
-        global_warnings=[]
+        findings=batch.findings, file_records=batch.files, residual_warnings=[], global_warnings=[]
     )
     # Strict mode con file processato correttamente dovrebbe essere YELLOW
-    assert safety in (SafetyLabel.YELLOW, SafetyLabel.GREEN), f"Expected YELLOW or GREEN for strict+findings, got {safety}"
+    assert safety in (
+        SafetyLabel.YELLOW,
+        SafetyLabel.GREEN,
+    ), f"Expected YELLOW or GREEN for strict+findings, got {safety}"
 
 
 @test("Safety: File FAILED → ORANGE/RED safety label")
 def test_safety_file_failures():
-    from app.models.schemas import SafetyLabel, Batch, BatchConfig, BatchMode, FileRecord, FileStatus
     from app.core.safety import compute_safety_label
+    from app.models.schemas import Batch, BatchConfig, BatchMode, FileRecord, FileStatus, SafetyLabel
 
     config = BatchConfig(mode=BatchMode.LIGHT)
     batch = Batch(config=config)
     batch.findings = []
-    
+
     # File con status FAILED
     file_rec = FileRecord(original_name="test.txt", stored_path="/tmp/test.txt")
     file_rec.status = FileStatus.FAILED
@@ -307,10 +344,7 @@ def test_safety_file_failures():
     batch.files = [file_rec]
 
     safety = compute_safety_label(
-        findings=batch.findings,
-        file_records=batch.files,
-        residual_warnings=[],
-        global_warnings=[]
+        findings=batch.findings, file_records=batch.files, residual_warnings=[], global_warnings=[]
     )
     # File failed deve alzare il safety label almeno a ORANGE
     assert safety in (SafetyLabel.ORANGE, SafetyLabel.RED), f"File failed deve essere ORANGE/RED, got {safety}"
@@ -318,11 +352,13 @@ def test_safety_file_failures():
 
 # ─── Test Pipeline Critical — Batch State Machine ────────────────────────────
 
+
 @test("Pipeline: Exception handling — ParsingError catturato")
 def test_pipeline_parsing_error():
+    from pathlib import Path
+
     from app.core.exceptions import ParsingError
     from app.parsers.factory import parse_file
-    from pathlib import Path
 
     # Tentativo di parsare un file inesistente
     try:
@@ -351,96 +387,94 @@ def test_pipeline_batch_not_found():
 
 # ─── Test Transformer Critical — Review Actions ────────────────────────────
 
+
 @test("Transformer: ReviewAction ACCEPT → pseudonimo usato")
 def test_transformer_action_accept():
-    from app.models.schemas import ReviewAction, Finding, EntityType
-    
-    finding = Finding(
-        file_id="file-001",
-        original_value="mario.rossi@ente.gov.it",
-        entity_type__name="EMAIL"
-    )
+    from app.models.schemas import EntityType, Finding, ReviewAction
+
+    finding = Finding(file_id="file-001", original_value="mario.rossi@ente.gov.it", entity_type__name="EMAIL")
     finding.review_action = ReviewAction.ACCEPT
     finding.proposed_pseudonym = "EMAIL_001@pseudo.local"
-    
+
     # Se action è ACCEPT, final_pseudonym deve essere proposed_pseudonym
     assert finding.review_action == ReviewAction.ACCEPT
 
 
 @test("Transformer: ReviewAction REJECT → finding scartato")
 def test_transformer_action_reject():
-    from app.models.schemas import ReviewAction, Finding, EntityType
+    from app.models.schemas import EntityType, Finding, ReviewAction
 
-    finding = Finding(
-        file_id="file-001",
-        original_value="mario.rossi@ente.gov.it",
-        entity_type__name="EMAIL"
-    )
+    finding = Finding(file_id="file-001", original_value="mario.rossi@ente.gov.it", entity_type__name="EMAIL")
     finding.review_action = ReviewAction.REJECT
-    
+
     # Se action è REJECT, il finding non deve essere né rimpiazzato né inserito nel file
     assert finding.review_action == ReviewAction.REJECT
 
 
 @test("Transformer: ReviewAction MODIFY → pseudonimo personalizzato")
 def test_transformer_action_modify():
-    from app.models.schemas import ReviewAction, Finding, EntityType
+    from app.models.schemas import EntityType, Finding, ReviewAction
 
-    finding = Finding(
-        file_id="file-001",
-        original_value="mario.rossi@ente.gov.it",
-        entity_type__name="EMAIL"
-    )
+    finding = Finding(file_id="file-001", original_value="mario.rossi@ente.gov.it", entity_type__name="EMAIL")
     finding.review_action = ReviewAction.MODIFY
     finding.modified_pseudonym = "mario@anon.local"
-    
+
     assert finding.review_action == ReviewAction.MODIFY
     assert finding.modified_pseudonym == "mario@anon.local"
 
 
-
 # ─── Test Pseudonimizzatore ───────────────────────────────────────────────────
+
 
 @test("Pseudonimizzatore: Consistenza — stesso valore stesso pseudonimo")
 def test_pseudonym_consistency():
+    from app.models.schemas import BatchMode, EntityType
     from app.pseudonymizer.engine import PseudonymEngine
-    from app.models.schemas import EntityType, BatchMode
+
     engine = PseudonymEngine(mode=BatchMode.LIGHT)
     p1 = engine.get_or_create_pseudonym(EntityType.EMAIL, "mario.rossi@ente.gov.it")
     p2 = engine.get_or_create_pseudonym(EntityType.EMAIL, "mario.rossi@ente.gov.it")
     assert p1 == p2, "Lo stesso valore deve produrre lo stesso pseudonimo"
 
+
 @test("Pseudonimizzatore: Unicità — valori diversi pseudonimi diversi")
 def test_pseudonym_uniqueness():
+    from app.models.schemas import BatchMode, EntityType
     from app.pseudonymizer.engine import PseudonymEngine
-    from app.models.schemas import EntityType, BatchMode
+
     engine = PseudonymEngine(mode=BatchMode.LIGHT)
     p1 = engine.get_or_create_pseudonym(EntityType.EMAIL, "mario.rossi@ente.gov.it")
     p2 = engine.get_or_create_pseudonym(EntityType.EMAIL, "luigi.ferrari@ente.gov.it")
     assert p1 != p2, "Valori diversi devono produrre pseudonimi diversi"
 
+
 @test("Pseudonimizzatore: Modalità Light — struttura email preservata")
 def test_pseudonym_light_email():
+    from app.models.schemas import BatchMode, EntityType
     from app.pseudonymizer.engine import PseudonymEngine
-    from app.models.schemas import EntityType, BatchMode
+
     engine = PseudonymEngine(mode=BatchMode.LIGHT)
     p = engine.get_or_create_pseudonym(EntityType.EMAIL, "mario.rossi@ente.gov.it")
     assert "@" in p, f"Pseudonimo email Light deve contenere '@': {p}"
     assert ".gov.it" in p or ".it" in p, f"Pseudonimo email Light deve preservare TLD: {p}"
 
+
 @test("Pseudonimizzatore: Modalità Strict — nessuna struttura preservata")
 def test_pseudonym_strict():
+    from app.models.schemas import BatchMode, EntityType
     from app.pseudonymizer.engine import PseudonymEngine
-    from app.models.schemas import EntityType, BatchMode
+
     engine = PseudonymEngine(mode=BatchMode.STRICT)
     p = engine.get_or_create_pseudonym(EntityType.EMAIL, "mario.rossi@ente.gov.it")
     assert p.startswith("EMAIL_"), f"Pseudonimo Strict deve iniziare con 'EMAIL_': {p}"
     assert "mario" not in p.lower(), f"Pseudonimo Strict non deve contenere il nome originale: {p}"
 
+
 @test("Pseudonimizzatore: IPv4 Light — struttura preservata")
 def test_pseudonym_light_ipv4():
+    from app.models.schemas import BatchMode, EntityType
     from app.pseudonymizer.engine import PseudonymEngine
-    from app.models.schemas import EntityType, BatchMode
+
     engine = PseudonymEngine(mode=BatchMode.LIGHT)
     p = engine.get_or_create_pseudonym(EntityType.IPV4, "10.24.8.15")
     assert "10.24" in p, f"IPv4 Light deve preservare i primi ottetti: {p}"
@@ -448,9 +482,11 @@ def test_pseudonym_light_ipv4():
 
 # ─── Test Cifratura Mapping ───────────────────────────────────────────────────
 
+
 @test("Cifratura: Encrypt/Decrypt round-trip corretto")
 def test_crypto_roundtrip():
-    from app.mapping.crypto import encrypt_mapping, decrypt_mapping
+    from app.mapping.crypto import decrypt_mapping, encrypt_mapping
+
     data = {"batch_id": "test-123", "mapping": {"EMAIL_001": "mario.rossi@ente.gov.it"}}
     passphrase = "TestPassphrase2024!"
     encrypted = encrypt_mapping(data, passphrase)
@@ -458,10 +494,12 @@ def test_crypto_roundtrip():
     assert decrypted["batch_id"] == data["batch_id"]
     assert decrypted["mapping"] == data["mapping"]
 
+
 @test("Cifratura: Passphrase errata genera eccezione")
 def test_crypto_wrong_passphrase():
-    from app.mapping.crypto import encrypt_mapping, decrypt_mapping
+    from app.mapping.crypto import decrypt_mapping, encrypt_mapping
     from cryptography.exceptions import InvalidTag
+
     data = {"test": "value"}
     encrypted = encrypt_mapping(data, "CorrectPassphrase")
     try:
@@ -470,18 +508,23 @@ def test_crypto_wrong_passphrase():
     except InvalidTag:
         pass  # Comportamento atteso
 
+
 @test("Cifratura: Output cifrato diverso ad ogni chiamata (salt casuale)")
 def test_crypto_random_salt():
     from app.mapping.crypto import encrypt_mapping
+
     data = {"test": "value"}
     enc1 = encrypt_mapping(data, "SamePassphrase")
     enc2 = encrypt_mapping(data, "SamePassphrase")
     assert enc1 != enc2, "Ogni cifratura deve produrre output diverso (salt casuale)"
 
+
 @test("Cifratura: File di mapping salvato e riletto correttamente")
 def test_crypto_file_save_load():
     import tempfile
-    from app.mapping.crypto import save_encrypted_mapping, load_and_decrypt_mapping
+
+    from app.mapping.crypto import load_and_decrypt_mapping, save_encrypted_mapping
+
     data = {"batch_id": "test-456", "mapping": {"IPV4_001": "10.24.8.15"}}
     with tempfile.NamedTemporaryFile(suffix=".enc", delete=False) as f:
         tmp_path = Path(f.name)
@@ -495,12 +538,13 @@ def test_crypto_file_save_load():
 
 # ─── Test Pipeline End-to-End ─────────────────────────────────────────────────
 
+
 @test("Pipeline E2E: TXT — detection e pseudonimizzazione")
 def test_pipeline_txt():
-    from app.parsers.factory import parse_file
     from app.detectors.engine import detect_in_parse_result
-    from app.pseudonymizer.engine import PseudonymEngine
     from app.models.schemas import BatchMode
+    from app.parsers.factory import parse_file
+    from app.pseudonymizer.engine import PseudonymEngine
 
     result = parse_file(TEST_DATA_DIR / "test_log.txt")
     assert result.success
@@ -516,12 +560,13 @@ def test_pipeline_txt():
     assert "EMAIL" in types, f"Email non trovata. Tipi trovati: {types}"
     assert "IPV4" in types, f"IPv4 non trovato. Tipi trovati: {types}"
 
+
 @test("Pipeline E2E: CSV — detection corretta")
 def test_pipeline_csv():
-    from app.parsers.factory import parse_file
     from app.detectors.engine import detect_in_parse_result
-    from app.pseudonymizer.engine import PseudonymEngine
     from app.models.schemas import BatchMode
+    from app.parsers.factory import parse_file
+    from app.pseudonymizer.engine import PseudonymEngine
 
     result = parse_file(TEST_DATA_DIR / "test_users.csv")
     assert result.success
@@ -534,10 +579,11 @@ def test_pipeline_csv():
     assert "EMAIL" in types
     assert "CODICE_FISCALE" in types
 
+
 @test("Pipeline E2E: XLSX — formule non processate")
 def test_pipeline_xlsx():
-    from app.parsers.factory import parse_file
     from app.detectors.engine import detect_in_parse_result
+    from app.parsers.factory import parse_file
 
     result = parse_file(TEST_DATA_DIR / "test_data.xlsx")
     assert result.success
@@ -547,18 +593,21 @@ def test_pipeline_xlsx():
     assert len(formula_chunks) > 0, "Nessun chunk formula trovato nel file XLSX"
     # I chunk formula non devono avere finding (il detector li salta)
     from app.detectors.engine import detect_in_chunk
+
     for chunk in formula_chunks:
         findings = detect_in_chunk(chunk)
         assert len(findings) == 0, f"Finding in chunk formula: {chunk.text}"
 
+
 @test("Pipeline E2E: Trasformazione TXT — sostituzioni applicate")
 def test_transformer_txt():
     import tempfile
-    from app.parsers.factory import parse_file
+
     from app.detectors.engine import detect_in_parse_result
+    from app.models.schemas import BatchMode, ReviewAction
+    from app.parsers.factory import parse_file
     from app.pseudonymizer.engine import PseudonymEngine
     from app.pseudonymizer.transformer import transform_text_file
-    from app.models.schemas import BatchMode, ReviewAction
 
     result = parse_file(TEST_DATA_DIR / "test_log.txt")
     raw_findings = detect_in_parse_result(result)
@@ -571,11 +620,7 @@ def test_transformer_txt():
 
     with tempfile.TemporaryDirectory() as tmpdir:
         output_path = Path(tmpdir) / "output.txt"
-        warnings = transform_text_file(
-            TEST_DATA_DIR / "test_log.txt",
-            output_path,
-            findings
-        )
+        warnings = transform_text_file(TEST_DATA_DIR / "test_log.txt", output_path, findings)
         assert output_path.exists(), "File di output non creato"
         content = output_path.read_text(encoding="utf-8")
         # Verifica che i valori originali siano stati sostituiti
@@ -584,13 +629,15 @@ def test_transformer_txt():
                 # Potrebbe essere in un contesto diverso, verifica almeno che il pseudonimo sia presente
                 pass  # Accettabile per test di base
 
+
 @test("Pipeline E2E: Report JSON generato correttamente")
 def test_report_json():
     import tempfile
-    from app.parsers.factory import parse_file
+
     from app.detectors.engine import detect_in_parse_result
+    from app.models.schemas import Batch, BatchConfig, BatchMode, FileRecord, FileStatus
+    from app.parsers.factory import parse_file
     from app.pseudonymizer.engine import PseudonymEngine
-    from app.models.schemas import BatchMode, Batch, BatchConfig, FileRecord, FileStatus
     from app.report.generator import build_report_data, generate_json_report
 
     result = parse_file(TEST_DATA_DIR / "test_log.txt")
@@ -624,14 +671,16 @@ def test_report_json():
 
 # ─── Test Sicurezza ───────────────────────────────────────────────────────────
 
+
 @test("Sicurezza: Nessun valore originale nel report JSON")
 def test_security_no_originals_in_report():
-    from app.models.schemas import BatchMode, Batch, BatchConfig, FileRecord, FileStatus
-    from app.parsers.factory import parse_file
+    import json
+
     from app.detectors.engine import detect_in_parse_result
+    from app.models.schemas import Batch, BatchConfig, BatchMode, FileRecord, FileStatus
+    from app.parsers.factory import parse_file
     from app.pseudonymizer.engine import PseudonymEngine
     from app.report.generator import build_report_data
-    import json
 
     result = parse_file(TEST_DATA_DIR / "test_users.csv")
     raw_findings = detect_in_parse_result(result)
@@ -651,10 +700,12 @@ def test_security_no_originals_in_report():
     for val in sensitive_values:
         assert val not in report_str, f"Valore sensibile trovato nel report: {val}"
 
+
 @test("Sicurezza: Mapping cifrato non leggibile senza passphrase")
 def test_security_mapping_encrypted():
     import tempfile
-    from app.mapping.crypto import save_encrypted_mapping, load_and_decrypt_mapping
+
+    from app.mapping.crypto import load_and_decrypt_mapping, save_encrypted_mapping
     from cryptography.exceptions import InvalidTag
 
     data = {"mapping": {"EMAIL_001": "mario.rossi@ente.gov.it"}}
@@ -676,11 +727,13 @@ def test_security_mapping_encrypted():
     finally:
         tmp_path.unlink(missing_ok=True)
 
+
 @test("Sicurezza: Dizionario detector non espone valori originali nei log")
 def test_security_no_sensitive_in_logs():
     """Verifica che il detector non loggi i valori sensibili trovati."""
-    import logging
     import io
+    import logging
+
     from app.detectors.engine import detect_in_chunk
     from app.parsers.base import TextChunk
 
@@ -689,10 +742,7 @@ def test_security_no_sensitive_in_logs():
     handler = logging.StreamHandler(log_capture)
     logging.getLogger("app").addHandler(handler)
 
-    chunk = TextChunk(
-        text="Email: mario.rossi@ente.gov.it, CF: RSSMRA80A01H501A",
-        source_ref="sec-test"
-    )
+    chunk = TextChunk(text="Email: mario.rossi@ente.gov.it, CF: RSSMRA80A01H501A", source_ref="sec-test")
     detect_in_chunk(chunk)
 
     logging.getLogger("app").removeHandler(handler)
@@ -705,25 +755,42 @@ def test_security_no_sensitive_in_logs():
 
 # ─── Esecuzione ───────────────────────────────────────────────────────────────
 
+
 def run_all_tests():
     test_fns = [
-        test_email_detection, test_email_false_positives,
-        test_ipv4_detection, test_ipv4_private_excluded,
-        test_ipv6_detection, test_url_detection,
-        test_cf_detection, test_piva_detection,
-        test_phone_detection, test_hostname_detection,
+        test_email_detection,
+        test_email_false_positives,
+        test_ipv4_detection,
+        test_ipv4_private_excluded,
+        test_ipv6_detection,
+        test_url_detection,
+        test_cf_detection,
+        test_piva_detection,
+        test_phone_detection,
+        test_hostname_detection,
         test_no_overlap_url_email,
-        test_txt_parser, test_csv_parser, test_docx_parser,
-        test_xlsx_parser, test_pdf_parser,
-        test_image_parser, test_jpg_exif_stripping,
+        test_txt_parser,
+        test_csv_parser,
+        test_docx_parser,
+        test_xlsx_parser,
+        test_pdf_parser,
+        test_image_parser,
+        test_jpg_exif_stripping,
         test_parser_factory,
-        test_pseudonym_consistency, test_pseudonym_uniqueness,
-        test_pseudonym_light_email, test_pseudonym_strict,
+        test_pseudonym_consistency,
+        test_pseudonym_uniqueness,
+        test_pseudonym_light_email,
+        test_pseudonym_strict,
         test_pseudonym_light_ipv4,
-        test_crypto_roundtrip, test_crypto_wrong_passphrase,
-        test_crypto_random_salt, test_crypto_file_save_load,
-        test_pipeline_txt, test_pipeline_csv, test_pipeline_xlsx,
-        test_transformer_txt, test_report_json,
+        test_crypto_roundtrip,
+        test_crypto_wrong_passphrase,
+        test_crypto_random_salt,
+        test_crypto_file_save_load,
+        test_pipeline_txt,
+        test_pipeline_csv,
+        test_pipeline_xlsx,
+        test_transformer_txt,
+        test_report_json,
         test_security_no_originals_in_report,
         test_security_mapping_encrypted,
         test_security_no_sensitive_in_logs,

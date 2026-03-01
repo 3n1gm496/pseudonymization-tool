@@ -7,10 +7,11 @@ Tests the full LDAP configuration and usage flow:
 3. Refresh user cache
 4. Verify config persistence
 """
-import pytest
-import requests
+
 import json
 
+import pytest
+import requests
 
 BASE_URL = "http://localhost:8000/api"
 
@@ -18,10 +19,7 @@ BASE_URL = "http://localhost:8000/api"
 def get_authenticated_session():
     """Helper: Get authenticated requests session."""
     session = requests.Session()
-    auth = session.post(
-        f"{BASE_URL}/auth/login",
-        json={"username": "admin", "password": "admin123!"}
-    )
+    auth = session.post(f"{BASE_URL}/auth/login", json={"username": "admin", "password": "admin123!"})
     assert auth.status_code == 200, f"Auth failed: {auth.text}"
     return session
 
@@ -29,11 +27,11 @@ def get_authenticated_session():
 def test_ldap_configure_and_persist():
     """Test configuring LDAP and verifying persistence."""
     session = get_authenticated_session()
-    
-    print("\n" + "="*70)
+
+    print("\n" + "=" * 70)
     print("LDAP CONFIGURATION TEST")
-    print("="*70)
-    
+    print("=" * 70)
+
     # Configuration payload (example)
     ldap_config = {
         "host": "ldap.example.com",
@@ -45,19 +43,16 @@ def test_ldap_configure_and_persist():
         "use_tls": False,
         "enabled": True,
     }
-    
+
     print("\n[1] Configuring LDAP settings...")
     print(f"  Host: {ldap_config['host']}")
     print(f"  Base DN: {ldap_config['base_dn']}")
     print(f"  Bind DN: {ldap_config['bind_dn']}")
-    
+
     # Note: This test may fail if ldap3 is not installed
     # But the API structure should be correct
-    response = session.post(
-        f"{BASE_URL}/settings/ldap",
-        json=ldap_config
-    )
-    
+    response = session.post(f"{BASE_URL}/settings/ldap", json=ldap_config)
+
     # Accept 200 (success) or 400 (if ldap3 not installed)
     if response.status_code == 400:
         error = response.json().get("detail", "")
@@ -65,19 +60,19 @@ def test_ldap_configure_and_persist():
             print(f"  ⚠ LDAP library not available (expected in test environment)")
             print(f"  API endpoint exists and validates correctly")
             return
-    
+
     assert response.status_code == 200, f"Config failed: {response.text}"
     data = response.json()
-    
+
     print(f"  ✓ Configuration saved")
     print(f"  Response: {data}")
-    
+
     # Retrieve config to verify persistence
     print("\n[2] Retrieving saved configuration...")
     get_response = session.get(f"{BASE_URL}/settings/ldap")
     assert get_response.status_code == 200
     retrieved = get_response.json()
-    
+
     assert retrieved["configured"] == True or retrieved["host"] is not None
     print(f"  ✓ Config retrieved")
     print(f"  Configured: {retrieved.get('configured')}")
@@ -87,16 +82,16 @@ def test_ldap_configure_and_persist():
 def test_ldap_test_connection():
     """Test the LDAP test-connection endpoint."""
     session = get_authenticated_session()
-    
-    print("\n" + "="*70)
+
+    print("\n" + "=" * 70)
     print("LDAP CONNECTION TEST")
-    print("="*70)
-    
+    print("=" * 70)
+
     print("\n[1] Testing LDAP connection...")
     response = session.post(f"{BASE_URL}/settings/ldap/test")
-    
+
     data = response.json()
-    
+
     if response.status_code == 200:
         print(f"  ✓ Connection test succeeded")
         print(f"  Result: {data.get('ok')}")
@@ -116,16 +111,16 @@ def test_ldap_test_connection():
 def test_ldap_refresh_cache():
     """Test the LDAP cache refresh endpoint."""
     session = get_authenticated_session()
-    
-    print("\n" + "="*70)
+
+    print("\n" + "=" * 70)
     print("LDAP CACHE REFRESH TEST")
-    print("="*70)
-    
+    print("=" * 70)
+
     print("\n[1] Refreshing LDAP user cache...")
     response = session.post(f"{BASE_URL}/settings/ldap/refresh")
-    
+
     data = response.json()
-    
+
     if response.status_code == 200:
         print(f"  ✓ Refresh succeeded")
         print(f"  Result: {data.get('ok')}")
@@ -145,17 +140,17 @@ def test_ldap_refresh_cache():
 def test_ldap_status_endpoint():
     """Test getting LDAP status."""
     session = get_authenticated_session()
-    
-    print("\n" + "="*70)
+
+    print("\n" + "=" * 70)
     print("LDAP STATUS TEST")
-    print("="*70)
-    
+    print("=" * 70)
+
     print("\n[1] Getting LDAP status...")
     response = session.get(f"{BASE_URL}/settings/ldap")
-    
+
     assert response.status_code == 200, f"Status endpoint failed: {response.text}"
     data = response.json()
-    
+
     print(f"  ✓ Status retrieved")
     print(f"  Configured: {data.get('configured')}")
     print(f"  Cache size: {data.get('cache_size', 0)}")

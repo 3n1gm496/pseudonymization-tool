@@ -1,8 +1,6 @@
-from app.core.revert import (
-    apply_revert_text, preview_revert_text, _validate_mapping_file, _replace_all
-)
-from app.mapping.crypto import encrypt_mapping
 import pytest
+from app.core.revert import _replace_all, _validate_mapping_file, apply_revert_text, preview_revert_text
+from app.mapping.crypto import encrypt_mapping
 
 
 def test_revert_text_preview_and_apply():
@@ -51,7 +49,7 @@ def test_revert_text_empty_mapping():
     passphrase = "TestPass_123"
     mapping_payload = {"mapping": {}}
     mapping_bytes = encrypt_mapping(mapping_payload, passphrase)
-    
+
     text = "Questo è un testo senza pseudonimi"
     applied = apply_revert_text(text, mapping_bytes, passphrase)
     assert applied["total_replacements"] == 0
@@ -63,7 +61,7 @@ def test_revert_text_no_matches():
     passphrase = "TestPass_123"
     mapping_payload = {"mapping": {"[PERSON_0001]": "Mario Rossi"}}
     mapping_bytes = encrypt_mapping(mapping_payload, passphrase)
-    
+
     text = "Questo testo non ha pseudonimi"
     applied = apply_revert_text(text, mapping_bytes, passphrase)
     assert applied["total_replacements"] == 0
@@ -80,7 +78,7 @@ def test_revert_text_overlapping_pseudonyms():
         }
     }
     mapping_bytes = encrypt_mapping(mapping_payload, passphrase)
-    
+
     # Test: se entrambi sono nel testo, devono sostituirsi correttamente
     text = "[PERSON_010] e [PERSON_01]"
     applied = apply_revert_text(text, mapping_bytes, passphrase)
@@ -111,12 +109,10 @@ def test_validate_mapping_file_too_small():
 def test_replace_all_with_multiple_occurrences():
     """Test della funzione _replace_all con occorrenze multiple"""
     text = "User [PERSON_0001] called [PERSON_0001] at [HOST_0001]"
-    sub_map = {
-        "[PERSON_0001]": "Alice",
-        "[HOST_0001]": "server.local"
-    }
-    
+    sub_map = {"[PERSON_0001]": "Alice", "[HOST_0001]": "server.local"}
+
     from app.core.revert import _replace_all
+
     result_text, count = _replace_all(text, sub_map)
     assert count == 3  # 2x [PERSON_0001], 1x [HOST_0001]
     assert result_text == "User Alice called Alice at server.local"
@@ -125,14 +121,12 @@ def test_replace_all_with_multiple_occurrences():
 def test_preview_revert_text_sample_matches():
     """Preview deve mostrare fino a 10 pseudonimi trovati"""
     passphrase = "TestPass_123"
-    mapping_payload = {
-        "mapping": {f"[PSEUDO_{i:04d}]": f"OriginalValue_{i}" for i in range(20)}
-    }
+    mapping_payload = {"mapping": {f"[PSEUDO_{i:04d}]": f"OriginalValue_{i}" for i in range(20)}}
     mapping_bytes = encrypt_mapping(mapping_payload, passphrase)
-    
+
     # Testo con alcuni pseudonimi
     text = " ".join([f"[PSEUDO_{i:04d}]" for i in range(15)])
-    
+
     preview = preview_revert_text(text, mapping_bytes, passphrase)
     assert preview["mapping_entries"] == 20
     assert preview["total_matches"] == 15
@@ -142,14 +136,9 @@ def test_preview_revert_text_sample_matches():
 def test_revert_text_with_special_chars():
     """Testo con caratteri speciali e unicode"""
     passphrase = "TestPass_123"
-    mapping_payload = {
-        "mapping": {
-            "[PERSONA]": "José García",
-            "[EMAIL]": "test@ente.it"
-        }
-    }
+    mapping_payload = {"mapping": {"[PERSONA]": "José García", "[EMAIL]": "test@ente.it"}}
     mapping_bytes = encrypt_mapping(mapping_payload, passphrase)
-    
+
     text = "Contatto: [EMAIL] per [PERSONA] - Ufficio: Via Roma 123"
     applied = apply_revert_text(text, mapping_bytes, passphrase)
     assert "José García" in applied["reverted_text"]

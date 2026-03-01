@@ -2,8 +2,9 @@
 Script per creare dataset di test sintetici realistici.
 Genera file di test per tutti i formati supportati.
 """
-import sys
+
 import os
+import sys
 from pathlib import Path
 
 # Aggiungi il backend al path
@@ -97,13 +98,12 @@ def create_docx_test():
     """File DOCX con testo sensibile."""
     try:
         from docx import Document
+
         doc = Document()
 
         doc.add_heading("Relazione Tecnica — Riservata", 0)
         doc.add_paragraph(
-            "Autore: Ing. Mario Rossi (mario.rossi@ente.gov.it)\n"
-            "Data: 15 Marzo 2024\n"
-            "Progetto: PROJ-2024-001"
+            "Autore: Ing. Mario Rossi (mario.rossi@ente.gov.it)\n" "Data: 15 Marzo 2024\n" "Progetto: PROJ-2024-001"
         )
 
         doc.add_heading("1. Sommario Esecutivo", 1)
@@ -116,15 +116,15 @@ def create_docx_test():
 
         doc.add_heading("2. Dettagli Tecnici", 1)
         table = doc.add_table(rows=1, cols=3)
-        table.style = 'Table Grid'
+        table.style = "Table Grid"
         hdr = table.rows[0].cells
-        hdr[0].text = 'Sistema'
-        hdr[1].text = 'IP'
-        hdr[2].text = 'Responsabile'
+        hdr[0].text = "Sistema"
+        hdr[1].text = "IP"
+        hdr[2].text = "Responsabile"
 
         data = [
-            ('srv-dc-01.ente.local', '10.0.0.1', 'mario.rossi@ente.gov.it'),
-            ('srv-mail-01.ente.local', '10.0.0.2', 'anna.bianchi@ente.gov.it'),
+            ("srv-dc-01.ente.local", "10.0.0.1", "mario.rossi@ente.gov.it"),
+            ("srv-mail-01.ente.local", "10.0.0.2", "anna.bianchi@ente.gov.it"),
         ]
         for sys_name, ip, resp in data:
             row = table.add_row().cells
@@ -142,6 +142,7 @@ def create_xlsx_test():
     """File XLSX con testo e formule."""
     try:
         import openpyxl
+
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Dati Utenti"
@@ -171,31 +172,31 @@ def create_pdf_test():
     """File PDF testuale."""
     try:
         from reportlab.lib.pagesizes import A4
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
         from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 
         doc = SimpleDocTemplate(str(TEST_DATA_DIR / "test_document.pdf"), pagesize=A4)
         styles = getSampleStyleSheet()
         story = []
 
-        story.append(Paragraph("Documento Riservato — Analisi di Sicurezza", styles['Title']))
+        story.append(Paragraph("Documento Riservato — Analisi di Sicurezza", styles["Title"]))
         story.append(Spacer(1, 12))
-        story.append(Paragraph(
-            "Responsabile: Dott. Mario Rossi (mario.rossi@ente.gov.it) — CF: RSSMRA80A01H501A",
-            styles['Normal']
-        ))
+        story.append(
+            Paragraph(
+                "Responsabile: Dott. Mario Rossi (mario.rossi@ente.gov.it) — CF: RSSMRA80A01H501A", styles["Normal"]
+            )
+        )
         story.append(Spacer(1, 12))
-        story.append(Paragraph(
-            "Durante l'analisi del server srv-dc-01.ente.local (10.24.8.1) è stato rilevato "
-            "traffico anomalo verso 203.0.113.42. Il firewall ha bloccato 15 tentativi di "
-            "connessione verso https://malicious.example.com/payload.",
-            styles['Normal']
-        ))
+        story.append(
+            Paragraph(
+                "Durante l'analisi del server srv-dc-01.ente.local (10.24.8.1) è stato rilevato "
+                "traffico anomalo verso 203.0.113.42. Il firewall ha bloccato 15 tentativi di "
+                "connessione verso https://malicious.example.com/payload.",
+                styles["Normal"],
+            )
+        )
         story.append(Spacer(1, 12))
-        story.append(Paragraph(
-            "Contatti: luigi.ferrari@ente.gov.it, tel. +39 06 1234 5678",
-            styles['Normal']
-        ))
+        story.append(Paragraph("Contatti: luigi.ferrari@ente.gov.it, tel. +39 06 1234 5678", styles["Normal"]))
 
         doc.build(story)
         print("✓ Creato test_document.pdf")
@@ -249,11 +250,12 @@ startxref
 def create_image_test():
     """Immagine PNG con testo sensibile per test OCR."""
     try:
-        from PIL import Image, ImageDraw, ImageFont
         import struct
 
+        from PIL import Image, ImageDraw, ImageFont
+
         # Crea un'immagine bianca con testo
-        img = Image.new('RGB', (800, 400), color='white')
+        img = Image.new("RGB", (800, 400), color="white")
         draw = ImageDraw.Draw(img)
 
         # Testo con dati sensibili
@@ -268,7 +270,7 @@ def create_image_test():
 
         y = 40
         for line in lines:
-            draw.text((40, y), line, fill='black')
+            draw.text((40, y), line, fill="black")
             y += 50
 
         # Aggiungi metadati EXIF finti (per testare lo stripping)
@@ -278,6 +280,7 @@ def create_image_test():
         # Aggiungi metadati EXIF usando piexif se disponibile
         try:
             import piexif
+
             exif_dict = {
                 "0th": {
                     piexif.ImageIFD.Make: b"TestCamera",
@@ -300,16 +303,18 @@ def create_image_test():
 def create_pdf_non_textual():
     """PDF non testuale (basato su immagine) per testare il warning."""
     try:
-        from PIL import Image
         import io
 
+        from PIL import Image
+
         # Crea un'immagine e salvala come PDF
-        img = Image.new('RGB', (400, 200), color='white')
+        img = Image.new("RGB", (400, 200), color="white")
         draw = img if True else None
 
         from PIL import ImageDraw
+
         draw = ImageDraw.Draw(img)
-        draw.text((20, 80), "Documento scansionato - non testuale", fill='black')
+        draw.text((20, 80), "Documento scansionato - non testuale", fill="black")
 
         img_path = TEST_DATA_DIR / "test_scanned.pdf"
         img.save(str(img_path), "PDF")

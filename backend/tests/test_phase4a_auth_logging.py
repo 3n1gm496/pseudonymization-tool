@@ -1,8 +1,7 @@
-from types import SimpleNamespace
 import os
+from types import SimpleNamespace
 
-from app.core import auth
-from app.core import logging_config
+from app.core import auth, logging_config
 
 
 def test_auth_b64_roundtrip():

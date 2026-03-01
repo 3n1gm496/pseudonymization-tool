@@ -1,6 +1,7 @@
 """
 Pytest configuration and fixtures for pseudonymization-tool tests.
 """
+
 import sys
 from pathlib import Path
 
