@@ -197,11 +197,17 @@ def _validate_upload_input(
     if passphrase:
         _validate_passphrase(passphrase)
 
+    # ✅ FIX #4a: Validate mode strictly - don't silently default
     try:
         batch_mode = BatchMode(mode.lower())
     except ValueError:
-        batch_mode = BatchMode.STRICT
+        valid_modes = ", ".join([m.value for m in BatchMode])
+        raise HTTPException(
+            status_code=400,
+            detail=f"Modalità non valida: '{mode}'. Valide: {valid_modes}",
+        )
 
+    # ✅ FIX #4b: Validate preset - _resolve_preset already raises on invalid
     batch_preset = _resolve_preset(preset)
     return batch_mode, batch_preset
 
@@ -462,6 +468,7 @@ async def submit_review(batch_id: str, review_request: SubmitReviewRequest, requ
 async def apply_batch(batch_id: str, request: Request):
     """
     Applica le sostituzioni usando le decisions persistite.
+    ✅ FIX #5: Added error handling with state rollback on failure.
     """
     enforce_rate_limit(request, "batch_apply", limit=20)
 
@@ -502,17 +509,35 @@ async def apply_batch(batch_id: str, request: Request):
             )
         apply_review_decisions(batch_id, decision_items)
 
+    # ✅ FIX #5a: Snapshot batch state before apply for rollback capability
+    original_status = batch.status
+    original_files = [f.model_copy(deep=True) for f in batch.files]
+
     started_at = _batch_start_times.get(batch_id, datetime.now(timezone.utc).isoformat())
+    
+    # ✅ FIX #5b: Try/except/finally with rollback on error
     try:
+        # Update status to APPLYING to indicate operation in progress
+        batch.status = BatchStatus.APPLYING
+        update_batch(batch)
+        
         zip_path = await asyncio.wait_for(
             run_in_threadpool(run_apply_pipeline, batch_id, started_at),
             timeout=API_HEAVY_TIMEOUT_SECONDS,
         )
     except asyncio.TimeoutError:
-        raise HTTPException(status_code=504, detail="Timeout durante apply del batch.")
+        # ✅ FIX #5c: Rollback on timeout
+        batch.status = original_status
+        batch.files = original_files
+        update_batch(batch)
+        raise HTTPException(status_code=504, detail="Timeout durante apply del batch. Lo stato è stato ripristinato.")
     except Exception as e:
-        logger.error("Errore apply batch %s: %s", batch_id, e)
-        raise HTTPException(status_code=500, detail=str(e))
+        # ✅ FIX #5d: Rollback on any other error
+        batch.status = original_status
+        batch.files = original_files
+        update_batch(batch)
+        logger.error("Errore apply batch %s (rollback eseguito): %s", batch_id, e)
+        raise HTTPException(status_code=500, detail=f"Errore durante apply (stato ripristinato): {str(e)}")
 
     decisions_count = len(decisions_map)
     rejected_count = sum(1 for d in decisions_map.values() if str(d.get("action", "")).lower() == "reject")

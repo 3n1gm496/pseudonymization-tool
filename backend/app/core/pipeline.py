@@ -145,21 +145,27 @@ def run_scan_pipeline(batch_id: str) -> Batch:
     # Mantieni i finding di testo inline già presenti
     existing_text_findings = [f for f in batch.findings if f.is_text_input]
     
-    # ✅ CRITICAL FIX #2: Deduplication by finding_id to prevent duplicates on rescans
+    # ✅ CRITICAL FIX #2: Deduplication by finding_id + (entity_type, original_value) to prevent duplicates on rescans & multi-detector hits
     seen_ids = set()
+    seen_values = set()  # Track (entity_type, original_value, file_id) to prevent multi-detector duplicates
     deduplicated_findings = []
     
     # Add existing text findings first (preserve insertion order)
     for f in existing_text_findings:
         if f.finding_id not in seen_ids:
-            deduplicated_findings.append(f)
-            seen_ids.add(f.finding_id)
+            value_key = (f.entity_type.value if hasattr(f.entity_type, 'value') else str(f.entity_type), f.original_value, f.file_id)
+            if value_key not in seen_values:
+                deduplicated_findings.append(f)
+                seen_ids.add(f.finding_id)
+                seen_values.add(value_key)
     
-    # Add new findings, skipping duplicates
+    # Add new findings, skipping duplicates (by finding_id or by value)
     for f in all_findings:
-        if f.finding_id not in seen_ids:
+        value_key = (f.entity_type.value if hasattr(f.entity_type, 'value') else str(f.entity_type), f.original_value, f.file_id)
+        if f.finding_id not in seen_ids and value_key not in seen_values:
             deduplicated_findings.append(f)
             seen_ids.add(f.finding_id)
+            seen_values.add(value_key)
     
     batch.findings = deduplicated_findings
     batch.status = BatchStatus.REVIEW

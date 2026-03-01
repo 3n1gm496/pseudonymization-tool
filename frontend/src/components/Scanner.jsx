@@ -5,6 +5,7 @@ import { useToast } from '../hooks/useToast'
 const Scanner = ({ onScan, isLoading }) => {
   const [text, setText] = useState('')
   const [uploadedFile, setUploadedFile] = useState(null)
+  const [scanLoading, setScanLoading] = useState(false)  // ✅ FIX #6: Local loading state for scans
   const fileInputRef = useRef(null)
   const { showToast } = useToast()
 
@@ -15,6 +16,7 @@ const Scanner = ({ onScan, isLoading }) => {
       return
     }
 
+    setScanLoading(true)  // ✅ Set local loading state
     try {
       const response = await axios.post('/api/console/scan', {
         text,
@@ -23,6 +25,8 @@ const Scanner = ({ onScan, isLoading }) => {
       showToast('Scan completato', 'success')
     } catch (error) {
       showToast(error.response?.data?.detail || 'Errore durante lo scan', 'error')
+    } finally {
+      setScanLoading(false)  // ✅ Always reset loading state on error or success
     }
   }
 
@@ -33,6 +37,7 @@ const Scanner = ({ onScan, isLoading }) => {
       return
     }
 
+    setScanLoading(true)  // ✅ Set local loading state
     try {
       const formData = new FormData()
       formData.append('files', uploadedFile)
@@ -45,6 +50,8 @@ const Scanner = ({ onScan, isLoading }) => {
       setUploadedFile(null)
     } catch (error) {
       showToast(error.response?.data?.detail || 'Errore durante lo scan', 'error')
+    } finally {
+      setScanLoading(false)  // ✅ Always reset loading state on error or success
     }
   }
 
@@ -88,7 +95,7 @@ const Scanner = ({ onScan, isLoading }) => {
             rows={6}
             maxLength={10000}
             className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-            disabled={isLoading}
+            disabled={isLoading || scanLoading}
             aria-label="Testo da pseudonimizzare"
           />
           <div className="flex justify-between items-center">
@@ -97,10 +104,10 @@ const Scanner = ({ onScan, isLoading }) => {
             </span>
             <button
               type="submit"
-              disabled={isLoading || !text.trim()}
+              disabled={isLoading || scanLoading || !text.trim()}
               className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {isLoading ? 'Scansionando...' : 'Scansiona'}
+              {isLoading || scanLoading ? 'Scansionando...' : 'Scansiona'}
             </button>
           </div>
         </form>
@@ -126,7 +133,7 @@ const Scanner = ({ onScan, isLoading }) => {
             accept=".pdf,.docx,.xlsx,.jpg,.png,.txt,.csv,.md"
             onChange={(e) => setUploadedFile(e.target.files?.[0] || null)}
             className="hidden"
-            disabled={isLoading}
+            disabled={isLoading || scanLoading}
             aria-label="Seleziona file"
           />
           <div className="space-y-2">
@@ -149,10 +156,10 @@ const Scanner = ({ onScan, isLoading }) => {
         <div className="mt-4">
           <button
             onClick={handleFileScan}
-            disabled={isLoading || !uploadedFile}
+            disabled={isLoading || scanLoading || !uploadedFile}
             className="w-full px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {isLoading ? 'Scansionando...' : 'Scansiona File'}
+            {isLoading || scanLoading ? 'Scansionando...' : 'Scansiona File'}
           </button>
         </div>
       </div>
