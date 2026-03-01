@@ -22,16 +22,26 @@ from app.api.settings_routes import router as settings_router
 from app.core.config import SERVER_HOST, SERVER_PORT, TEMP_BASE_DIR
 from app.core.batch_manager import start_cleanup_scheduler
 from app.core.auth import (
-    AUTH_ENABLED,
     auth_uses_default_password,
     extract_token_from_request,
     validate_session,
 )
+from app.core.profiles import get_config, print_profile_info
 
-# Configurazione logging: nessun valore sensibile nei log
+# Get deployment profile configuration
+_profile_config = get_config()
+
+# Configure logging based on deployment profile
+log_level = getattr(logging, _profile_config.log_level.upper(), logging.INFO)
+log_format = (
+    "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    if not _profile_config.json_logs
+    else "%(message)s"  # JSON logging handled by structured logging library
+)
+
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    level=log_level,
+    format=log_format,
     handlers=[logging.StreamHandler(sys.stdout)],
 )
 logger = logging.getLogger(__name__)
@@ -42,11 +52,10 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    logger.info("=" * 60)
+    print_profile_info()
     logger.info("Local Pseudonymization Tool — vNext v2.0.0")
     logger.info("Server in ascolto su: http://%s:%s", SERVER_HOST, SERVER_PORT)
     logger.info("SICUREZZA: Nessuna chiamata di rete esterna verra' effettuata.")
-    logger.info("=" * 60)
     TEMP_BASE_DIR.mkdir(parents=True, exist_ok=True)
     try:
         from app.core.policies import save_default_policies
@@ -61,7 +70,7 @@ async def lifespan(app: FastAPI):
         logger.warning("Errore nel caricamento dei dizionari: %s", e)
     start_cleanup_scheduler()
     logger.info("Cleanup scheduler avviato.")
-    if AUTH_ENABLED:
+    if _profile_config.auth_enabled:
         logger.info("Autenticazione API: ATTIVA")
         if auth_uses_default_password():
             logger.warning("AUTH_PASSWORD non impostata: uso password default (NON SICURO).")
@@ -74,33 +83,32 @@ async def lifespan(app: FastAPI):
 
 # ─── Applicazione FastAPI ─────────────────────────────────────────────────────
 
+# Determine docs_url based on profile (disable in production)
+docs_url = "/api/docs" if _profile_config.swagger_ui_enabled else None
+
 app = FastAPI(
     title="Local Pseudonymization Tool",
     description="Tool locale per la pseudonimizzazione di documenti sensibili. Solo uso locale.",
     version="2.0.0-vNext",
-    docs_url="/api/docs",  # Swagger UI disponibile solo in locale
+    docs_url=docs_url,
     redoc_url=None,
     lifespan=lifespan,
 )
 
-# CORS: solo localhost (per sicurezza)
+# CORS: configured per deployment profile
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        f"http://127.0.0.1:{SERVER_PORT}",
-        f"http://localhost:{SERVER_PORT}",
-        "http://127.0.0.1:5173",
-        "http://localhost:5173",
-    ],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "DELETE"],
+    allow_origins=_profile_config.cors_origins,
+    allow_credentials=_profile_config.cors_allow_credentials,
+    allow_methods=_profile_config.cors_allow_methods,
     allow_headers=["*"],
 )
 
 
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
-    if not AUTH_ENABLED:
+    # Skip auth check if disabled in profile
+    if not _profile_config.auth_enabled:
         return await call_next(request)
 
     path = request.url.path

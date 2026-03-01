@@ -3,10 +3,20 @@ import hashlib
 import hmac
 import os
 import secrets
-import sys
 import threading
 import time
 from typing import Optional, Tuple
+
+# Lazy import to avoid circular dependency
+_config_cache = None
+
+def _get_config():
+    """Lazy-load config to avoid circular imports."""
+    global _config_cache
+    if _config_cache is None:
+        from app.core.profiles import get_config
+        _config_cache = get_config()
+    return _config_cache
 
 
 def _env_flag(name: str, default: bool = False) -> bool:
@@ -18,16 +28,14 @@ def _env_flag(name: str, default: bool = False) -> bool:
 
 SESSION_COOKIE_NAME = os.environ.get("AUTH_SESSION_COOKIE", "pseudonymizer_session")
 SESSION_TTL_SECONDS = int(os.environ.get("AUTH_SESSION_TTL_SECONDS", "28800"))
-SESSION_COOKIE_SECURE = _env_flag("AUTH_SESSION_COOKIE_SECURE", default=True)
 ADMIN_USERNAME = os.environ.get("AUTH_USERNAME", "admin")
 DEFAULT_ADMIN_PASSWORD = "admin123!"
 
-_running_under_pytest = (
-    os.environ.get("PYTEST_CURRENT_TEST") is not None
-    or "pytest" in sys.modules
-)
-_auth_enabled_default = "false" if _running_under_pytest else "true"
-AUTH_ENABLED = _env_flag("AUTH_ENABLED", default=(_auth_enabled_default == "true"))
+# Get cookie secure flag from deployment profile
+SESSION_COOKIE_SECURE = _get_config().cookie_secure
+
+# Get auth enabled flag from deployment profile (no pytest check inline)
+AUTH_ENABLED = _get_config().auth_enabled
 
 _secret = os.environ.get("AUTH_SECRET") or secrets.token_urlsafe(48)
 _password_env = os.environ.get("AUTH_PASSWORD", DEFAULT_ADMIN_PASSWORD)
