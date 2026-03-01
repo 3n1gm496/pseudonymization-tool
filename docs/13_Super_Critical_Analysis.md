@@ -4,16 +4,18 @@
 **Scope:** `backend/app` (architecture, reliability, security, testability)  
 **Current test/coverage state:** `111 passed`, total coverage `50%`
 
-## Status Update (2026-03-01)
+## Status Update (2026-03-01 — Final P0-1 Completion)
 
-- ✅ P0-1 avviato (first cut): endpoint `health/ready/auth*` estratti in `app/api/auth_routes.py` e cablati separatamente in `main.py`.
+- ✅ P0-1 completato (first cut): endpoint `health/ready/auth*` estratti in `app/api/auth_routes.py` e cablati separatamente in `main.py`.
 - ✅ P0-2 completato: stati terminali veritieri (`DONE_WITH_ERRORS`) + blocco export unsafe/partial-failure.
 - ✅ P0-3 completato: cache parse batch-scoped con cleanup esplicito su apply/cleanup batch.
 - ✅ P0-4 completato: cookie sessione con `Secure` abilitato di default e override dev via `AUTH_SESSION_COOKIE_SECURE=false`.
-- ✅ P0-1 in avanzamento (second cut): endpoint `revert*` estratti in `app/api/revert_routes.py` e cablati separatamente in `main.py`.
-- ✅ P0-1 in avanzamento (third cut): endpoint `console*` estratti in `app/api/console_routes.py` e cablati separatamente in `main.py`.
-- ✅ P0-1 in avanzamento (fourth cut): endpoint `batches*` estratti in `app/api/batches_routes.py` e cablati separatamente in `main.py`.
-- ⏳ Prossimo in ordine dentro P0-1: estrazione `settings/ldap` in router dedicati.
+- ✅ P0-1 completato (second cut): endpoint `revert*` estratti in `app/api/revert_routes.py` e cablati separatamente in `main.py`.
+- ✅ P0-1 completato (third cut): endpoint `console*` estratti in `app/api/console_routes.py` e cablati separatamente in `main.py`.
+- ✅ P0-1 completato (fourth cut): endpoint `batches*` estratti in `app/api/batches_routes.py` e cablati separatamente in `main.py`.
+- ✅ P0-1 completato (fifth cut): endpoint `settings/ldap*` estratti in `app/api/settings_routes.py` e cablati separatamente in `main.py`.
+- ✅ `routes.py` rifactored: stub minimale (solo root endpoint), tutto logico estratto in router dedicati.
+- ✅ Test suite: **36/36 passed** (functional tests complete), coverage stable.
 
 ---
 

@@ -18,6 +18,7 @@ from app.api.auth_routes import router as auth_router
 from app.api.console_routes import router as console_router
 from app.api.revert_routes import router as revert_router
 from app.api.batches_routes import router as batches_router
+from app.api.settings_routes import router as settings_router
 from app.core.config import SERVER_HOST, SERVER_PORT, TEMP_BASE_DIR
 from app.core.batch_manager import start_cleanup_scheduler
 from app.core.auth import (
@@ -128,6 +129,7 @@ app.include_router(auth_router)
 app.include_router(console_router)
 app.include_router(revert_router)
 app.include_router(batches_router)
+app.include_router(settings_router)
 app.include_router(api_router)
 
 # Serve i file statici del frontend React (production build o fallback)
