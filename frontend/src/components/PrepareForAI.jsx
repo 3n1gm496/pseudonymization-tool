@@ -5,6 +5,7 @@ import { copyToClipboard, downloadTextFile } from '../utils/text-export'
 const PrepareForAI = ({ batch, pseudonymizedText, isLoading, setIsLoading, showToast }) => {
   const [passphrase, setPassphrase] = useState('')
   const [showPassphrase, setShowPassphrase] = useState(false)
+  const [downloadingMapping, setDownloadingMapping] = useState(false)
 
   // Popola la passphrase dal batch quando il componente monta o il batch cambia
   useEffect(() => {
@@ -12,7 +13,6 @@ const PrepareForAI = ({ batch, pseudonymizedText, isLoading, setIsLoading, showT
       setPassphrase(batch.passphrase)
     }
   }, [batch?.passphrase])
-  const [downloadingMapping, setDownloadingMapping] = useState(false)
 
   const handleDownloadMapping = async () => {
     if (!batch?.batch_id) {
@@ -57,7 +57,7 @@ const PrepareForAI = ({ batch, pseudonymizedText, isLoading, setIsLoading, showT
     showToast('Testo scaricato', 'success')
   }
 
-  if (!batch || !pseudonymizedText) {
+  if (!batch) {
     return (
       <div className="w-full mx-auto p-6 bg-white dark:bg-slate-800 rounded-lg shadow">
         <h2 className="text-xl font-semibold mb-2">Prepara per AI</h2>
@@ -67,6 +67,9 @@ const PrepareForAI = ({ batch, pseudonymizedText, isLoading, setIsLoading, showT
       </div>
     )
   }
+
+  // Per file-based batch, pseudonymizedText sarà vuoto ma dobbiamo comunque mostrare PrepareForAI
+  const isTextInput = batch?.is_text_input
 
   return (
     <div className="w-full mx-auto p-6 space-y-6">
@@ -82,16 +85,17 @@ const PrepareForAI = ({ batch, pseudonymizedText, isLoading, setIsLoading, showT
         </ol>
       </div>
 
-      {/* TESTO PSEUDONIMIZZATO */}
-      <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-6">
-        <h3 className="text-lg font-semibold mb-3">Testo pseudonimizzato per AI</h3>
-        <textarea
-          readOnly
-          value={pseudonymizedText}
-          rows={12}
-          className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-900 font-mono text-sm"
-        />
-        <div className="flex gap-3 mt-4">
+      {/* TESTO PSEUDONIMIZZATO - Solo per testo inline */}
+      {isTextInput && pseudonymizedText && (
+        <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold mb-3">Testo pseudonimizzato per AI</h3>
+          <textarea
+            readOnly
+            value={pseudonymizedText}
+            rows={12}
+            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-900 font-mono text-sm"
+          />
+          <div className="flex gap-3 mt-4">
           <button
             onClick={handleCopyText}
             disabled={isLoading}
@@ -108,6 +112,7 @@ const PrepareForAI = ({ batch, pseudonymizedText, isLoading, setIsLoading, showT
           </button>
         </div>
       </div>
+      )}
 
       {/* MAPPING.ENC */}
       <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-6">
