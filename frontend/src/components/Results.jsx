@@ -1,6 +1,7 @@
 import React from 'react'
 import axios from 'axios'
 import { useToast } from '../hooks/useToast'
+import PrepareForAI from './PrepareForAI'
 
 const Results = ({ batch, pseudonymizedText, onNewScan }) => {
   const { showToast } = useToast()
@@ -120,6 +121,15 @@ const Results = ({ batch, pseudonymizedText, onNewScan }) => {
           </div>
         </div>
       </div>
+
+      {/* Sezione Prepara per AI - ora integrata nel flusso principale */}
+      <PrepareForAI 
+        batch={batch} 
+        pseudonymizedText={pseudonymizedText} 
+        isLoading={false} 
+        setIsLoading={() => {}} 
+        showToast={showToast} 
+      />
     </div>
   )
 }

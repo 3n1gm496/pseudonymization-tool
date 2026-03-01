@@ -1,10 +1,17 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import { copyToClipboard, downloadTextFile } from '../utils/text-export'
 
 const PrepareForAI = ({ batch, pseudonymizedText, isLoading, setIsLoading, showToast }) => {
   const [passphrase, setPassphrase] = useState('')
   const [showPassphrase, setShowPassphrase] = useState(false)
+
+  // Popola la passphrase dal batch quando il componente monta o il batch cambia
+  useEffect(() => {
+    if (batch?.passphrase) {
+      setPassphrase(batch.passphrase)
+    }
+  }, [batch?.passphrase])
   const [downloadingMapping, setDownloadingMapping] = useState(false)
 
   const handleDownloadMapping = async () => {
@@ -129,7 +136,7 @@ const PrepareForAI = ({ batch, pseudonymizedText, isLoading, setIsLoading, showT
             value={passphrase}
             readOnly
             className="flex-1 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-900 font-mono"
-            placeholder="Carica il batch per vedere la passphrase"
+            placeholder="La passphrase verrà visualizzata automaticamente"
           />
           <button
             onClick={() => setShowPassphrase(!showPassphrase)}
