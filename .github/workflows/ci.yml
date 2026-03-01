@@ -61,7 +61,31 @@ jobs:
     - name: Run tests with pytest
       run: |
         cd backend
-        pytest tests/ -v --cov=app --cov-report=xml --cov-report=html --cov-report=term-missing
+        pytest tests/ -v --cov=app --cov-report=xml --cov-report=html --cov-report=term-missing --cov-fail-under=50
+
+    - name: Coverage regression check for critical modules
+      run: |
+        cd backend
+        # Check coverage for critical modules (fail if below thresholds)
+        pytest tests/ --cov=app.core.pipeline --cov-report=term --cov-fail-under=20 -q
+        pytest tests/ --cov=app.core.safety --cov-report=term --cov-fail-under=20 -q
+        pytest tests/ --cov=app.pseudonymizer.transformer --cov-report=term --cov-fail-under=35 -q
+        pytest tests/ --cov=app.core.exceptions --cov-report=term --cov-fail-under=55 -q
+      continue-on-error: false
+
+    - name: Check for untyped broad exceptions in critical paths
+      run: |
+        # Fail if "except Exception" found without comment justification in critical modules
+        echo "Checking for broad exceptions in critical modules..."
+        BROAD_EXCEPTIONS=$(grep -rn "except Exception" backend/app/core/pipeline.py backend/app/pseudonymizer/transformer.py backend/app/core/safety.py | grep -v "#" | grep -v "except Exception as" || true)
+        if [ -n "$BROAD_EXCEPTIONS" ]; then
+          echo "❌ Found untyped broad exceptions in critical modules:"
+          echo "$BROAD_EXCEPTIONS"
+          echo "Please use specific exception types or add justification comment."
+          exit 1
+        fi
+        echo "✅ No untyped broad exceptions found in critical modules"
+      continue-on-error: false
 
     - name: Run API contract tests
       run: |
