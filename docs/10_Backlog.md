@@ -66,5 +66,5 @@ Questo documento rappresenta il backlog di lavoro per lo sviluppo dell'MVP del L
 | **S-01** | Garantire il binding del server su `127.0.0.1` | **Massima** | - Il server Uvicorn è configurato per ascoltare solo sull'interfaccia di loopback. |
 | **S-02** | Implementare la pulizia dei file temporanei | **Massima** | - La directory del batch viene eliminata al termine del processo, sia in caso di successo che di errore. |
 | **S-03** | Sanitizzare i log | **Alta** | - Nessun valore di dato sensibile originale viene scritto nei log dell'applicazione. |
-| **S-04** | Creare gli script di avvio (`.bat`, `.sh`) | **Alta** | - Lo script `start.bat` per Windows installa le dipendenze in un `venv` e avvia l'applicazione. - Viene fornito uno script equivalente per Linux/macOS. |
+| **S-04** | Creare interfaccia di avvio unificata | **Alta** | - Makefile con comandi standard (`make start`, `make dev`, `make test`) come interfaccia primaria. - Docker Compose per deployment containerizzato. - Script legacy in `scripts/legacy/` per ambienti air-gapped senza Docker. |
 | **S-05** | Scrivere la documentazione utente (README) | **Alta** | - Il file `README.md` contiene istruzioni chiare per l'installazione, l'uso, la configurazione dei dizionari e le limitazioni note. |

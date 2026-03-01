@@ -97,7 +97,9 @@ jobs:
       run: |
         test -f backend/requirements.txt
         test -f frontend/index.html
-        test -f start.sh
+        test -f Makefile
+        test -f docker-compose.yml
+        test -f scripts/legacy/start.sh
         test -f README.md
 
     - name: Check for sensitive data

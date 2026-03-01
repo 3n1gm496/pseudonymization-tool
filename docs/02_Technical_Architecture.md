@@ -88,14 +88,17 @@ La pipeline è un insieme di moduli Python orchestrati dal backend. Per ogni fil
 
 ## 4. Packaging e Deployment (MVP)
 
-Il rilascio per Windows consisterà in un archivio ZIP contenente:
+Il rilascio consiste in:
 
-- L'interprete Python embedded o un link per l'installazione.
-- La cartella con il codice sorgente dell'applicazione.
-- Uno script `start.bat` che:
-    1.  Crea un ambiente virtuale Python (`venv`).
-    2.  Installa le dipendenze da un file `requirements.txt` locale.
-    3.  Avvia il server Uvicorn/FastAPI.
-    4.  Apre l'URL `http://127.0.0.1:8000` nel browser di default dell'utente.
-- Un file `README.md` con istruzioni dettagliate.
-- Una cartella `config/` con esempi di dizionari custom.
+**Metodo Raccomandato: Docker**
+- Dockerfile multi-stage (frontend React + backend FastAPI)
+- docker-compose.yml per orchestrazione
+- Makefile con comandi unificati (`make start`, `make dev`, `make test`)
+- README.md con quick start Docker-first
+
+**Metodo Alternativo: Installazione Locale (Air-gapped)**
+- Script in `scripts/legacy/` per ambienti senza Docker:
+  - `start.sh` / `start.bat`: Crea venv, installa dipendenze, avvia server
+  - `prepare_offline.sh` / `.bat`: Prepara wheelhouse per installazione offline
+- Documentazione dedicata in `scripts/legacy/README.md`
+- Cartella `config/` con dizionari custom
