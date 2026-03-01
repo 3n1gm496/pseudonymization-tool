@@ -59,3 +59,4 @@ htmlcov/
 # Data directories
 data/temp/
 data/results/
+ANALYSIS_REPORT.md
