@@ -11,12 +11,18 @@ Tests the full cycle:
 
 import asyncio
 import json
+import os
 from pathlib import Path
 
 import pytest
 import requests
 
 BASE_URL = "http://localhost:8000/api"
+
+pytestmark = pytest.mark.skipif(
+    os.getenv("RUN_LIVE_E2E", "0") != "1",
+    reason="Live E2E tests disabled (set RUN_LIVE_E2E=1 to enable)",
+)
 
 
 def get_authenticated_session():
