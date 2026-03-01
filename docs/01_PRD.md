@@ -1,8 +1,6 @@
-# PRD (Product Requirements Document) — Local Pseudonymization Tool
+# Product Requirements Document (PRD) — Local Pseudonymization Tool
 
-**Autore:** Manus AI
-**Versione:** 1.0 (MVP)
-**Data:** 2026-02-25
+Local anonymization tool for secure data processing before AI analysis.
 
 ---
 

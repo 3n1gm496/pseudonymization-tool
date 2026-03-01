@@ -1,12 +1,8 @@
-# AI Integration e Flussi di Revert
+# AI Integration and Revert Flows
 
-**Documento:** Guida per l'integrazione con AI e decifratura di risposte  
-**Versione:** 4.1+  
-**Target Audience:** Data Engineers, Security Analysts, AI Integration Developers
+Workflows for preparing pseudonymized data for external AI services and reverting encrypted mappings.
 
----
-
-## 📌 Indice
+## Table of Contents
 
 1. [Overview](#overview)
 2. [Flusso "Prepara per AI"](#flusso-prepara-per-ai)
@@ -20,28 +16,28 @@
 
 ## Overview
 
-La **pseudonimizzazione** trasforma dati sensibili in valori placeholder (es: `mario.rossi@acme.com` → `EMAIL_001`). Il Pseudonymization Tool fornisce tre flussi per lavorare con AI:
+Pseudonymization transforms sensitive data into placeholder values (e.g., `mario.rossi@acme.com` → `EMAIL_001`). The tool provides three workflows:
 
-| Flusso | Quando usarlo | Input | Output |
-|--------|--------------|-------|--------|
-| **Prepara per AI** | Generi testo pseudonimo da inviare a modello AI | Testo pseudonimo + passphrase | Testo + mapping.enc |
-| **Decifera Risposta** | La ricezione una risposta dall'AI (contiene pseudonimi) | Testo AI + mapping.enc + passphrase | Testo decifrato originale |
-| **Revert Batch ZIP** | Devi invertire l'intera pseudonimizzazione di un batch | ZIP da batch | ZIP revertito |
+| Workflow | When to Use | Input | Output |
+|----------|-------------|-------|--------|
+| **Prepare for AI** | Export pseudonymized text for external AI model | Pseudonymized text + passphrase | Encrypted mapping file |
+| **Decrypt AI Response** | Process AI response containing your pseudonyms | AI output + mapping.enc + passphrase | Decrypted original text |
+| **Revert Batch** | Fully reverse pseudonymization of a batch | Batch ZIP file | Reverted ZIP file |
 
-### Caso d'uso tipico:
+### Typical Workflow
 
 ```
-1. Carica dati sensibili nel Tool
+1. Upload sensitive data to the tool
    ↓
-2. Seleziona "Pseudonimizza" → scarica testo pseudonimo + mapping.enc
+2. Select "Pseudonymize" → download pseudonymized text + mapping.enc
    ↓
-3. Invia testo pseudonimo all'AI (es: ChatGPT, Claude)
+3. Send pseudonymized text to external AI (e.g., ChatGPT, Claude)
    ↓
-4. L'AI risponde con testo che contiene i tuoi pseudonimi
+4. Receive AI response containing your pseudonyms
    ↓
-5. Usa "Decifera Risposta AI" con mapping.enc + passphrase
+5. Use "Decrypt AI Response" with mapping.enc + passphrase
    ↓
-6. Ricevi risposta originaletxt (con dati originali reintegrati)
+6. Receive decrypted output with original data restored
 ```
 
 ---
@@ -56,9 +52,9 @@ La **pseudonimizzazione** trasforma dati sensibili in valori placeholder (es: `m
 
 ### Step-by-step
 
-#### Passo 1: Seleziona "Prepara per AI" nel Menu
+#### Step 1: Select "Prepare for AI" from Menu
 
-Nel **RevertPanel** (sezione destra), clicca su **"Prepara per AI"**.
+In the **Revert Panel** (right section), click **"Prepare for AI"**.
 
 ```
 ┌─ Pseudonymization Tool ─────────────────────┐
@@ -73,34 +69,34 @@ Nel **RevertPanel** (sezione destra), clicca su **"Prepara per AI"**.
 └─────────────────────────────────────────────┘
 ```
 
-#### Passo 2: Seleziona un Batch Completato
+#### Step 2: Select a Completed Batch
 
-Il tab "Prepara per AI" mostra un selector:
+The "Prepare for AI" tab displays a selector:
 ```
-Seleziona batch pseudonimizzato
-[Dropdown con elenco batch]
+Select pseudonymized batch
+[Dropdown with batch list]
 ```
 
-**Seleziona il batch** su cui hai già applicato la pseudonimizzazione.
+**Select the batch** that has already been pseudonymized.
 
-#### Passo 3: Visualizza il Testo Pseudonimizzato
+#### Step 3: View Pseudonymized Text
 
-Una volta selezionato il batch, vedrai:
+Once the batch is selected, you will see:
 
 ```
-┌─ TESTO PSEUDONIMIZZATO ─────────────────────┐
+┌─ PSEUDONYMIZED TEXT ────────────────────────┐
 │                                             │
-│ L'utente EMAIL_001 ha creato un progetto    │
-│ CUSTOM_001 presso IPV4_001 il 2026-02-28   │
+│ User EMAIL_001 created project CUSTOM_001   │
+│ on IPV4_001 at 2026-02-28                  │
 │                                             │
-│ [Copia negli Appunti]                       │
+│ [Copy to Clipboard]                         │
 │                                             │
 └─────────────────────────────────────────────┘
 ```
 
-Clicca **"Copia negli Appunti"** per copiare il testo.
+Click **"Copy to Clipboard"** to copy the text.
 
-#### Passo 4: Scarica il File Mapping Cifrato
+#### Step 4: Download Encrypted Mapping File
 
 Nella sezione seguente, vedrai:
 
@@ -119,101 +115,101 @@ Nella sezione seguente, vedrai:
 
 Clicca **"⬇️ Scarica Mapping"** e salva il file. **Conservalo al sicuro.**
 
-#### Passo 5: Copia la Passphrase di Decifrazione
+#### Step 5: Copy the Decryption Passphrase
 
-Infine, vedrai la passphrase che hai inserito durante la pseudonimizzazione:
+Finally, you will see the passphrase you entered during pseudonymization:
 
 ```
-┌─ PASSPHRASE DI DECIFRAZIONE ─────────────────┐
+┌─ DECRYPTION PASSPHRASE ──────────────────────┐
 │                                             │
 │ SuperSecurePassword123!@#                   │
 │                                             │
-│ [Copia Passphrase]                          │
+│ [Copy Passphrase]                           │
 │                                             │
-│ ⚠️ Conserva questa passphrase al sicuro:    │
-│ servirà per decifrare il mapping.enc        │
+│ ⚠️  Secure this passphrase carefully:       │
+│ You will need it to decrypt the mapping.enc │
 │                                             │
-└────────────────────────────────────────────┘
+└─────────────────────────────────────────────┘
 ```
 
-**NON inviare la passphrase all'AI.**
+**Do NOT send the passphrase to external services.**
 
-### Riepilogo "Prepara per AI"
+### Summary: Prepare for AI Workflow
 
-Ora hai tre artefatti:
-1. **Testo pseudonimizzato** - Da inviare all'AI
-2. **mapping.enc** - File cifrato (conservare al sicuro)
-3. **Passphrase** - Necessaria per decifrare (conservare al sicuro)
+You now have three artifacts:
+1. **Pseudonymized text** — Send to external AI
+2. **mapping.enc** — Encrypted mapping file (store securely)
+3. **Passphrase** — Required to decrypt mapping (store securely)
 
 ---
 
-## Flusso "Decifera Risposta AI"
+## Decrypt AI Response
 
-### Quando usare questo flusso
+### When to Use This Workflow
 
-- **Scenario:** L'AI ha processato il tuo testo pseudonimizzato e ha risposto (es: "EMAIL_001 ha ricevuto la conferma il 2026-02-28")
-- **Problema:** La risposta contiene pseudonimi, non dati leggibili
-- **Soluzione:** Usa il mapping.enc per reintegrar i dati originali
+- **Scenario:** The AI has processed your pseudonymized text and responded (e.g., "EMAIL_001 received confirmation on 2026-02-28")
+- **Problem:** The response contains pseudonyms, not readable original data
+- **Solution:** Use mapping.enc with your passphrase to restore original data
 
-### Step-by-step
+### Step-by-Step
 
-#### Passo 1: Seleziona "Decifera Risposta AI"
+#### Step 1: Select "Decrypt AI Response"
 
-Nel **RevertPanel**, clicca su **"Decifera Risposta AI"**.
+In the **Revert Panel**, click on **"Decrypt AI Response"**.
 
-#### Passo 2: Carica il File mapping.enc
+#### Step 2: Upload mapping.enc File
 
-Vedrai una sezione:
+You will see a section:
 ```
-┌─ CARICA FILE MAPPING (CIFRATO) ──────────────┐
+┌─ UPLOAD ENCRYPTED MAPPING FILE──────────────┐
 │                                             │
-│ [Scegli file mapping.enc...]                │
+│ [Choose mapping.enc file...]                │
 │                                             │
-│ Accettati: *.enc                            │
+│ Accepted: *.enc                             │
 │                                             │
 └─────────────────────────────────────────────┘
 ```
 
-Clicca e **seleziona il file mapping.enc** che hai scaricato in "Prepara per AI".
+Click and **select the mapping.enc file** you downloaded from "Prepare for AI".
 
-#### Passo 3: Inserisci la Passphrase
+#### Step 3: Enter Decryption Passphrase
 
 ```
-┌─ PASSPHRASE ─────────────────────────────────┐
+┌─ DECRYPTION PASSPHRASE ───────────────────────┐
 │                                             │
-│ Inserisci passphrase di decifrazione:       │
-│ [________________________] (nascosta)        │
+│ Enter decryption passphrase:                │
+│ [________________________] (hidden)          │
 │                                             │
 └─────────────────────────────────────────────┘
 ```
 
-Incolla la passphrase che avevi salvato.
+Paste the passphrase you saved earlier.
 
-#### Passo 4: Incolla la Risposta dell'AI
+#### Step 4: Paste AI Response Text
 
 ```
-┌─ TESTO PSEUDONIMIZZATO (RISPOSTA AI)──────────┐
+┌─ PSEUDONYMIZED AI RESPONSE ──────────────────┐
 │                                             │
-│ Incolla la risposta dell'AI:                │
+│ Paste AI response:                          │
 │                                             │
 │ ┌──────────────────────────────────────┐    │
-│ │ EMAIL_001 ha ricevuto la conferma    │    │
-│ │ il 2026-02-28 presso CUSTOM_001      │    │
+│ │ EMAIL_001 received confirmation      │    │
+│ │ on 2026-02-28 at CUSTOM_001          │    │
 │ └──────────────────────────────────────┘    │
 │                                             │
 └─────────────────────────────────────────────┘
 ```
 
-#### Passo 5: Visualizza Anteprima (Preview)
+#### Step 5: Preview Decryption
 
-Clicca **"Anteprima Decifratura"**:
+Click **"Preview Decryption"**:
 
 ```
-┌─ ANALISI PREVIEW ────────────────────────────┐
+┌─ PREVIEW ANALYSIS ────────────────────────────┐
 │                                             │
-│ Mappature nel file:   3 entità              │
-│ Caratteri testo:      147                   │
-│ Pseudonimi trovati:   2 match               │
+│ Mappings in file:        3 entities         │
+│ Text characters:         147                 │
+│ Pseudonyms found:        2 matches           │
 │                                             │
 │ [EMAIL_001 → mario.rossi@acme.com]          │
 │ [CUSTOM_001 → ACME Corp]                    │
@@ -221,275 +217,278 @@ Clicca **"Anteprima Decifratura"**:
 └─────────────────────────────────────────────┘
 ```
 
-Se il preview mostra i tuoi pseudonimi, significa che la passphrase è corretta. ✓
+If the preview shows your pseudonyms correctly mapped, your passphrase is correct. ✓
 
-#### Passo 6: Applica la Decifratura
+#### Step 6: Apply Decryption
 
-Clicca **"Decifera Risposta"**:
+Click **"Decrypt Response"**:
 
 ```
-┌─ RISPOSTA DECIFRATA ─────────────────────────┐
+┌─ DECRYPTED RESPONSE ─────────────────────────┐
 │                                             │
-│ mario.rossi@acme.com ha ricevuto la        │
-│ conferma il 2026-02-28 presso ACME Corp    │
+│ mario.rossi@acme.com received confirmation  │
+│ on 2026-02-28 at ACME Corp                  │
 │                                             │
-│ [Copia negli Appunti]                       │
+│ [Copy to Clipboard]                         │
 │                                             │
 └─────────────────────────────────────────────┘
 ```
 
-✓ Adesso hai la risposta dell'AI con i dati originali reintegrati!
+✓ You now have the AI response with original data fully restored!
 
 ---
 
-## Flusso "Revert Batch ZIP"
+## Revert Batch
 
-### Quando usare questo flusso
+### When to Use This Workflow
 
-- **Scenario:** Hai un file ZIP di un batch pseudonimizzato e vuoi invertire completamente il processo
-- **Problema:** Hai molti file in ZIP e vuoi re-originarli tutti in una volta
-- **Soluzione:** Carica lo ZIP + mapping.enc + passphrase
+- **Scenario:** You have a ZIP file from a pseudonymized batch and want to fully reverse the process
+- **Problem:** Multiple files in ZIP need to be de-pseudonymized at once
+- **Solution:** Upload ZIP + mapping.enc + passphrase
 
-### Step-by-step
+### Step-by-Step
 
-#### Passo 1: Seleziona "Revert Batch ZIP"
+#### Step 1: Select "Revert Batch"
 
-Nel **RevertPanel**, clicca su **"Revert Batch ZIP"**.
+In the **Revert Panel**, click on **"Revert Batch"**.
 
-#### Passo 2: Carica lo ZIP di Batch
+#### Step 2: Upload Batch ZIP
 
 ```
-┌─ CARICA BATCH ZIP ───────────────────────────┐
+┌─ UPLOAD BATCH ZIP ───────────────────────────┐
 │                                             │
-│ [Scegli file batch ZIP...]                  │
+│ [Choose batch ZIP file...]                  │
 │                                             │
-│ File ZIP deve contenere:                    │
-│ - files/ (i file pseudonimizzati)           │
-│ - mapping.enc (il file di mapping)          │
+│ ZIP must contain:                           │
+│ - files/ (pseudonymized files)              │
+│ - mapping.enc (mapping file)                │
 │                                             │
 └─────────────────────────────────────────────┘
 ```
 
-Seleziona lo ZIP scaricato dalla UI dopo l'apply.
+Select the ZIP file downloaded from the UI after pseudonymization.
 
-#### Passo 3: Inserisci Passphrase
+#### Step 3: Enter Passphrase
 
-Come nel flusso "Decifera Risposta", inserisci la passphrase.
+As in the "Decrypt AI Response" workflow, enter your passphrase.
 
-#### Passo 4: Visualizza Preview
+#### Step 4: Preview Revert Results
 
 ```
 ┌─ ANTEPRIMA REVERT ───────────────────────────┐
 │                                             │
-│ File ZIP scansionati:   1                   │
-│ File di testo trovati:  1                   │
-│ Pseudonimi da revert:   3                   │
-│ Sostituzioni previste:  5                   │
+```
+┌─ REVERT PREVIEW ──────────────────────────────┐
+│                                             │
+│ ZIPfiles scanned:        1                  │
+│ Text files found:        1                  │
+│ Pseudonyms to revert:    3                  │
+│ Replacements planned:    5                  │
 │                                             │
 └─────────────────────────────────────────────┘
 ```
 
-#### Passo 5: Applica Revert
+#### Step 5: Apply Revert
 
-Clicca **"Applica Revert"** → scarica lo ZIP fatto di nuovo con i dati originali.
+Click **"Apply Revert"** → download new ZIP with original data restored.
 
 ---
 
-## Sicurezza e Passphrase
+## Security and Passphrase
 
-### Come Scegliere una Passphrase Robusta
+### Choosing a Strong Passphrase
 
-La passphrase è la **chiave che cifra il file mapping.enc**. Se qualcuno ruba il mapping.enc, senza la passphrase non può leggerlo.
+Your passphrase is the **key that encrypts mapping.enc**. If someone obtains mapping.enc without your passphrase, they cannot read it.
 
-#### ✅ BUONE passphrase
-
-```
-SuperSecurePassword123!@#        (lunghezza: 27, entropia: 4.2 bit/char)
-MyC@t'sNameIs$Fluffy#2026      (lunghezza: 30, entropia: 4.8 bit/char)
-!@#$%^&*()_+ABCDEFGH_12345     (lunghezza: 32, entropia: 5.1 bit/char)
-```
-
-#### ❌ CATTIVE passphrase
+#### ✅ STRONG passphrases
 
 ```
-password                          (too weak, dictionary word)
-12345678                          (only numbers, low entropy)
+SuperSecurePassword123!@#        (length: 27, entropy: 4.2 bits/char)
+MyC@t'sNameIs$Fluffy#2026      (length: 30, entropy: 4.8 bits/char)
+!@#$%^&*()_+ABCDEFGH_12345     (length: 32, entropy: 5.1 bits/char)
+```
+
+#### ❌ WEAK passphrases
+
+```
+password                          (dictionary word, very weak)
+12345678                          (numbers only, low entropy)
 mario                             (single name, low entropy)
 ```
 
-#### Raccomandazioni
+#### Recommendations
 
-1. **Lunghezza minima:** 12 caratteri (consigliato: 20+)
-2. **Caratteri misti:** maiuscole, minuscole, numeri, simboli
-3. **No parole comuni:** evita nomi, date di compleanno, parole di dizionario
-4. **Unica per batch:** usa una passphrase diversa per ogni batch sensibile
-5. **Salva in sicurezza:** usa un password manager (1Password, Bitwarden, KeePass)
+1. **Minimum length:** 12 characters (recommended: 20+)
+2. **Mixed characters:** uppercase, lowercase, numbers, symbols
+3. **No dictionary words:** avoid names, birthdays, common words
+4. **Unique per batch:** use a different passphrase for each sensitive batch
+5. **Store securely:** use a password manager (1Password, Bitwarden, KeePass)
 
-**Il Tool valida automaticamente l'entropia.** Se la passphrase è debole, riceverai un avviso.
+**The tool automatically validates entropy.** If your passphrase is weak, you will receive a warning.
 
-### Cosa Succede se Perdi la Passphrase
+### What If You Lose Your Passphrase
 
-- ❌ **Non puoi decifrare il mapping.enc**
-- ❌ **I dati originali rimangono persi** (i pseudonimi rimangono)
-- ✅ Ma il file mapping.enc rimane cifrato (sicuro da attacchi)
+- ❌ **You cannot decrypt mapping.enc**
+- ❌ **Original data remains lost** (pseudonyms stay)
+- ✅ But mapping.enc remains encrypted (safe from attacks)
 
-**Conserva la passphrase in un luogo sicuro.** Se è critica, usa un password manager con backup cifrato.
+**Store your passphrase in a secure location.** For critical work, use a password manager with encrypted backup.
 
 ---
 
-## Workflow Completo Esempio
+## Complete Example Workflow
 
-Scenario: Un'azienda vuole analizzare 500 email di supporto con ChatGPT per sentiment analysis, senza esporre PII.
+Scenario: A company wants to analyze 500 support emails with ChatGPT for sentiment analysis without exposing PII.
 
-### Setup Iniziale
+### Initial Setup
 
-1. **Carica 500 email nel Tool**
-   - Formato: .txt, .csv, .eml
-   - Seleziona modalità: `STRICT` (rileva tutte le entità PII)
-   - Seleziona policy: `Email Headers`
+1. **Upload 500 emails to the Tool**
+   - Format: .txt, .csv, .eml
+   - Select mode: `STRICT` (detect all PII entities)
+   - Select policy: `Email Headers`
 
-2. **Scansiona**
-   - Tool rileva: 1.250 entità PII (nomi, email, IP, ecc.)
-   - Genera pseudonimi: EMAIL_001, PERSON_001, IPV4_001, ecc.
+2. **Scan**
+   - Tool detects: 1,250 PII entities (names, emails, IPs, etc.)
+   - Generates pseudonyms: EMAIL_001, PERSON_001, IPV4_001, etc.
 
-3. **Review e Applica**
-   - Review ogni entità (opzionale: modifica pseudonimi)
-   - Applica → scarica ZIP con:
-     - `files/` → 500 email pseudonimizzate
-     - `report.html` → audit trail delle sostituzioni
-     - `mapping.enc` → mapping cifrato
+3. **Review and Apply**
+   - Review each entity (optional: customize pseudonyms)
+   - Apply → download ZIP containing:
+     - `files/` → 500 pseudonymized emails
+     - `report.html` → substitution audit trail
+     - `mapping.enc` → encrypted mapping
 
-### Phase "Prepara per AI"
+### "Prepare for AI" Phase
 
-4. **Estrai una email di campione**
+4. **Extract a sample email**
    ```
-   Subject: Problema con login
+   Subject: Login issue
    From: EMAIL_001
    To: EMAIL_002
    
-   "Ciao, sono PERSON_001 e non riesco ad accedere da PERSON_002..."
+   "Hi, I'm PERSON_001 and can't login from PERSON_002..."
    ```
 
-5. **Scarica mapping.enc e passphrase**
+5. **Download mapping.enc and passphrase**
    - mapping.enc: `mapping_batch_xyz.enc`
    - Passphrase: `MyC@t'sNameIs$Fluffy#2026`
 
-### Phase "Invia a ChatGPT"
+### "Send to ChatGPT" Phase
 
-6. **Paste email pseudonimizzata in ChatGPT**
+6. **Paste pseudonymized email to ChatGPT**
    ```
    Prompt:
-   "Analizza il sentiment di questo ticket di supporto:
+   "Analyze the sentiment of this support ticket:
    
-   Subject: Problema con login
+   Subject: Login issue
    From: EMAIL_001
    To: EMAIL_002
    
-   Ciao, sono PERSON_001 e non riesco ad accedere da PERSON_002..."
+   Hi, I'm PERSON_001 and can't login from PERSON_002..."
    ```
 
-7. **ChatGPT risponde:**
+7. **ChatGPT responds:**
    ```
-   Sentiment: NEGATIVO (frustazione moderata)
+   Sentiment: NEGATIVE (moderate frustration)
    
-   Azioni consigliate:
-   - Contattare EMAIL_001 per verificare credenziali
-   - Controllare se PERSON_001 ha 2FA abilitato
-   - Resettare password per PERSON_002...
+   Recommended actions:
+   - Contact EMAIL_001 to verify credentials
+   - Check if PERSON_001 has 2FA enabled
+   - Reset password for PERSON_002...
    ```
 
-### Phase "Decifera Risposta AI"
+### "Decrypt AI Response" Phase
 
-8. **Nel Tool, tab "Decifera Risposta AI":**
-   - Carica `mapping_batch_xyz.enc`
-   - Inserisci passphrase: `MyC@t'sNameIs$Fluffy#2026`
-   - Incolla risposta di ChatGPT
-   - Clicca "Decifera"
+8. **In the tool, "Decrypt AI Response" tab:**
+   - Upload `mapping_batch_xyz.enc`
+   - Enter passphrase: `MyC@t'sNameIs$Fluffy#2026`
+   - Paste ChatGPT response
+   - Click "Decrypt"
 
-9. **Ricevi risposta decifrata:**
+9. **Receive decrypted response:**
    ```
-   Sentiment: NEGATIVO (frustazione moderata)
+   Sentiment: NEGATIVE (moderate frustration)
    
-   Azioni consigliate:
-   - Contattare mario.rossi@acme.com per verificare credenziali
-   - Controllare se Giovanni Rossi ha 2FA abilitato
-   - Resettare password per Maria Bianchi...
+   Recommended actions:
+   - Contact mario.rossi@acme.com to verify credentials
+   - Check if Giovanni Rossi has 2FA enabled
+   - Reset password for Maria Bianchi...
    ```
 
-✓ **Fine del workflow.** Ora hai:
-- Analisi AI completa
-- Risposta con dati originali reintegrati
-- Nessun dato PII mai inviato a ChatGPT
+✅ **Workflow complete.** You now have:
+- Complete AI analysis
+- Response with original data restored
+- No PII ever sent to ChatGPT
 
 ---
 
 ## Troubleshooting
 
-### Q: "Passphrase non è corretta per questo mapping.enc"
+### Q: "Passphrase is incorrect for this mapping.enc"
 
-**Problema:** La passphrase che hai inserito non coincide.
+**Problem:** The passphrase you entered doesn't match.
 
-**Soluzioni:**
-1. ✓ Copia la passphrase da password manager (non digitarla)
-2. ✓ Controlla se hai usato MAIUSCOLE/minuscole correttamente
-3. ✓ Verifica di aver scaricato il mapping.enc giusto (batch corrispondente)
-4. ❌ Se la passphrase è persa: non puoi più decifrare (usa un backup del mapping.enc)
-
----
-
-### Q: "Il file non è un mapping.enc valido (magic header non riconosciuto)"
-
-**Problema:** Il file che hai scaricato non è un mapping.enc valido.
-
-**Soluzioni:**
-1. ✓ Verifica di aver scaricato il file corretto (dovrebbe finire in `.enc`)
-2. ✓ Controlla che il file non sia stato corrotto durante download/email
-3. ✓ Se è un backup vecchio, potrebbe essere in formato v1 (legacy support)
-4. ❌ Se il file è davvero corrotto: scarica di nuovo dal Tool
+**Solutions:**
+1. ✅ Copy passphrase from password manager (don't type manually)
+2. ✅ Check if you used correct UPPERCASE/lowercase
+3. ✅ Verify you downloaded the correct mapping.enc (matching batch)
+4. ❌ If passphrase is lost: you cannot decrypt (use mapping.enc backup)
 
 ---
 
-### Q: "Testo troppo lungo"
+### Q: "File is not a valid mapping.enc (magic header not recognized)"
 
-**Problema:** Il testo che stai decrifrando è > 200.000 caratteri.
+**Problem:** The downloaded file is not a valid mapping.enc.
 
-**Soluzioni:**
-1. ✓ Dividi il testo in sezioni più piccole
-2. ✓ Usa "Revert Batch ZIP" per file grandi (supporta fino a 50 MB)
-3. ✓ Contatta l'admin se devi aumentare il limite (configurabile)
-
----
-
-### Q: "Anteprima preview mostra 0 match"
-
-**Problema:** Il Tool non trova pseudonimi nel testo che incollate.
-
-**Soluzioni:**
-1. ✓ Verifica di aver incollato il testo dalla risposta dell'AI (non il testo originale)
-2. ✓ Controlla che mapping.enc e testo appartengono allo stesso batch
-3. ✓ Se l'AI ha modificato i pseudonimi (es: "EMAIL_001" → "email_001"), non verranno trovati (case-sensitive)
+**Solutions:**
+1. ✅ Verify you downloaded the correct file (should end in `.enc`)
+2. ✅ Check that file wasn't corrupted during download/email
+3. ✅ If it's an old backup, it might be legacy format v1 (backward compatible)
+4. ❌ If file is truly corrupted: download again from the tool
 
 ---
 
-### Q: "Come posso modificare un pseudonimo prima di mandarla all'AI?"
+### Q: "Text too long"
 
-**Soluzione:**
-Durante il flusso "Review" (prima di Applica), clicca su ogni finding e modificalo.
-Ad esempio: `EMAIL_001` → `UTENTE_A` (più leggibile per l'AI).
+**Problem:** Text you're decrypting is > 200,000 characters.
 
-Poi continua con "Prepara per AI" (i pseudonimi modificati saranno nel mapping.enc).
-
----
-
-## Links Correlati
-
-- [README.md](../README.md) - Installazione e setup
-- [docs/06_Detector_Strategy.md](../docs/06_Detector_Strategy.md) - Come il Tool rileva entità PII
-- [docs/04_Policies.md](../docs/04_Policies.md) - Cosa rileva ogni politica
-- [CRITICAL_ANALYSIS_REPORT.md](../CRITICAL_ANALYSIS_REPORT.md) - Analisi critica del progetto
+**Solutions:**
+1. ✅ Split text into smaller sections
+2. ✅ Use "Revert Batch" for large files (supports up to 50 MB)
+3. ✅ Contact admin to increase limit (configurable)
 
 ---
 
-**Last updated:** 28 Feb 2026  
-**Tool version:** v4.1+  
-**Feedback:** Contatta il team per miglioramenti a questo documento
+### Q: "Preview shows 0 matches"
+
+**Problem:** The tool found no pseudonyms in the text.
+
+**Solutions:**
+1. ✅ Verify you pasted text from AI response (not original)
+2. ✅ Check that mapping.enc and text belong to same batch
+3. ✅ If AI modified pseudonyms (e.g., "EMAIL_001" → "email_001"), they won't match (case-sensitive)
+
+---
+
+### Q: "How can I customize a pseudonym before sending to AI?"
+
+**Solution:**
+During the "Review" phase (before Apply), click each finding and customize it.
+Example: `EMAIL_001` → `USER_A` (more readable for AI).
+
+Then continue to "Prepare for AI" (customized pseudonyms go into mapping.enc).
+
+---
+
+## Related Links
+
+- [README.md](../README.md) — Installation and setup
+- [docs/06_Detector_Strategy.md](../docs/06_Detector_Strategy.md) — How the Tool detects PII entities
+- [docs/04_Policies.md](../docs/04_Policies.md) — What each policy detects
+- [docs/13_Super_Critical_Analysis.md](../docs/13_Super_Critical_Analysis.md) — Project analysis and roadmap
+
+---
+
+**Last updated:** March 2026  
+**Tool version:** v4.3  
+**Contact:** Team for document improvements

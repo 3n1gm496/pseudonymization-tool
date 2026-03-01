@@ -130,8 +130,45 @@ Vuoi inviare i tuoi dati a un modello AI (ChatGPT, Claude, LLaMA) senza esporre 
 → Vedi [docs/11_AI_Integration_and_Revert_Flows.md](docs/11_AI_Integration_and_Revert_Flows.md) per:
 - Passaggio-per-passaggio dei tre flussi (Prepara per AI, Decifera Risposta, Revert Batch ZIP)
 - Come scegliere una passphrase robusta
-- Exemple workflow completo
+- Esempio workflow completo
 - Troubleshooting
+
+---
+
+## 📚 Documentation Guide
+
+### Per Iniziare
+- **[README.md](README.md)** — Questa pagina. Quick start e feature overview.
+- **[docs/01_PRD.md](docs/01_PRD.md)** — Product requirements, caso d'uso e stack tecnico.
+
+### Capire l'Architettura
+- **[docs/02_Technical_Architecture.md](docs/02_Technical_Architecture.md)** — Architettura backend, flussi, dipendenze moduli.
+- **[docs/03_Data_Model.md](docs/03_Data_Model.md)** — Schemi Pydantic e flusso dei dati.
+- **[docs/06_Detector_Strategy.md](docs/06_Detector_Strategy.md)** — Strategia di detection (regex, dict, NER, pattern custom).
+
+### Workflow & Usabilità
+- **[docs/05_UX_Flow.md](docs/05_UX_Flow.md)** — Flussi utente interfaccia e casi d'uso.
+- **[docs/04_Policies.md](docs/04_Policies.md)** — Policy preset (SOC Logs, Policy Docs, Email Headers).
+- **[docs/11_AI_Integration_and_Revert_Flows.md](docs/11_AI_Integration_and_Revert_Flows.md)** — Integrazione AI, reversibilità, gestione passphrase.
+
+### Testing & Qualità
+- **[docs/07_Test_Plan_and_Metrics.md](docs/07_Test_Plan_and_Metrics.md)** — Strategia testing, metriche coverage.
+- **[docs/15_CI_Quality_Gates.md](docs/15_CI_Quality_Gates.md)** — Automated quality gates (coverage thresholds, exception patterns).
+- **[docs/14_Parser_Capability_Matrix.md](docs/14_Parser_Capability_Matrix.md)** — Feature matrix per parser, limitazioni note.
+
+### Operational & Deployment
+- **[docs/08_Risks_and_Mitigations.md](docs/08_Risks_and_Mitigations.md)** — Analisi rischi e mitigazioni.
+- **[docs/17_Deployment_Profiles.md](docs/17_Deployment_Profiles.md)** — Profili deployment (DEV, STAGING, PROD), configurazione per ambiente.
+- **[docs/16_Rate_Limit_Robustness.md](docs/16_Rate_Limit_Robustness.md)** — Rate limiting, cleanup auto, memory bounds.
+
+### Planning & Roadmap
+- **[docs/09_Roadmap.md](docs/09_Roadmap.md)** — Roadmap prodotto.
+- **[docs/10_Backlog.md](docs/10_Backlog.md)** — Backlog item e priorità.
+- **[docs/RELEASES.md](docs/RELEASES.md)** — Changelog e versioni.
+
+### Approfondimenti
+- **[docs/13_Super_Critical_Analysis.md](docs/13_Super_Critical_Analysis.md)** — Analysis post-P2 (completamento P0/P1/P2 stabilization phases).
+- **[docs/12_Coverage_Analysis_and_Strategy.md](docs/12_Coverage_Analysis_and_Strategy.md)** — Analisi coverage storica e strategia incrementale.
 
 ---
 

@@ -1,33 +1,16 @@
-# P0 Improvements Implementation
+# Improvements & Changelog
 
-This document describes the high-priority (P0) improvements implemented in the pseudonymization-tool project.
+**Note:** All improvements and feature details are now consolidated in [RELEASES.md](RELEASES.md).
 
-## ✅ Latest Completed Enhancements (v4 hardening)
+Please refer to [RELEASES.md](RELEASES.md) for:
+- Version history and release notes
+- Feature additions
+- Bug fixes
+- Improvements per release
 
-- Added readiness endpoint `GET /api/ready` with dependency checks.
-- Added endpoint-level protection for heavy operations:
-  - request rate limiting (in-memory, per-client scope)
-  - timeout guard with user-friendly `504` messages
-  - payload limits (`MAX_UPLOAD_FILES_PER_BATCH`, `MAX_CONSOLE_TEXT_CHARS`)
-- Strengthened secret handling:
-  - recursive sanitization of saved server state (`password`, `passphrase`, `token`, `secret` keys removed)
-  - passphrase zeroization best-effort on batch cleanup
-- Added policy preview APIs:
-  - `GET /api/settings/policies`
-  - `GET /api/settings/policies/{preset}`
-- Improved frontend UX:
-  - unified input flow for inline text and file upload
-  - preset selector and policy preview panel
-  - consistent safety label rendering (`SAFE_TO_UPLOAD`, `SAFE_WITH_WARNINGS`, `NOT_SAFE`)
-- Improved reports with residual risk section and safety label summary.
-- Added contract tests `backend/tests/test_api_contract.py`.
-- Extended CI workflow with:
-  - dedicated contract test step
-  - startup smoke test for `/api/health` and `/api/ready`.
+## Feature Overview
 
-## 🎯 Improvements Overview
-
-### 1. CI/CD Pipeline with GitHub Actions ✅
+### 1. CI/CD Pipeline with GitHub Actions
 
 **Location:** `.github/workflows/ci.yml`
 
@@ -45,7 +28,7 @@ This document describes the high-priority (P0) improvements implemented in the p
 # View results at: https://github.com/3n1gm496/pseudonymization-tool/actions
 ```
 
-### 2. Test Coverage with Pytest ✅
+### 2. Test Coverage with Pytest
 
 **Location:** `backend/tests/`
 
@@ -68,7 +51,7 @@ pytest tests/ -v --cov=app --cov-report=html
 # Open htmlcov/index.html to view coverage report
 ```
 
-### 3. Pre-commit Hooks ✅
+### 3. Pre-commit Hooks
 
 **Location:** `.pre-commit-config.yaml`
 
@@ -92,7 +75,7 @@ pre-commit install
 pre-commit run --all-files
 ```
 
-### 4. Structured Logging ✅
+### 4. Structured Logging
 
 **Location:** `backend/app/core/logging_config.py`
 
@@ -119,7 +102,7 @@ Every HTTP request is automatically logged with:
 - Response status code
 - Request duration in milliseconds
 
-### 5. Health Check & Monitoring Endpoints ✅
+### 5. Health Check & Monitoring Endpoints
 
 **Location:** `backend/app/api/monitoring.py`
 
@@ -178,7 +161,7 @@ curl http://localhost:8000/api/ready
 curl http://localhost:8000/api/metrics
 ```
 
-## 📦 New Dependencies
+## Dependencies
 
 ### Production (`backend/requirements.txt`):
 - `structlog>=24.1.0` - Structured logging
@@ -196,7 +179,7 @@ curl http://localhost:8000/api/metrics
 - `mypy>=1.8.0` - Type checker
 - `pre-commit>=3.6.0` - Git hooks framework
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Install Development Dependencies
 ```bash
@@ -237,7 +220,7 @@ cd backend
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-## 🔍 Monitoring in Production
+## Monitoring in Production
 
 ### Health Check Integration
 Use health endpoints for:
@@ -284,7 +267,7 @@ curl -v http://localhost:8000/api/health
 
 Use this ID to trace requests across logs and systems.
 
-## 📊 Code Coverage Targets
+## Code Coverage Targets
 
 Current coverage target: **80%+**
 
@@ -295,7 +278,7 @@ pytest tests/ --cov=app --cov-report=html
 open htmlcov/index.html
 ```
 
-## 🔒 Security Checks
+## Security Checks
 
 Automated security scanning includes:
 - **Bandit**: Python code security issues
@@ -308,9 +291,9 @@ bandit -r backend/app -ll
 safety check
 ```
 
-## 📝 Next Steps (P1/P2)
+## Next Steps (P1/P2+)
 
-Future improvements to consider:
+Planned enhancements:
 - [ ] Performance optimization (streaming, async processing)
 - [ ] API rate limiting distribuito (Redis/shared-state)
 - [ ] Advanced metrics (Prometheus format)
@@ -319,7 +302,7 @@ Future improvements to consider:
 - [ ] Detector quality loop (false-positive feedback dalla review)
 - [ ] Deploy parity con stack container (compose + healthcheck + runbook)
 
-## 🤝 Contributing
+## Contributing
 
 All contributions must pass:
 1. Pre-commit hooks
