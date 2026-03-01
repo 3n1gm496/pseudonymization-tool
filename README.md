@@ -100,7 +100,7 @@ Questa modalità permette di preparare il pacchetto su una macchina con internet
 
 ### 2.3. Modalità Docker Compose
 
-Questa modalità fornisce un avvio standardizzato dell'app in container, in linea con approcci infrastrutturali tipo `security-scanning-platform`.
+Questa modalità fornisce un avvio standardizzato dell'app in container, in linea con approcci infrastrutturali tipo `security-scanning-platform`. *************************************************************************************************************************************************************************************************************************
 
 ```bash
 cd pseudonymization-tool
@@ -227,13 +227,13 @@ npm run build
 
 Crea `frontend/dist/` che FastAPI servira' automaticamente in produzione.
 
-**Alternativa (Full Stack Script)**
+#### Dev Mode (Full Stack)
 
 ```bash
 ./dev-stack.sh
 ```
 
-Avvia sia backend che frontend in parallelo. Premi Ctrl+C per fermare entrambi.
+Avvia sia backend che frontend in parallelo con HMR (Hot Module Reload). Premi Ctrl+C per fermare entrambi.
 
 #### Caratteristiche Frontend
 
@@ -321,13 +321,15 @@ pseudonymization-tool/
 │   ├── package.json
 │   ├── vite.config.js
 │   └── tailwind.config.js
-├── frontend-legacy/           # Vanilla JS (backup)
 ├── scripts/                   # Operational tools
 │   └── ops.sh                 # Unified deployment script
-├── docs/                      # Documentation
-├── build-frontend.sh          # Build React frontend
+├── docs/                      # Documentation & Roadmap
 ├── dev-stack.sh               # Start backend + frontend
 ├── docker-compose.yml
+├── start.sh                   # Linux/macOS startup script
+├── start.bat                  # Windows startup script
+├── prepare_offline.sh         # Offline mode preparation
+├── prepare_offline.bat        # Windows offline mode
 └── README.md
 ```
 
