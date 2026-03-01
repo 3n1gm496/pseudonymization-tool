@@ -2,10 +2,14 @@
 Parser per file .xlsx (Microsoft Excel).
 Legge solo celle testuali; ignora formule e celle non-stringa.
 """
+import logging
 from pathlib import Path
 from typing import List
 
 from app.parsers.base import BaseParser, ParseResult, TextChunk
+from app.core.exceptions import XlsxParsingError
+
+logger = logging.getLogger(__name__)
 
 
 class XlsxParser(BaseParser):
@@ -22,10 +26,13 @@ class XlsxParser(BaseParser):
 
         try:
             import openpyxl
-            # data_only=True legge i valori calcolati, non le formule.
-            # Tuttavia, per identificare le formule, dobbiamo leggere anche con data_only=False.
-            wb_formulas = openpyxl.load_workbook(str(file_path), data_only=False)
-            wb_values = openpyxl.load_workbook(str(file_path), data_only=True)
+            try:
+                # data_only=True legge i valori calcolati, non le formule.
+                # Tuttavia, per identificare le formule, dobbiamo leggere anche con data_only=False.
+                wb_formulas = openpyxl.load_workbook(str(file_path), data_only=False)
+                wb_values = openpyxl.load_workbook(str(file_path), data_only=True)
+            except Exception as load_err:
+                raise XlsxParsingError(str(file_path), f"Failed to open/read XLSX: {load_err}") from load_err
 
             for sheet_name in wb_formulas.sheetnames:
                 ws_formulas = wb_formulas[sheet_name]
@@ -69,8 +76,13 @@ class XlsxParser(BaseParser):
                 f"Processate {text_cell_count} celle testuali su {text_cell_count + formula_count} celle totali analizzate."
             )
 
+        except XlsxParsingError as e:
+            result.success = False
+            result.error_message = str(e)
+            logger.warning("XLSX parsing error: %s", e)
         except Exception as e:
             result.success = False
             result.error_message = f"Errore durante il parsing del file XLSX: {e}"
+            logger.error("Unexpected error in XLSX parser: %s", e)
 
         return result

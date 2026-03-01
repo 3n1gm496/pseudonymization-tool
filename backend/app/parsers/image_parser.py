@@ -9,6 +9,7 @@ from typing import List, Optional
 
 from app.parsers.base import BaseParser, ParseResult, TextChunk
 from app.core.config import OCR_LANGUAGES
+from app.core.exceptions import ImageParsingError
 
 logger = logging.getLogger(__name__)
 
@@ -137,9 +138,15 @@ class ImageParser(BaseParser):
         except ImportError as e:
             result.success = False
             result.error_message = f"Libreria mancante per il processing delle immagini: {e}"
+            logger.error("Missing image processing library: %s", e)
+        except ImageParsingError as e:
+            result.success = False
+            result.error_message = str(e)
+            logger.warning("Image parsing error: %s", e)
         except Exception as e:
             result.success = False
             result.error_message = f"Errore durante il parsing dell'immagine: {e}"
+            logger.error("Unexpected error in image parser: %s", e)
 
         return result
 

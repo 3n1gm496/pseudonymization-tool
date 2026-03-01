@@ -2,10 +2,14 @@
 Parser per file .docx (Microsoft Word).
 Estrae testo da paragrafi, tabelle, header e footer.
 """
+import logging
 from pathlib import Path
 from typing import List
 
 from app.parsers.base import BaseParser, ParseResult, TextChunk
+from app.core.exceptions import DocxParsingError
+
+logger = logging.getLogger(__name__)
 
 
 class DocxParser(BaseParser):
@@ -56,7 +60,10 @@ class DocxParser(BaseParser):
         result = ParseResult(file_path=file_path)
         try:
             from docx import Document
-            doc = Document(str(file_path))
+            try:
+                doc = Document(str(file_path))
+            except Exception as open_err:
+                raise DocxParsingError(str(file_path), f"Failed to open/read DOCX: {open_err}") from open_err
 
             # Paragrafi del corpo principale
             for i, para in enumerate(doc.paragraphs):
@@ -101,8 +108,13 @@ class DocxParser(BaseParser):
                 "LIMITE MVP: Commenti, note a piè di pagina, caselle di testo e macro non vengono processati."
             )
 
+        except DocxParsingError as e:
+            result.success = False
+            result.error_message = str(e)
+            logger.warning("DOCX parsing error: %s", e)
         except Exception as e:
             result.success = False
             result.error_message = f"Errore durante il parsing del file DOCX: {e}"
+            logger.error("Unexpected error in DOCX parser: %s", e)
 
         return result

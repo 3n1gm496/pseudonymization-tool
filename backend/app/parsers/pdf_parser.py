@@ -2,10 +2,14 @@
 Parser per file .pdf (solo PDF nativamente testuali).
 I PDF basati su immagini o cifrati vengono segnalati con warning.
 """
+import logging
 from pathlib import Path
 from typing import List
 
 from app.parsers.base import BaseParser, ParseResult, TextChunk
+from app.core.exceptions import PDFParsingError
+
+logger = logging.getLogger(__name__)
 
 
 class PdfParser(BaseParser):
@@ -46,7 +50,10 @@ class PdfParser(BaseParser):
         result = ParseResult(file_path=file_path)
         try:
             from pypdf import PdfReader
-            reader = PdfReader(str(file_path))
+            try:
+                reader = PdfReader(str(file_path))
+            except Exception as read_err:
+                raise PDFParsingError(str(file_path), f"Failed to open/read PDF: {read_err}") from read_err
 
             # Controlla se il PDF è cifrato
             if reader.is_encrypted:
@@ -80,6 +87,7 @@ class PdfParser(BaseParser):
                                 )
                 except Exception as page_err:
                     result.warnings.append(f"Errore nell'estrazione del testo dalla pagina {page_num}: {page_err}")
+                    logger.warning("Page %d extraction error: %s", page_num, page_err)
 
             # Valuta se il PDF è "testuale" o basato su immagini
             if pages_with_text == 0:
@@ -98,8 +106,13 @@ class PdfParser(BaseParser):
                     f"Le pagine senza testo potrebbero contenere immagini con dati sensibili non rilevati."
                 )
 
+        except PDFParsingError as e:
+            result.success = False
+            result.error_message = str(e)
+            logger.warning("PDF parsing error: %s", e)
         except Exception as e:
             result.success = False
             result.error_message = f"Errore durante il parsing del file PDF: {e}"
+            logger.error("Unexpected error in PDF parser: %s", e)
 
         return result

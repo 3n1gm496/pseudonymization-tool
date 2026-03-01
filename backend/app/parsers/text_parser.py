@@ -1,10 +1,14 @@
 """
 Parser per file di testo semplice: .txt, .md, .csv
 """
+import logging
 from pathlib import Path
 from typing import List
 
 from app.parsers.base import BaseParser, ParseResult, TextChunk
+from app.core.exceptions import FileEncodingError, ParsingError
+
+logger = logging.getLogger(__name__)
 
 
 class TextParser(BaseParser):
@@ -20,12 +24,18 @@ class TextParser(BaseParser):
             # Prova a leggere come UTF-8, poi fallback su latin-1
             try:
                 content = file_path.read_text(encoding="utf-8")
-            except UnicodeDecodeError:
-                content = file_path.read_text(encoding="latin-1")
-                result.warnings.append(
-                    f"Il file non era in UTF-8; letto con codifica latin-1. "
-                    f"Potrebbero esserci caratteri non corretti."
-                )
+            except UnicodeDecodeError as ue:
+                try:
+                    content = file_path.read_text(encoding="latin-1")
+                    result.warnings.append(
+                        f"Il file non era in UTF-8; letto con codifica latin-1. "
+                        f"Potrebbero esserci caratteri non corretti."
+                    )
+                except Exception as fallback_err:
+                    raise FileEncodingError(
+                        str(file_path),
+                        "UTF-8 + latin-1 fallback"
+                    ) from fallback_err
 
             # Suddividi il testo riga per riga per avere informazioni di posizione
             for line_num, line in enumerate(content.splitlines(), start=1):
@@ -38,8 +48,17 @@ class TextParser(BaseParser):
                         )
                     )
 
+        except FileEncodingError as e:
+            result.success = False
+            result.error_message = str(e)
+            logger.warning("Encoding error in text parser: %s", e)
+        except ParsingError as e:
+            result.success = False
+            result.error_message = str(e)
+            logger.warning("Parsing error in text parser: %s", e)
         except Exception as e:
             result.success = False
             result.error_message = f"Errore durante il parsing del file di testo: {e}"
+            logger.error("Unexpected error in text parser: %s", e)
 
         return result
