@@ -17,9 +17,10 @@ Architettura:
 - ldap_detector.py: LdapCache (caching, refresh loop), LdapPersonDetector (detection)
 """
 import logging
+import re
 import threading
 import time
-from typing import List, Dict, Optional, Set
+from typing import List, Dict, Optional, Set, Tuple
 
 from app.detectors.base import BaseDetector, RawFinding
 from app.detectors.ldap_client import (
