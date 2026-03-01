@@ -49,6 +49,7 @@ from app.models.schemas import (
     SubmitReviewRequest,
 )
 from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 
@@ -150,6 +151,8 @@ def _resolve_preset(raw_value: str) -> PresetName:
 
 
 def _scrub_sensitive(value: Any) -> Any:
+    import re
+    
     if isinstance(value, dict):
         cleaned = {}
         for key, item in value.items():
@@ -162,6 +165,13 @@ def _scrub_sensitive(value: Any) -> Any:
         return cleaned
     if isinstance(value, list):
         return [_scrub_sensitive(item) for item in value]
+    if isinstance(value, str):
+        # ✅ FIX #18: Enhanced sanitization
+        # Remove file paths (security: don't leak filesystem structure)
+        value = re.sub(r'/(?:home|root|var)/\S+', '/***', value)
+        # Remove full UUIDs (potential timing attacks): show first 8 chars only
+        value = re.sub(r'\b[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\b', 'xxxx-xxxx-xxxx', value)
+        return value
     return value
 
 
@@ -316,7 +326,7 @@ async def create_new_batch(
     Crea un nuovo batch con i file allegati.
     Orchestrazione: validazione → creazione batch → caricamento file → scansione.
     """
-    enforce_rate_limit(request, "batch_create", limit=20)
+    rate_info = enforce_rate_limit(request, "batch_create", limit=20)
 
     # Step 1: Validazione input
     batch_mode, batch_preset = _validate_upload_input(files, mode, preset, passphrase)
@@ -357,16 +367,23 @@ async def create_new_batch(
         safety_label=batch.safety_label.value if batch.safety_label else "SAFE_TO_UPLOAD",
     )
 
-    return {
-        "batch_id": batch.batch_id,
-        "status": batch.status.value,
-        "mode": mode,
-        "passphrase": pp,
-        "files": [{"name": fr.original_name, "id": fr.file_id} for fr in batch.files],
-        "findings": _findings_list(batch),
-        "findings_count": len(batch.findings),
-        "safety_label": batch.safety_label.value if batch.safety_label else "SAFE_TO_UPLOAD",
-    }
+    return JSONResponse(
+        content={
+            "batch_id": batch.batch_id,
+            "status": batch.status.value,
+            "mode": mode,
+            "passphrase": pp,
+            "files": [{"name": fr.original_name, "id": fr.file_id} for fr in batch.files],
+            "findings": _findings_list(batch),
+            "findings_count": len(batch.findings),
+            "safety_label": batch.safety_label.value if batch.safety_label else "SAFE_TO_UPLOAD",
+        },
+        headers={
+            "X-RateLimit-Limit": str(rate_info["limit"]),
+            "X-RateLimit-Remaining": str(rate_info["remaining"]),
+            "X-RateLimit-Reset": str(rate_info["reset"]),
+        }
+    )
 
 
 # ─── Batch Lifecycle ──────────────────────────────────────────────────────────
@@ -470,7 +487,7 @@ async def apply_batch(batch_id: str, request: Request):
     Applica le sostituzioni usando le decisions persistite.
     ✅ FIX #5: Added error handling with state rollback on failure.
     """
-    enforce_rate_limit(request, "batch_apply", limit=20)
+    rate_info = enforce_rate_limit(request, "batch_apply", limit=20)
 
     batch = get_batch(batch_id)
     if not batch:
@@ -561,16 +578,23 @@ async def apply_batch(batch_id: str, request: Request):
         and updated_batch.safety_label == SafetyLabel.SAFE_TO_UPLOAD
     )
 
-    return {
-        "message": "Trasformazioni applicate.",
-        "batch_id": batch_id,
-        "download_ready": download_ready,
-        "decisions_received_count": decisions_count,
-        "accepted_count": accepted_count,
-        "rejected_count": rejected_count,
-        "modified_count": modified_count,
-        "ignored_count": ignored_count,
-    }
+    return JSONResponse(
+        content={
+            "message": "Trasformazioni applicate.",
+            "batch_id": batch_id,
+            "download_ready": download_ready,
+            "decisions_received_count": decisions_count,
+            "accepted_count": accepted_count,
+            "rejected_count": rejected_count,
+            "modified_count": modified_count,
+            "ignored_count": ignored_count,
+        },
+        headers={
+            "X-RateLimit-Limit": str(rate_info["limit"]),
+            "X-RateLimit-Remaining": str(rate_info["remaining"]),
+            "X-RateLimit-Reset": str(rate_info["reset"]),
+        }
+    )
 
 
 @router.get("/batches/{batch_id}/download")
@@ -601,6 +625,16 @@ async def download_batch(batch_id: str, background_tasks: BackgroundTasks, reque
         raise HTTPException(status_code=404, detail="File ZIP non trovato.")
     zip_path = zip_files[0]
 
+    # ✅ FIX #16: Log performance metrics when batch completes
+    if batch_id in _batch_start_times:
+        try:
+            started_at_iso = _batch_start_times[batch_id]
+            started_at = datetime.fromisoformat(started_at_iso)
+            elapsed = (datetime.now(timezone.utc) - started_at).total_seconds()
+            logger.info("Batch %s completed in %.2f seconds", batch_id, elapsed)
+        except Exception as e:
+            logger.warning("Failed to calculate batch timing: %s", e)
+    
     _batch_start_times.pop(batch_id, None)
     _audit_event(request, "batch_download", batch_id=batch_id, filename=zip_path.name)
     background_tasks.add_task(cleanup_batch, batch_id)

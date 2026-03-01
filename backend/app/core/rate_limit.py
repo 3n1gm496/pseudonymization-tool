@@ -135,15 +135,19 @@ class RateLimiter:
         scope: str,
         limit: int,
         window_seconds: int = 60,
-    ) -> None:
+    ) -> Dict:
         """
         Enforce rate limit for a request. Raises HTTPException(429) if limit exceeded.
+        Returns rate limit information for response headers.
 
         Args:
             request: FastAPI Request object (to extract client IP)
             scope: Rate limit scope (e.g., "batch_create", "console_scan")
             limit: Maximum requests allowed in window
             window_seconds: Time window in seconds (default 60)
+
+        Returns:
+            Dict with keys: remaining (int), reset (int Unix timestamp)
 
         Raises:
             HTTPException: 429 Too Many Requests if limit exceeded
@@ -167,6 +171,9 @@ class RateLimiter:
             bucket["timestamps"] = [t for t in bucket["timestamps"] if t >= cutoff]
 
             # Step 3: Check limit
+            remaining = limit - len(bucket["timestamps"])
+            reset_time = int(bucket["timestamps"][0] + window_seconds) if bucket["timestamps"] else int(now + window_seconds)
+            
             if len(bucket["timestamps"]) >= limit:
                 logger.warning(
                     "Rate limit exceeded: scope=%s client=%s (%d/%d requests in %ds)",
@@ -184,6 +191,13 @@ class RateLimiter:
             # Step 4: Add current timestamp
             bucket["timestamps"].append(now)
             bucket["last_access"] = now
+            
+            # ✅ FIX #20: Return rate limit info for response headers
+            return {
+                "remaining": remaining - 1,  # -1 because we just added current request
+                "reset": reset_time,
+                "limit": limit,
+            }
 
     def get_stats(self) -> Dict:
         """Return rate limiter stats (for monitoring/debugging)."""
@@ -207,7 +221,7 @@ def enforce_rate_limit(
     scope: str,
     limit: int,
     window_seconds: int = 60,
-) -> None:
+) -> Dict:
     """
     Enforce rate limit for a request (convenience function).
 
@@ -217,16 +231,29 @@ def enforce_rate_limit(
         limit: Maximum requests allowed in window
         window_seconds: Time window in seconds (default 60)
 
+    Returns:
+        Dict with rate limit info for response headers:
+        - X-RateLimit-Limit: Total limit
+        - X-RateLimit-Remaining: Remaining requests in window
+        - X-RateLimit-Reset: Unix timestamp when limit resets
+
     Raises:
         HTTPException: 429 Too Many Requests if limit exceeded
 
     Example:
         @router.post("/api/batches")
         async def create_batch(request: Request, ...):
-            enforce_rate_limit(request, "batch_create", limit=20)
-            # ... endpoint logic
+            rate_info = enforce_rate_limit(request, "batch_create", limit=20)
+            return JSONResponse(
+                content={"message": "Created"},
+                headers={
+                    "X-RateLimit-Limit": str(rate_info["limit"]),
+                    "X-RateLimit-Remaining": str(rate_info["remaining"]),
+                    "X-RateLimit-Reset": str(rate_info["reset"]),
+                }
+            )
     """
-    _rate_limiter.check_limit(request, scope, limit, window_seconds)
+    return _rate_limiter.check_limit(request, scope, limit, window_seconds)
 
 
 def get_rate_limiter_stats() -> Dict:
