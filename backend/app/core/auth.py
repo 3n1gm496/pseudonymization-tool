@@ -96,6 +96,9 @@ def validate_session(token: Optional[str]) -> Optional[str]:
         expires_at = int(expires_raw)
         now = int(time.time())
         if now >= expires_at:
+            # ✅ FIX: Remove expired session from memory to prevent memory leak
+            with _lock:
+                _sessions.pop(sid, None)
             return None
         with _lock:
             stored_exp = _sessions.get(sid)

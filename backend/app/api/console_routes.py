@@ -18,6 +18,9 @@ from app.core.batch_manager import (
     get_decisions,
     get_passphrase,
     store_passphrase,
+    set_batch_start_time,
+    get_batch_start_time,
+    clear_batch_start_time,
 )
 from app.core.config import API_HEAVY_TIMEOUT_SECONDS, MAX_CONSOLE_TEXT_CHARS
 from app.core.console_pipeline import run_text_apply, run_text_scan
@@ -30,7 +33,6 @@ from fastapi.responses import FileResponse
 
 router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
-_batch_start_times: dict = {}
 
 
 def _resolve_preset(raw_value: str) -> PresetName:
@@ -159,7 +161,7 @@ async def console_scan(req: dict, request: Request):
     create_batch(batch)
     pp = generate_passphrase()
     store_passphrase(batch.batch_id, pp)
-    _batch_start_times[batch.batch_id] = datetime.now(timezone.utc).isoformat()
+    set_batch_start_time(batch.batch_id)  # ✅ FIX #3: Thread-safe timing
 
     try:
         file_id, findings, safety = await asyncio.wait_for(

@@ -25,6 +25,9 @@ from app.core.batch_manager import (
     store_decisions,
     store_passphrase,
     update_batch,
+    set_batch_start_time,
+    get_batch_start_time,
+    clear_batch_start_time,
 )
 from app.core.config import (
     API_HEAVY_TIMEOUT_SECONDS,
@@ -55,7 +58,6 @@ from fastapi.responses import FileResponse
 
 router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
-_batch_start_times: dict = {}
 
 # File di stato server-side (no password, no PII)
 _STATE_FILE = CONFIG_DIR / "state.json"
@@ -337,7 +339,7 @@ async def create_new_batch(
     batch = create_batch(batch)
     pp = passphrase if passphrase else generate_passphrase()
     store_passphrase(batch.batch_id, pp)
-    _batch_start_times[batch.batch_id] = datetime.now(timezone.utc).isoformat()
+    set_batch_start_time(batch.batch_id)  # ✅ FIX #3: Thread-safe timing
 
     # Step 3: Caricamento file (con validazione)
     files_stored, warnings, file_records = await _process_uploaded_files(batch.batch_id, files)
@@ -352,7 +354,7 @@ async def create_new_batch(
         )
 
     update_batch(batch)
-    _batch_start_times[batch.batch_id] = datetime.now(timezone.utc).isoformat()
+    set_batch_start_time(batch.batch_id)  # ✅ FIX #3: Update timing
 
     # Step 5: Scansione batch con timeout
     batch = await _run_batch_scan_safe(batch.batch_id)
@@ -626,16 +628,14 @@ async def download_batch(batch_id: str, background_tasks: BackgroundTasks, reque
     zip_path = zip_files[0]
 
     # ✅ FIX #16: Log performance metrics when batch completes
-    if batch_id in _batch_start_times:
+    started_at_iso = clear_batch_start_time(batch_id)  # ✅ FIX #3: Thread-safe clear
+    if started_at_iso:
         try:
-            started_at_iso = _batch_start_times[batch_id]
             started_at = datetime.fromisoformat(started_at_iso)
             elapsed = (datetime.now(timezone.utc) - started_at).total_seconds()
             logger.info("Batch %s completed in %.2f seconds", batch_id, elapsed)
         except Exception as e:
             logger.warning("Failed to calculate batch timing: %s", e)
-    
-    _batch_start_times.pop(batch_id, None)
     _audit_event(request, "batch_download", batch_id=batch_id, filename=zip_path.name)
     background_tasks.add_task(cleanup_batch, batch_id)
     return FileResponse(path=str(zip_path), media_type="application/zip", filename=zip_path.name)

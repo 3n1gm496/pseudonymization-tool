@@ -11,6 +11,7 @@ import logging
 import shutil
 import threading
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -25,6 +26,7 @@ _passphrases: Dict[str, str] = {}  # batch_id -> passphrase (mai su disco)
 _engines: Dict[str, object] = {}  # batch_id -> PseudonymEngine (persistente)
 _decisions: Dict[str, Dict[str, Any]] = {}  # batch_id -> {finding_id -> decision_dict}
 _last_activity: Dict[str, float] = {}  # batch_id -> timestamp ultima attività
+_batch_start_times: Dict[str, str] = {}  # ✅ FIX #3: Centralized, thread-safe storage
 
 # Timeout di inattività (configurabile)
 BATCH_INACTIVITY_TIMEOUT_SECONDS = max(300, BATCH_INACTIVITY_TTL_HOURS * 3600)
@@ -46,6 +48,30 @@ def generate_passphrase(length: int = 32) -> str:
     from app.mapping.crypto import generate_passphrase as _gen
 
     return _gen(length)
+
+
+# ─── Batch Timing Helpers (Thread-Safe) ───────────────────────────────────────
+# ✅ FIX #3: Centralized, lock-protected access to _batch_start_times
+
+
+def set_batch_start_time(batch_id: str) -> None:
+    """Record when a batch was created/started (thread-safe)."""
+    with _global_lock:
+        _batch_start_times[batch_id] = datetime.fromisoformat(
+            datetime.now(timezone.utc).isoformat()
+        ).isoformat()
+
+
+def get_batch_start_time(batch_id: str) -> Optional[str]:
+    """Get batch start time, returns None if not found (thread-safe)."""
+    with _global_lock:
+        return _batch_start_times.get(batch_id)
+
+
+def clear_batch_start_time(batch_id: str) -> Optional[str]:
+    """Remove and return batch start time (thread-safe)."""
+    with _global_lock:
+        return _batch_start_times.pop(batch_id, None)
 
 
 # ─── CRUD batch ───────────────────────────────────────────────────────────────
@@ -221,17 +247,53 @@ def cleanup_batch(batch_id: str) -> None:
         _decisions.pop(batch_id, None)
         _batches.pop(batch_id, None)
         _last_activity.pop(batch_id, None)
+        _batch_start_times.pop(batch_id, None)  # ✅ FIX #3: Also cleanup timing info
 
 
 def cleanup_inactive_batches() -> int:
-    """Rimuove i batch inattivi. Restituisce il numero di batch rimossi."""
-    with _cleanup_lock:
+    """
+    Rimuove i batch inattivi. Restituisce il numero di batch rimossi.
+    ✅ FIX: Check expiration INSIDE _global_lock to prevent TOCTOU race condition
+    """
+    expired_bids = []
+    
+    # Step 1: Identify expired batches (under main lock to prevent TOCTOU)
+    with _global_lock:
         now = time.time()
-        expired = [bid for bid, last in _last_activity.items() if now - last > BATCH_INACTIVITY_TIMEOUT_SECONDS]
-        for bid in expired:
-            logger.info("Cleanup batch inattivo: %s", bid)
-            cleanup_batch(bid)
-        return len(expired)
+        expired_bids = [bid for bid, last in _last_activity.items() 
+                        if now - last > BATCH_INACTIVITY_TIMEOUT_SECONDS]
+    
+    # Step 2: Clean them up (still under same lock context)
+    if expired_bids:
+        with _global_lock:
+            # Double-check expiration is still valid (re-check under lock)
+            now = time.time()
+            for bid in expired_bids:
+                if bid in _last_activity and now - _last_activity[bid] > BATCH_INACTIVITY_TIMEOUT_SECONDS:
+                    # Only cleanup if still expired
+                    batch_dir = TEMP_BASE_DIR / bid
+                    if batch_dir.exists():
+                        try:
+                            shutil.rmtree(batch_dir)
+                            logger.info("Directory temporanea rimossa per batch: id=%s", bid)
+                        except Exception as e:
+                            logger.error("Errore rimozione directory batch %s: %s", bid, e)
+
+                    if bid in _passphrases:
+                        _passphrases[bid] = ""
+                        _passphrases.pop(bid, None)
+                    try:
+                        from app.core.pipeline import _clear_parse_results
+
+                        _clear_parse_results(bid)
+                    except Exception:
+                        pass
+                    _engines.pop(bid, None)
+                    _decisions.pop(bid, None)
+                    _batches.pop(bid, None)
+                    _last_activity.pop(bid, None)
+    
+    return len(expired_bids)
 
 
 def start_cleanup_scheduler() -> None:
