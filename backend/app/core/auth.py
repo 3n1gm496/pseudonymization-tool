@@ -8,8 +8,17 @@ import threading
 import time
 from typing import Optional, Tuple
 
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
 SESSION_COOKIE_NAME = os.environ.get("AUTH_SESSION_COOKIE", "pseudonymizer_session")
 SESSION_TTL_SECONDS = int(os.environ.get("AUTH_SESSION_TTL_SECONDS", "28800"))
+SESSION_COOKIE_SECURE = _env_flag("AUTH_SESSION_COOKIE_SECURE", default=True)
 ADMIN_USERNAME = os.environ.get("AUTH_USERNAME", "admin")
 DEFAULT_ADMIN_PASSWORD = "admin123!"
 
@@ -18,7 +27,7 @@ _running_under_pytest = (
     or "pytest" in sys.modules
 )
 _auth_enabled_default = "false" if _running_under_pytest else "true"
-AUTH_ENABLED = os.environ.get("AUTH_ENABLED", _auth_enabled_default).lower() == "true"
+AUTH_ENABLED = _env_flag("AUTH_ENABLED", default=(_auth_enabled_default == "true"))
 
 _secret = os.environ.get("AUTH_SECRET") or secrets.token_urlsafe(48)
 _password_env = os.environ.get("AUTH_PASSWORD", DEFAULT_ADMIN_PASSWORD)

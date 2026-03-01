@@ -23,6 +23,7 @@ class BatchStatus(str, Enum):
     REVIEW = "review"
     APPLYING = "applying"
     DONE = "done"
+    DONE_WITH_ERRORS = "done_with_errors"
     ERROR = "error"
 
 

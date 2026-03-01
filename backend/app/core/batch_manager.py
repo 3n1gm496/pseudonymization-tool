@@ -185,6 +185,11 @@ def cleanup_batch(batch_id: str) -> None:
     if batch_id in _passphrases:
         _passphrases[batch_id] = ""
         _passphrases.pop(batch_id, None)
+    try:
+        from app.core.pipeline import _clear_parse_results
+        _clear_parse_results(batch_id)
+    except Exception:
+        pass
     _engines.pop(batch_id, None)
     _decisions.pop(batch_id, None)
     _batches.pop(batch_id, None)

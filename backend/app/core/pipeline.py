@@ -29,7 +29,20 @@ from app.report.generator import build_report_data, generate_json_report, genera
 logger = logging.getLogger(__name__)
 
 # Store dei ParseResult in memoria (per la fase di trasformazione)
-_parse_results: Dict[str, ParseResult] = {}
+_parse_results: Dict[str, Dict[str, ParseResult]] = {}
+
+
+def _cache_parse_result(batch_id: str, file_id: str, parse_result: ParseResult) -> None:
+    batch_cache = _parse_results.setdefault(batch_id, {})
+    batch_cache[file_id] = parse_result
+
+
+def _get_parse_result(batch_id: str, file_id: str) -> Optional[ParseResult]:
+    return _parse_results.get(batch_id, {}).get(file_id)
+
+
+def _clear_parse_results(batch_id: str) -> None:
+    _parse_results.pop(batch_id, None)
 
 
 def _filter_findings_by_policy(
@@ -71,6 +84,7 @@ def run_scan_pipeline(batch_id: str) -> Batch:
 
     all_findings: List[Finding] = []
     global_warnings: List[str] = []
+    _clear_parse_results(batch_id)
 
     for file_rec in batch.files:
         if file_rec.is_text_input:
@@ -81,7 +95,7 @@ def run_scan_pipeline(batch_id: str) -> Batch:
 
         # 1. Parsing
         parse_result = parse_file(file_path)
-        _parse_results[file_rec.file_id] = parse_result
+        _cache_parse_result(batch_id, file_rec.file_id, parse_result)
 
         if not parse_result.success:
             file_rec.status = FileStatus.FAILED
@@ -164,93 +178,100 @@ def run_apply_pipeline(batch_id: str, started_at: str) -> Path:
             findings_by_file[finding.file_id] = []
         findings_by_file[finding.file_id].append(finding)
 
-    if not batch.config.is_dry_run:
-        for file_rec in batch.files:
-            if file_rec.status == FileStatus.FAILED or file_rec.is_text_input:
-                continue
+    try:
+        if not batch.config.is_dry_run:
+            for file_rec in batch.files:
+                if file_rec.status == FileStatus.FAILED or file_rec.is_text_input:
+                    continue
 
-            file_path = Path(file_rec.stored_path)
-            file_findings = findings_by_file.get(file_rec.file_id, [])
-            parse_result = _parse_results.get(file_rec.file_id)
+                file_path = Path(file_rec.stored_path)
+                file_findings = findings_by_file.get(file_rec.file_id, [])
+                parse_result = _get_parse_result(batch_id, file_rec.file_id)
 
+                try:
+                    output_path, transform_warnings = transform_file(
+                        original_path=file_path,
+                        output_dir=output_dir,
+                        findings=file_findings,
+                        parse_result=parse_result,
+                    )
+                    file_rec.warnings.extend(transform_warnings)
+                    file_rec.status = FileStatus.PROCESSED
+                except Exception as e:
+                    file_rec.status = FileStatus.FAILED
+                    file_rec.error_message = f"Errore durante la trasformazione: {e}"
+                    logger.error("Errore trasformazione '%s': %s", file_rec.original_name, e)
+
+        completed_at = datetime.now(timezone.utc).isoformat()
+
+        # Genera il mapping cifrato
+        if passphrase and not batch.config.is_dry_run:
+            mapping_data = {
+                "batch_id": batch_id,
+                "created_at": completed_at,
+                "mode": batch.config.mode.value,
+                "preset": batch.config.preset.value,
+                "policy_hash": batch.policy_hash,
+                "mapping": {}
+            }
+            for finding in batch.findings:
+                if finding.review_action != ReviewAction.REJECT:
+                    pseudo = finding.final_pseudonym
+                    canon = finding.canonical_value or finding.original_value
+                    if pseudo not in mapping_data["mapping"]:
+                        mapping_data["mapping"][pseudo] = canon
+
+            mapping_path = batch_dir / "mapping.enc"
             try:
-                output_path, transform_warnings = transform_file(
-                    original_path=file_path,
-                    output_dir=output_dir,
-                    findings=file_findings,
-                    parse_result=parse_result,
-                )
-                file_rec.warnings.extend(transform_warnings)
-                file_rec.status = FileStatus.PROCESSED
+                save_encrypted_mapping(mapping_data, passphrase, mapping_path)
             except Exception as e:
-                file_rec.status = FileStatus.FAILED
-                file_rec.error_message = f"Errore durante la trasformazione: {e}"
-                logger.error("Errore trasformazione '%s': %s", file_rec.original_name, e)
+                logger.error("Errore nella cifratura del mapping: %s", e)
 
-    completed_at = datetime.now(timezone.utc).isoformat()
+        # Calcola safety label
+        residual_warnings = batch.residual_warnings or []
+        safety = compute_safety_label(
+            findings=batch.findings,
+            file_records=batch.files,
+            residual_warnings=residual_warnings,
+            global_warnings=global_warnings,
+        )
+        batch.safety_label = safety
 
-    # Genera il mapping cifrato
-    if passphrase and not batch.config.is_dry_run:
-        mapping_data = {
-            "batch_id": batch_id,
-            "created_at": completed_at,
-            "mode": batch.config.mode.value,
-            "preset": batch.config.preset.value,
-            "policy_hash": batch.policy_hash,
-            "mapping": {}
-        }
-        for finding in batch.findings:
-            if finding.review_action != ReviewAction.REJECT:
-                pseudo = finding.final_pseudonym
-                canon = finding.canonical_value or finding.original_value
-                if pseudo not in mapping_data["mapping"]:
-                    mapping_data["mapping"][pseudo] = canon
+        # Genera i report
+        report_data = build_report_data(
+            batch=batch,
+            findings=batch.findings,
+            started_at=started_at,
+            completed_at=completed_at,
+        )
 
-        mapping_path = batch_dir / "mapping.enc"
-        try:
-            save_encrypted_mapping(mapping_data, passphrase, mapping_path)
-        except Exception as e:
-            logger.error("Errore nella cifratura del mapping: %s", e)
+        report_json_path = batch_dir / "report.json"
+        report_html_path = batch_dir / "report.html"
+        generate_json_report(report_data, report_json_path)
+        generate_html_report(report_data, report_html_path)
 
-    # Calcola safety label
-    residual_warnings = batch.residual_warnings or []
-    safety = compute_safety_label(
-        findings=batch.findings,
-        file_records=batch.files,
-        residual_warnings=residual_warnings,
-        global_warnings=global_warnings,
-    )
-    batch.safety_label = safety
+        # Crea l'archivio ZIP finale
+        zip_path = batch_dir / f"pseudonymized_batch_{batch_id[:8]}.zip"
+        with zipfile.ZipFile(str(zip_path), "w", zipfile.ZIP_DEFLATED) as zf:
+            if output_dir.exists():
+                for output_file in output_dir.iterdir():
+                    zf.write(str(output_file), f"files/{output_file.name}")
+            if report_json_path.exists():
+                zf.write(str(report_json_path), "report.json")
+            if report_html_path.exists():
+                zf.write(str(report_html_path), "report.html")
+            mapping_path = batch_dir / "mapping.enc"
+            if mapping_path.exists():
+                zf.write(str(mapping_path), "mapping.enc")
 
-    # Genera i report
-    report_data = build_report_data(
-        batch=batch,
-        findings=batch.findings,
-        started_at=started_at,
-        completed_at=completed_at,
-    )
+        failed_files = [
+            file_rec for file_rec in batch.files
+            if not file_rec.is_text_input and file_rec.status == FileStatus.FAILED
+        ]
+        batch.status = BatchStatus.DONE_WITH_ERRORS if failed_files else BatchStatus.DONE
+        update_batch(batch)
 
-    report_json_path = batch_dir / "report.json"
-    report_html_path = batch_dir / "report.html"
-    generate_json_report(report_data, report_json_path)
-    generate_html_report(report_data, report_html_path)
-
-    # Crea l'archivio ZIP finale
-    zip_path = batch_dir / f"pseudonymized_batch_{batch_id[:8]}.zip"
-    with zipfile.ZipFile(str(zip_path), "w", zipfile.ZIP_DEFLATED) as zf:
-        if output_dir.exists():
-            for output_file in output_dir.iterdir():
-                zf.write(str(output_file), f"files/{output_file.name}")
-        if report_json_path.exists():
-            zf.write(str(report_json_path), "report.json")
-        if report_html_path.exists():
-            zf.write(str(report_html_path), "report.html")
-        mapping_path = batch_dir / "mapping.enc"
-        if mapping_path.exists():
-            zf.write(str(mapping_path), "mapping.enc")
-
-    batch.status = BatchStatus.DONE
-    update_batch(batch)
-
-    logger.info("Pipeline completata per batch %s. ZIP: %s", batch_id, zip_path)
-    return zip_path
+        logger.info("Pipeline completata per batch %s. ZIP: %s", batch_id, zip_path)
+        return zip_path
+    finally:
+        _clear_parse_results(batch_id)

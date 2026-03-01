@@ -13,7 +13,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.responses import JSONResponse
 
-from app.api.routes import router
+from app.api.routes import router as api_router
+from app.api.auth_routes import router as auth_router
+from app.api.console_routes import router as console_router
+from app.api.revert_routes import router as revert_router
+from app.api.batches_routes import router as batches_router
 from app.core.config import SERVER_HOST, SERVER_PORT, TEMP_BASE_DIR
 from app.core.batch_manager import start_cleanup_scheduler
 from app.core.auth import (
@@ -120,7 +124,11 @@ async def auth_middleware(request: Request, call_next):
     return await call_next(request)
 
 # Registra i router API
-app.include_router(router)
+app.include_router(auth_router)
+app.include_router(console_router)
+app.include_router(revert_router)
+app.include_router(batches_router)
+app.include_router(api_router)
 
 # Serve i file statici del frontend React (production build o fallback)
 BASE_DIR = Path(__file__).resolve().parent.parent.parent

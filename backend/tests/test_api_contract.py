@@ -1,10 +1,16 @@
 import io
+import zipfile
 
 from fastapi.testclient import TestClient
 
 from app.main import app
 from app.api import routes
-from app.models.schemas import SafetyLabel
+from app.api import auth_routes
+from app.api import console_routes
+from app.api import revert_routes
+from app.api import batches_routes
+from app.core.batch_manager import create_batch, get_batch_dir
+from app.models.schemas import Batch, BatchConfig, BatchStatus, FileRecord, PresetName, SafetyLabel
 
 
 client = TestClient(app)
@@ -42,7 +48,7 @@ def test_console_scan_contract(monkeypatch):
     def fake_run_text_scan(batch_id: str, text: str, label: str):
         return 'file-contract-1', [], SafetyLabel.SAFE_TO_UPLOAD
 
-    monkeypatch.setattr(routes, 'run_text_scan', fake_run_text_scan)
+    monkeypatch.setattr(console_routes, 'run_text_scan', fake_run_text_scan)
 
     response = client.post('/api/console/scan', json={
         'text': 'email: test@example.com',
@@ -66,8 +72,8 @@ def test_console_apply_contract(monkeypatch):
     def fake_run_text_apply(batch_id: str, file_id: str, original_text: str):
         return 'masked text', SafetyLabel.SAFE_TO_UPLOAD, [], 1
 
-    monkeypatch.setattr(routes, 'run_text_scan', fake_run_text_scan)
-    monkeypatch.setattr(routes, 'run_text_apply', fake_run_text_apply)
+    monkeypatch.setattr(console_routes, 'run_text_scan', fake_run_text_scan)
+    monkeypatch.setattr(console_routes, 'run_text_apply', fake_run_text_apply)
 
     scan = client.post('/api/console/scan', json={
         'text': 'user@example.com',
@@ -92,7 +98,7 @@ def test_console_apply_contract(monkeypatch):
 
 
 def test_batch_create_contract(monkeypatch):
-    monkeypatch.setattr(routes, 'run_scan_pipeline', lambda batch_id: routes.get_batch(batch_id))
+    monkeypatch.setattr(batches_routes, 'run_scan_pipeline', lambda batch_id: batches_routes.get_batch(batch_id))
 
     file_content = io.BytesIO(b'Utente: alice@example.com')
     response = client.post(
@@ -111,3 +117,73 @@ def test_batch_create_contract(monkeypatch):
     assert 'status' in body
     assert 'files' in body
     assert 'findings_count' in body
+
+
+def test_download_blocked_when_done_with_errors():
+    batch = Batch(config=BatchConfig(preset=PresetName.SOC_LOGS))
+    batch.status = BatchStatus.DONE_WITH_ERRORS
+    batch.safety_label = SafetyLabel.SAFE_TO_UPLOAD
+    batch.files = [
+        FileRecord(
+            original_name='contract.txt',
+            stored_path='/tmp/contract.txt',
+            is_text_input=False,
+        )
+    ]
+    create_batch(batch)
+
+    batch_dir = get_batch_dir(batch.batch_id)
+    batch_dir.mkdir(parents=True, exist_ok=True)
+    zip_path = batch_dir / 'artifact.zip'
+    with zipfile.ZipFile(zip_path, 'w') as zf:
+        payload = batch_dir / 'payload.txt'
+        payload.write_text('dummy', encoding='utf-8')
+        zf.write(payload, arcname='payload.txt')
+
+    response = client.get(f'/api/batches/{batch.batch_id}/download')
+    assert response.status_code == 409
+    assert 'done_with_errors' in response.json()['detail']
+
+
+def test_download_blocked_when_not_safe():
+    batch = Batch(config=BatchConfig(preset=PresetName.SOC_LOGS))
+    batch.status = BatchStatus.DONE
+    batch.safety_label = SafetyLabel.NOT_SAFE
+    batch.files = [
+        FileRecord(
+            original_name='contract.txt',
+            stored_path='/tmp/contract.txt',
+            is_text_input=False,
+        )
+    ]
+    create_batch(batch)
+
+    batch_dir = get_batch_dir(batch.batch_id)
+    batch_dir.mkdir(parents=True, exist_ok=True)
+    zip_path = batch_dir / 'artifact.zip'
+    with zipfile.ZipFile(zip_path, 'w') as zf:
+        payload = batch_dir / 'payload.txt'
+        payload.write_text('dummy', encoding='utf-8')
+        zf.write(payload, arcname='payload.txt')
+
+    response = client.get(f'/api/batches/{batch.batch_id}/download')
+    assert response.status_code == 409
+    assert 'safety_label' in response.json()['detail']
+
+
+def test_auth_login_sets_secure_cookie_by_default(monkeypatch):
+    monkeypatch.setattr(auth_routes, 'SESSION_COOKIE_SECURE', True)
+
+    response = client.post('/api/auth/login', json={'username': 'admin', 'password': 'admin123!'})
+    assert response.status_code == 200
+    set_cookie = response.headers.get('set-cookie', '')
+    assert 'Secure' in set_cookie
+
+
+def test_auth_login_allows_dev_override_without_secure_cookie(monkeypatch):
+    monkeypatch.setattr(auth_routes, 'SESSION_COOKIE_SECURE', False)
+
+    response = client.post('/api/auth/login', json={'username': 'admin', 'password': 'admin123!'})
+    assert response.status_code == 200
+    set_cookie = response.headers.get('set-cookie', '')
+    assert 'Secure' not in set_cookie
