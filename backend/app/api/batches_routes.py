@@ -474,6 +474,15 @@ async def apply_batch(batch_id: str, request: Request):
             detail=f"Batch non in review (stato: {batch.status.value}).",
         )
 
+    # ✅ CRITICAL FIX #4: Validate passphrase exists before applying
+    # Prevents silent failures when zip download would fail due to missing passphrase
+    passphrase = get_passphrase(batch_id)
+    if not passphrase:
+        raise HTTPException(
+            status_code=410,  # 410 Gone - passphrase has been lost/cleared
+            detail="Passphrase persa: il batch è stato ripulito. Ricrea il batch e ripeti la scansione.",
+        )
+
     decisions_map = get_decisions(batch_id)
     if decisions_map:
         from app.models.schemas import ReviewDecisionItem

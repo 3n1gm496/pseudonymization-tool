@@ -1,20 +1,26 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import { useToast } from '../hooks/useToast'
 
 const FindingsTable = ({ batch, onApply, isLoading }) => {
-  const [decisions, setDecisions] = useState(() => {
-    return Object.fromEntries(
-      batch.findings.map((f) => [
-        f.finding_id,
-        {
-          action: 'accept',
-          custom_pseudonym: f.proposed_pseudonym,
-        },
-      ])
-    )
-  })
+  const [decisions, setDecisions] = useState({})
   const { showToast } = useToast()
+
+  // ✅ CRITICAL FIX #3: Initialize decisions when batch.findings changes
+  // This ensures that when user uploads a new file, the findings state is synced
+  useEffect(() => {
+    setDecisions(
+      Object.fromEntries(
+        batch.findings.map((f) => [
+          f.finding_id,
+          {
+            action: 'accept',
+            custom_pseudonym: f.proposed_pseudonym,
+          },
+        ])
+      )
+    )
+  }, [batch.findings])
 
   const handleActionChange = (findingId, action) => {
     setDecisions((prev) => ({

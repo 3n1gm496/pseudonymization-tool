@@ -29,6 +29,8 @@ _last_activity: Dict[str, float] = {}  # batch_id -> timestamp ultima attività
 # Timeout di inattività (configurabile)
 BATCH_INACTIVITY_TIMEOUT_SECONDS = max(300, BATCH_INACTIVITY_TTL_HOURS * 3600)
 
+# CRITICAL FIX #1: Reentrant lock for thread-safe access to all shared state
+_global_lock = threading.RLock()
 _cleanup_lock = threading.Lock()
 
 
@@ -53,25 +55,30 @@ def create_batch(batch: Batch) -> Batch:
     """Registra un nuovo batch e crea la sua directory temporanea."""
     batch_dir = TEMP_BASE_DIR / batch.batch_id
     batch_dir.mkdir(parents=True, exist_ok=True)
-    _batches[batch.batch_id] = batch
-    _decisions[batch.batch_id] = {}
-    _last_activity[batch.batch_id] = time.time()
+    
+    with _global_lock:
+        _batches[batch.batch_id] = batch
+        _decisions[batch.batch_id] = {}
+        _last_activity[batch.batch_id] = time.time()
+    
     logger.info("Batch creato: id=%s", batch.batch_id)
     return batch
 
 
 def get_batch(batch_id: str) -> Optional[Batch]:
     """Recupera un batch per ID e aggiorna il timestamp di attività."""
-    batch = _batches.get(batch_id)
-    if batch:
-        _last_activity[batch_id] = time.time()
-    return batch
+    with _global_lock:
+        batch = _batches.get(batch_id)
+        if batch:
+            _last_activity[batch_id] = time.time()
+        return batch
 
 
 def update_batch(batch: Batch) -> Batch:
     """Aggiorna lo stato di un batch esistente."""
-    _batches[batch.batch_id] = batch
-    _last_activity[batch.batch_id] = time.time()
+    with _global_lock:
+        _batches[batch.batch_id] = batch
+        _last_activity[batch.batch_id] = time.time()
     return batch
 
 
@@ -82,7 +89,8 @@ def get_batch_dir(batch_id: str) -> Path:
 
 def list_batches() -> List[Batch]:
     """Restituisce tutti i batch attivi."""
-    return list(_batches.values())
+    with _global_lock:
+        return list(_batches.values())
 
 
 # ─── Passphrase ───────────────────────────────────────────────────────────────
@@ -90,12 +98,14 @@ def list_batches() -> List[Batch]:
 
 def store_passphrase(batch_id: str, passphrase: str) -> None:
     """Memorizza la passphrase in memoria (mai su disco)."""
-    _passphrases[batch_id] = passphrase
+    with _global_lock:
+        _passphrases[batch_id] = passphrase
 
 
 def get_passphrase(batch_id: str) -> Optional[str]:
     """Recupera la passphrase per un batch."""
-    return _passphrases.get(batch_id)
+    with _global_lock:
+        return _passphrases.get(batch_id)
 
 
 def regenerate_passphrase(batch_id: str) -> Optional[str]:
@@ -103,10 +113,11 @@ def regenerate_passphrase(batch_id: str) -> Optional[str]:
     Rigenera la passphrase per un batch.
     ATTENZIONE: il mapping precedente diventa inaccessibile senza la vecchia passphrase.
     """
-    if batch_id not in _batches:
-        return None
-    new_pp = generate_passphrase()
-    _passphrases[batch_id] = new_pp
+    with _global_lock:
+        if batch_id not in _batches:
+            return None
+        new_pp = generate_passphrase()
+        _passphrases[batch_id] = new_pp
     logger.info("Passphrase rigenerata per batch %s (log sanitizzato)", batch_id)
     return new_pp
 
@@ -120,38 +131,41 @@ def store_decisions(batch_id: str, decisions: List[Dict[str, Any]]) -> Dict[str,
     decisions: lista di {finding_id, action, custom_pseudonym?}
     Restituisce contatori {accepted, rejected, modified}.
     """
-    if batch_id not in _decisions:
-        _decisions[batch_id] = {}
+    with _global_lock:
+        if batch_id not in _decisions:
+            _decisions[batch_id] = {}
 
-    counts = {"accepted": 0, "rejected": 0, "modified": 0}
-    for d in decisions:
-        fid = d.get("finding_id")
-        action = d.get("action", "ACCEPT").upper()
-        if not fid:
-            continue
-        _decisions[batch_id][fid] = {
-            "action": action,
-            "custom_pseudonym": d.get("custom_pseudonym"),
-        }
-        if action == "REJECT":
-            counts["rejected"] += 1
-        elif action == "MODIFY":
-            counts["modified"] += 1
-        else:
-            counts["accepted"] += 1
+        counts = {"accepted": 0, "rejected": 0, "modified": 0}
+        for d in decisions:
+            fid = d.get("finding_id")
+            action = d.get("action", "ACCEPT").upper()
+            if not fid:
+                continue
+            _decisions[batch_id][fid] = {
+                "action": action,
+                "custom_pseudonym": d.get("custom_pseudonym"),
+            }
+            if action == "REJECT":
+                counts["rejected"] += 1
+            elif action == "MODIFY":
+                counts["modified"] += 1
+            else:
+                counts["accepted"] += 1
 
-    _last_activity[batch_id] = time.time()
+        _last_activity[batch_id] = time.time()
     return counts
 
 
 def get_decisions(batch_id: str) -> Dict[str, Any]:
     """Recupera le decisioni persistite per un batch."""
-    return _decisions.get(batch_id, {})
+    with _global_lock:
+        return _decisions.get(batch_id, {})
 
 
 def clear_decisions(batch_id: str) -> None:
     """Cancella le decisioni di un batch (es. dopo apply)."""
-    _decisions[batch_id] = {}
+    with _global_lock:
+        _decisions[batch_id] = {}
 
 
 # ─── PseudonymEngine persistente ─────────────────────────────────────────────
@@ -165,15 +179,17 @@ def get_or_create_engine(batch_id: str, mode: BatchMode) -> object:
     """
     from app.pseudonymizer.engine import PseudonymEngine
 
-    if batch_id not in _engines:
-        _engines[batch_id] = PseudonymEngine(mode=mode)
-        logger.info("PseudonymEngine creato per batch %s", batch_id)
-    return _engines[batch_id]
+    with _global_lock:
+        if batch_id not in _engines:
+            _engines[batch_id] = PseudonymEngine(mode=mode)
+            logger.info("PseudonymEngine creato per batch %s", batch_id)
+        return _engines[batch_id]
 
 
 def get_engine(batch_id: str) -> Optional[object]:
     """Recupera il PseudonymEngine per un batch."""
-    return _engines.get(batch_id)
+    with _global_lock:
+        return _engines.get(batch_id)
 
 
 # ─── Cleanup ──────────────────────────────────────────────────────────────────
@@ -183,27 +199,28 @@ def cleanup_batch(batch_id: str) -> None:
     """
     Rimuove la directory temporanea del batch e cancella tutti i dati in memoria.
     """
-    batch_dir = TEMP_BASE_DIR / batch_id
-    if batch_dir.exists():
+    with _global_lock:
+        batch_dir = TEMP_BASE_DIR / batch_id
+        if batch_dir.exists():
+            try:
+                shutil.rmtree(batch_dir)
+                logger.info("Directory temporanea rimossa per batch: id=%s", batch_id)
+            except Exception as e:
+                logger.error("Errore rimozione directory batch %s: %s", batch_id, e)
+
+        if batch_id in _passphrases:
+            _passphrases[batch_id] = ""
+            _passphrases.pop(batch_id, None)
         try:
-            shutil.rmtree(batch_dir)
-            logger.info("Directory temporanea rimossa per batch: id=%s", batch_id)
-        except Exception as e:
-            logger.error("Errore rimozione directory batch %s: %s", batch_id, e)
+            from app.core.pipeline import _clear_parse_results
 
-    if batch_id in _passphrases:
-        _passphrases[batch_id] = ""
-        _passphrases.pop(batch_id, None)
-    try:
-        from app.core.pipeline import _clear_parse_results
-
-        _clear_parse_results(batch_id)
-    except Exception:
-        pass
-    _engines.pop(batch_id, None)
-    _decisions.pop(batch_id, None)
-    _batches.pop(batch_id, None)
-    _last_activity.pop(batch_id, None)
+            _clear_parse_results(batch_id)
+        except Exception:
+            pass
+        _engines.pop(batch_id, None)
+        _decisions.pop(batch_id, None)
+        _batches.pop(batch_id, None)
+        _last_activity.pop(batch_id, None)
 
 
 def cleanup_inactive_batches() -> int:

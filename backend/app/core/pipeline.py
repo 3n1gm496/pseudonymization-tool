@@ -144,7 +144,24 @@ def run_scan_pipeline(batch_id: str) -> Batch:
 
     # Mantieni i finding di testo inline già presenti
     existing_text_findings = [f for f in batch.findings if f.is_text_input]
-    batch.findings = existing_text_findings + all_findings
+    
+    # ✅ CRITICAL FIX #2: Deduplication by finding_id to prevent duplicates on rescans
+    seen_ids = set()
+    deduplicated_findings = []
+    
+    # Add existing text findings first (preserve insertion order)
+    for f in existing_text_findings:
+        if f.finding_id not in seen_ids:
+            deduplicated_findings.append(f)
+            seen_ids.add(f.finding_id)
+    
+    # Add new findings, skipping duplicates
+    for f in all_findings:
+        if f.finding_id not in seen_ids:
+            deduplicated_findings.append(f)
+            seen_ids.add(f.finding_id)
+    
+    batch.findings = deduplicated_findings
     batch.status = BatchStatus.REVIEW
     update_batch(batch)
 
