@@ -532,7 +532,8 @@ async def apply_batch(batch_id: str, request: Request):
     original_status = batch.status
     original_files = [f.model_copy(deep=True) for f in batch.files]
 
-    started_at = _batch_start_times.get(batch_id, datetime.now(timezone.utc).isoformat())
+    # ✅ Use thread-safe function instead of direct dict access
+    started_at = get_batch_start_time(batch_id) or datetime.now(timezone.utc).isoformat()
     
     # ✅ FIX #5b: Try/except/finally with rollback on error
     try:

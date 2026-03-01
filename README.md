@@ -164,11 +164,11 @@ Vuoi inviare i tuoi dati a un modello AI (ChatGPT, Claude, LLaMA) senza esporre 
 ### Planning & Roadmap
 - **[docs/09_Roadmap.md](docs/09_Roadmap.md)** — Roadmap prodotto.
 - **[docs/10_Backlog.md](docs/10_Backlog.md)** — Backlog item e priorità.
-- **[docs/RELEASES.md](docs/RELEASES.md)** — Changelog e versioni.
+- **[docs/RELEASES.md](docs/RELEASES.md)** — Changelog, release notes e versioni.
 
-### Approfondimenti
-- **[docs/13_Super_Critical_Analysis.md](docs/13_Super_Critical_Analysis.md)** — Analysis post-P2 (completamento P0/P1/P2 stabilization phases).
-- **[docs/12_Coverage_Analysis_and_Strategy.md](docs/12_Coverage_Analysis_and_Strategy.md)** — Analisi coverage storica e strategia incrementale.
+### Code Review & Improvements
+- **[docs/18_CODE_REVIEW_FINDINGS.md](docs/18_CODE_REVIEW_FINDINGS.md)** — Deep code review completo con 23 issue identificati, 3 critical bugs risolti, e roadmap remediation. Include analisi dettagliata di severità, impatto e priorità.
+- **[docs/IMPROVEMENTS.md](docs/IMPROVEMENTS.md)** — Miglioramenti identificati e suggerimenti futuri.
 
 ---
 
