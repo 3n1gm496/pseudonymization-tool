@@ -27,9 +27,9 @@ Web application locale moderna per la pseudonimizzazione sicura di dati sensibil
 
 ## 📋 Indice
 
-- [Prerequisiti](#-prerequisiti)
-- [Installazione](#-installazione-e-avvio)
+- [Quick Start](#-quick-start)
 - [Utilizzo](#-utilizzo)
+- [Integrazione AI](#-integrazione-con-ai---prepara-per-ai)
 - [Sicurezza](#-sicurezza-e-limitazioni)
 - [Sviluppo](#-sviluppo)
 - [Contributing](#-contributing)
@@ -37,87 +37,53 @@ Web application locale moderna per la pseudonimizzazione sicura di dati sensibil
 
 ---
 
-## 🔧 Prerequisiti
+## ⚡ Quick Start
 
-### 1.1. Python (Obbligatorio)
+### Metodo 1: Docker (Raccomandato)
 
-| Versione | Supporto | Note |
-|---|---|---|
-| **3.11.x** | ✅ **Raccomandata e Testata** | La versione usata per lo sviluppo e i test. |
-| 3.10.x | ⚠️ Supportata (fallback) | Dovrebbe funzionare, ma non è la versione primaria di test. |
-| 3.12.x | ⚠️ Supportata (fallback) | Idem. |
-| < 3.10 | ❌ **Non supportata** | Lo script di avvio si fermerà. |
-| >= 3.13 | ❌ **Non supportata** | Lo script di avvio si fermerà per evitare problemi di compatibilità non noti. |
-
-**Installazione (Windows):**
-1. Scarica **Python 3.11.9** da [python.org](https://www.python.org/downloads/release/python-3119/).
-2. Durante l'installazione, **seleziona l'opzione "Add Python to PATH"**.
-
-### 1.2. Tesseract OCR (Opzionale)
-
-Questo componente è necessario **solo per processare testo contenuto in immagini** (JPG, PNG).
-
-**Installazione (Windows):**
-1. Scarica l'installer da [UB Mannheim](https://github.com/UB-Mannheim/tesseract/wiki).
-2. Durante l'installazione, assicurati di selezionare i language pack aggiuntivi, in particolare **Italiano**.
-
-### 1.3. Prerequisiti di Build (Windows)
-
-**Nessuno.** Le dipendenze Python usate sono distribuite come *wheel* pre-compilati per Windows. **Non sono richiesti Visual C++ Build Tools** o altri compilatori C/Rust.
-
----
-
-## 🚀 Installazione e Avvio
-
-### 2.1. Modalità Online (connessione internet richiesta solo la prima volta)
-
-1. **Decomprimi** il file `pseudonymization-tool-v1.0.3.zip`.
-2. Esegui lo script di avvio:
-   - **Windows**: Doppio clic su `start.bat`.
-   - **Linux/macOS**: Apri un terminale e digita `chmod +x start.sh && ./start.sh`.
-3. La prima volta, lo script creerà un ambiente virtuale (`.venv/`) e installerà le dipendenze. Questo richiede qualche minuto e una connessione internet.
-4. Il browser si aprirà automaticamente su `http://localhost:8000`.
-
-Le esecuzioni successive saranno istantanee e completamente offline.
-
-### 2.2. Modalità Offline (per macchine senza accesso a internet)
-
-Questa modalità permette di preparare il pacchetto su una macchina con internet e poi eseguirlo su una macchina target completamente isolata.
-
-**Passo 1: Sulla macchina CON internet**
-
-1. Decomprimi il file ZIP.
-2. Esegui lo script `prepare_offline`:
-   - **Windows**: Doppio clic su `prepare_offline.bat`.
-   - **Linux/macOS**: Apri un terminale e digita `chmod +x prepare_offline.sh && ./prepare_offline.sh`.
-3. Lo script creerà una cartella `wheelhouse/` con tutti i file delle dipendenze (`.whl`).
-
-**Passo 2: Sulla macchina TARGET (senza internet)**
-
-1. Copia l'**intera cartella** del tool (inclusa la sottocartella `wheelhouse/`) sulla macchina target.
-2. Esegui lo script `start.bat` o `start.sh` come al solito.
-3. Lo script rileverà automaticamente la presenza di `wheelhouse/` e installerà le dipendenze da lì, **senza richiedere alcuna connessione internet**.
-
-### 2.3. Modalità Docker Compose
-
-Questa modalità fornisce un avvio standardizzato dell'app in container, in linea con approcci infrastrutturali tipo `security-scanning-platform`. *************************************************************************************************************************************************************************************************************************
+**Prerequisiti**: Docker e Docker Compose installati
 
 ```bash
+# Clone del repository
+git clone https://github.com/3n1gm496/pseudonymization-tool.git
 cd pseudonymization-tool
+
+# Avvio con Docker
+make start
+```
+
+Oppure manualmente:
+
+```bash
 docker compose up --build -d
 ```
 
-Verifica servizio:
+Accedi all'interfaccia: **http://localhost:8000**
 
+**Comandi utili:**
 ```bash
-curl http://127.0.0.1:8000/api/health
-curl http://127.0.0.1:8000/api/ready
+make logs      # Visualizza i log
+make stop      # Ferma il servizio
+make health    # Verifica lo stato
 ```
 
-Stop:
+Vedi [Makefile](Makefile) per tutti i comandi disponibili.
 
+---
+
+### Metodo 2: Installazione Locale (Senza Docker)
+
+**Per ambienti air-gapped o sistemi senza Docker**
+
+Vedi [scripts/legacy/README.md](scripts/legacy/README.md) per istruzioni dettagliate su:
+- Installazione con Python venv
+- Modalità offline (machine senza internet)
+- Preparazione pacchetto wheelhouse
+- Troubleshooting prerequisiti (Python, Tesseract)
+
+**Quick command:**
 ```bash
-docker compose down
+make legacy-start
 ```
 
 ---
@@ -230,10 +196,15 @@ Crea `frontend/dist/` che FastAPI servira' automaticamente in produzione.
 #### Dev Mode (Full Stack)
 
 ```bash
-./dev-stack.sh
+make dev
 ```
 
-Avvia sia backend che frontend in parallelo con HMR (Hot Module Reload). Premi Ctrl+C per fermare entrambi.
+Avvia sia backend che frontend in parallelo con HMR (Hot Module Reload). Backend su `:8000`, Frontend su `:5173` con hot reload.
+
+Alternativamente, manuale:
+```bash
+./dev-stack.sh  # se preferisci lo script legacy
+```
 
 #### Caratteristiche Frontend
 
@@ -275,16 +246,19 @@ curl http://127.0.0.1:8000/api/settings/policies
 curl http://127.0.0.1:8000/api/settings/policies/SOC%20Logs
 ```
 
-### Esecuzione via Docker
+### Testing
 
 ```bash
-docker compose up --build
-```
+# Esegui tutti i test
+make test
 
-Note operative container:
-- Le configurazioni dizionario sono montate da `backend/config`.
-- I dati temporanei batch sono su volume Docker dedicato `pseudonymizer_tmp`.
-- OCR (`tesseract`) è incluso nell'immagine.
+# Con coverage report
+make test-cov
+
+# Test specifici
+cd backend
+pytest tests/test_api_contract.py -v
+```
 
 ### Struttura Progetto
 
@@ -321,15 +295,17 @@ pseudonymization-tool/
 │   ├── package.json
 │   ├── vite.config.js
 │   └── tailwind.config.js
-├── scripts/                   # Operational tools
-│   └── ops.sh                 # Unified deployment script
+├── scripts/
+│   └── legacy/                # Venv-based startup scripts (air-gapped)
+│       ├── start.sh           # Linux/macOS startup
+│       ├── start.bat          # Windows startup
+│       ├── prepare_offline.sh # Offline preparation
+│       ├── prepare_offline.bat
+│       └── README.md          # Legacy installation guide
 ├── docs/                      # Documentation & Roadmap
-├── dev-stack.sh               # Start backend + frontend
-├── docker-compose.yml
-├── start.sh                   # Linux/macOS startup script
-├── start.bat                  # Windows startup script
-├── prepare_offline.sh         # Offline mode preparation
-├── prepare_offline.bat        # Windows offline mode
+├── Makefile                   # Universal command interface
+├── dev-stack.sh               # Development mode helper
+├── docker-compose.yml         # Docker orchestration
 └── README.md
 ```
 
