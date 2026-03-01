@@ -25,6 +25,10 @@ from app.detectors.engine import detect_in_parse_result, residual_scan, build_ex
 from app.pseudonymizer.transformer import transform_file
 from app.mapping.crypto import save_encrypted_mapping
 from app.report.generator import build_report_data, generate_json_report, generate_html_report
+from app.core.exceptions import (
+    ScanPipelineError, ApplyPipelineError, BatchStateError,
+    ParsingError, TransformError
+)
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +70,7 @@ def run_scan_pipeline(batch_id: str) -> Batch:
     """
     batch = get_batch(batch_id)
     if not batch:
-        raise ValueError(f"Batch non trovato: {batch_id}")
+        raise BatchStateError(batch_id, "INIT", "get_batch")
 
     batch.status = BatchStatus.SCANNING
     update_batch(batch)
@@ -93,32 +97,42 @@ def run_scan_pipeline(batch_id: str) -> Batch:
         file_path = Path(file_rec.stored_path)
         logger.info("Processing file: %s", file_rec.original_name)
 
-        # 1. Parsing
-        parse_result = parse_file(file_path)
-        _cache_parse_result(batch_id, file_rec.file_id, parse_result)
+        try:
+            # 1. Parsing
+            parse_result = parse_file(file_path)
+            _cache_parse_result(batch_id, file_rec.file_id, parse_result)
 
-        if not parse_result.success:
+            if not parse_result.success:
+                file_rec.status = FileStatus.FAILED
+                file_rec.error_message = parse_result.error_message
+                logger.warning("Parsing fallito per '%s': %s", file_rec.original_name, parse_result.error_message)
+                continue
+
+            file_rec.warnings.extend(parse_result.warnings)
+
+            # 2. Detection
+            raw_findings = detect_in_parse_result(parse_result, extra_detectors=extra_detectors)
+
+            # 3. Pseudonimizzazione (usa engine persistente)
+            file_findings = engine.process_findings(raw_findings, file_rec.file_id)
+
+            # 4. Filtra per policy
+            file_findings = _filter_findings_by_policy(file_findings, batch.config.preset)
+
+            file_rec.findings_count = len(file_findings)
+            all_findings.extend(file_findings)
+
+            file_rec.status = FileStatus.PARSED
+            logger.info("File '%s' processato: %d finding trovati.", file_rec.original_name, len(file_findings))
+
+        except ParsingError as e:
             file_rec.status = FileStatus.FAILED
-            file_rec.error_message = parse_result.error_message
-            logger.warning("Parsing fallito per '%s': %s", file_rec.original_name, parse_result.error_message)
-            continue
-
-        file_rec.warnings.extend(parse_result.warnings)
-
-        # 2. Detection
-        raw_findings = detect_in_parse_result(parse_result, extra_detectors=extra_detectors)
-
-        # 3. Pseudonimizzazione (usa engine persistente)
-        file_findings = engine.process_findings(raw_findings, file_rec.file_id)
-
-        # 4. Filtra per policy
-        file_findings = _filter_findings_by_policy(file_findings, batch.config.preset)
-
-        file_rec.findings_count = len(file_findings)
-        all_findings.extend(file_findings)
-
-        file_rec.status = FileStatus.PARSED
-        logger.info("File '%s' processato: %d finding trovati.", file_rec.original_name, len(file_findings))
+            file_rec.error_message = str(e)
+            logger.warning("Parsing error for '%s': %s", file_rec.original_name, e)
+        except Exception as e:
+            file_rec.status = FileStatus.FAILED
+            file_rec.error_message = f"Errore durante il processing: {e}"
+            logger.error("Unexpected error processing '%s': %s", file_rec.original_name, e)
 
     # Mantieni i finding di testo inline già presenti
     existing_text_findings = [f for f in batch.findings if f.is_text_input]
@@ -159,7 +173,7 @@ def run_apply_pipeline(batch_id: str, started_at: str) -> Path:
     """
     batch = get_batch(batch_id)
     if not batch:
-        raise ValueError(f"Batch non trovato: {batch_id}")
+        raise BatchStateError(batch_id, "REVIEW", "get_batch")
 
     batch.status = BatchStatus.APPLYING
     update_batch(batch)
@@ -197,10 +211,14 @@ def run_apply_pipeline(batch_id: str, started_at: str) -> Path:
                     )
                     file_rec.warnings.extend(transform_warnings)
                     file_rec.status = FileStatus.PROCESSED
+                except TransformError as e:
+                    file_rec.status = FileStatus.FAILED
+                    file_rec.error_message = str(e)
+                    logger.warning("Transform error for '%s': %s", file_rec.original_name, e)
                 except Exception as e:
                     file_rec.status = FileStatus.FAILED
                     file_rec.error_message = f"Errore durante la trasformazione: {e}"
-                    logger.error("Errore trasformazione '%s': %s", file_rec.original_name, e)
+                    logger.error("Unexpected error transforming '%s': %s", file_rec.original_name, e)
 
         completed_at = datetime.now(timezone.utc).isoformat()
 
@@ -225,7 +243,7 @@ def run_apply_pipeline(batch_id: str, started_at: str) -> Path:
             try:
                 save_encrypted_mapping(mapping_data, passphrase, mapping_path)
             except Exception as e:
-                logger.error("Errore nella cifratura del mapping: %s", e)
+                logger.error("Error encrypting mapping: %s", e)
 
         # Calcola safety label
         residual_warnings = batch.residual_warnings or []

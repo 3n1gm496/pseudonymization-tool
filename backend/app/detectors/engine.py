@@ -12,6 +12,7 @@ from app.detectors.soc_detectors import SOC_DETECTORS, DomainFragmentDetector
 from app.detectors.ldap_detector import LdapPersonDetector
 from app.parsers.base import ParseResult, TextChunk
 from app.models.schemas import EntityType
+from app.core.exceptions import DetectionError, DictionaryDetectionError, LDAPDetectionError
 
 logger = logging.getLogger(__name__)
 
@@ -113,30 +114,40 @@ def detect_in_chunk(
     for detector in ALL_REGEX_DETECTORS:
         try:
             all_findings.extend(detector.detect(chunk))
+        except DetectionError as e:
+            logger.warning("Regex detection error in '%s': %s", detector.name, e)
         except Exception as e:
-            logger.error("Errore nel detector '%s': %s", detector.name, e)
+            logger.error("Unexpected error in detector '%s': %s", detector.name, e)
 
     # 2. Detector SOC-grade v2
     for detector in SOC_DETECTORS:
         try:
             all_findings.extend(detector.detect(chunk))
+        except DetectionError as e:
+            logger.warning("SOC detection error in '%s': %s", detector.name, e)
         except Exception as e:
-            logger.error("Errore nel detector SOC '%s': %s", detector.name, e)
+            logger.error("Unexpected error in SOC detector '%s': %s", detector.name, e)
 
     # 3. Detector dizionario custom
     try:
         dict_detector = get_dictionary_detector()
         all_findings.extend(dict_detector.detect(chunk))
+    except DictionaryDetectionError as e:
+        logger.warning("Dictionary detection error: %s", e)
     except Exception as e:
-        logger.error("Errore nel DictionaryDetector: %s", e)
+        logger.error("Unexpected error in DictionaryDetector: %s", e)
 
     # 4. Detector extra (LDAP, domain fragments, ecc.)
     if extra_detectors:
         for detector in extra_detectors:
             try:
                 all_findings.extend(detector.detect(chunk))
+            except LDAPDetectionError as e:
+                logger.warning("LDAP detection error: %s", e)
+            except DetectionError as e:
+                logger.warning("Detection error in extra detector '%s': %s", detector.name, e)
             except Exception as e:
-                logger.error("Errore nel detector extra '%s': %s", detector.name, e)
+                logger.error("Unexpected error in extra detector '%s': %s", detector.name, e)
 
     # 5. Risolvi le sovrapposizioni con priorità per tipo
     return _resolve_overlaps(all_findings)
