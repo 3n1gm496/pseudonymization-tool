@@ -39,7 +39,7 @@ class TestSessionMemoryLeakFix:
             _sessions.clear()
 
         # Create session
-        token, expires_at = create_session("admin")
+        token, expires_at, _ = create_session("admin")
 
         initial_count = len(_sessions)
         assert initial_count >= 1
@@ -63,7 +63,7 @@ class TestSessionMemoryLeakFix:
             _sessions.clear()
 
         # Create session
-        token, expires_at = create_session("admin")
+        token, expires_at, _ = create_session("admin")
 
         # Validate while still active
         result = validate_session(token)
@@ -341,7 +341,7 @@ class TestMemoryManagementIntegration:
             _batch_start_times.clear()
 
         # Create session
-        token, _ = create_session("admin")
+        token, _, _ = create_session("admin")
         assert validate_session(token) == "admin"
 
         # Create batch
@@ -376,7 +376,7 @@ class TestNoRegressions:
         with auth_lock:
             _sessions.clear()
 
-        token, _ = create_session("admin")
+        token, _, _ = create_session("admin")
         result = validate_session(token)
 
         assert result == "admin"

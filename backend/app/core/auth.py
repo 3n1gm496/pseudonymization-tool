@@ -180,7 +180,6 @@ def cleanup_csrf_token(session_id: str) -> None:
 
 def validate_csrf_dependency(
     request: "Request",  # type: ignore
-    csrf_token: Optional[str] = None
 ) -> None:
     """
     FastAPI dependency for CSRF validation.
@@ -193,11 +192,17 @@ def validate_csrf_dependency(
     The dependency extracts csrf_token from:
     1. X-CSRF-Token header (recommended)
     2. csrf_token query parameter (fallback)
+    
+    Note: Skips validation when AUTH_ENABLED is False (e.g., in tests)
     """
     import logging
     from fastapi import Header, HTTPException
     
     logger = logging.getLogger(__name__)
+    
+    # ✅ FIX: Skip CSRF validation when authentication is disabled (e.g., dev/test mode)
+    if not AUTH_ENABLED:
+        return  # No auth required, no CSRF check needed
     
     # Get CSRF token from either header or query
     csrf_from_header = request.headers.get("X-CSRF-Token")

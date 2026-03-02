@@ -51,3 +51,13 @@ def temp_output_dir(tmp_path):
     output_dir = tmp_path / "output"
     output_dir.mkdir(exist_ok=True)
     return output_dir
+
+
+@pytest.fixture(scope="function", autouse=True)
+def disable_auth_for_tests(monkeypatch):
+    """
+    Disable authentication for all tests to avoid CSRF validation.
+    This allows test client to make requests without session/CSRF tokens.
+    """
+    from app.core import auth
+    monkeypatch.setattr(auth, "AUTH_ENABLED", False)

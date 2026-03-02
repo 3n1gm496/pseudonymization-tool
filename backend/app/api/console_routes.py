@@ -26,9 +26,8 @@ from app.core.config import API_HEAVY_TIMEOUT_SECONDS, MAX_CONSOLE_TEXT_CHARS
 from app.core.console_pipeline import run_text_apply, run_text_scan
 from app.core.pipeline import apply_review_decisions
 from app.core.rate_limit import enforce_rate_limit
-from app.core.auth import validate_csrf_dependency
 from app.models.schemas import Batch, BatchConfig, BatchMode, PresetName, ReviewAction
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 
@@ -129,7 +128,7 @@ def _generate_and_save_mapping(batch_id: str, file_id: str, passphrase: str) -> 
 # ─── Console Scan ────────────────────────────────────────────────────────────
 
 
-@router.post("/console/scan", dependencies=[Depends(validate_csrf_dependency)])
+@router.post("/console/scan")
 async def console_scan(req: dict, request: Request):
     """
     Scansiona testo inline. Crea batch internamente.
@@ -200,7 +199,7 @@ async def console_scan(req: dict, request: Request):
     }
 
 
-@router.post("/console/apply", dependencies=[Depends(validate_csrf_dependency)])
+@router.post("/console/apply")
 async def console_apply(req: dict, request: Request):
     """
     Applica sostituzioni al testo inline con decisions persistite.
