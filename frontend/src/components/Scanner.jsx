@@ -2,6 +2,18 @@ import React, { useState, useRef } from 'react'
 import axios from 'axios'
 import { useToast } from '../hooks/useToast'
 
+/**
+ * @typedef {import('../types').Batch} Batch
+ */
+
+/**
+ * Scanner Component - Handles text and file scanning input
+ * 
+ * @param {Object} props
+ * @param {function(Batch): void} props.onScan - Callback when scan completes with batch data
+ * @param {boolean} props.isLoading - Loading state from parent (shared across operations)
+ * @returns {React.ReactElement}
+ */
 const Scanner = ({ onScan, isLoading }) => {
   const [text, setText] = useState('')
   const [uploadedFile, setUploadedFile] = useState(null)
@@ -198,4 +210,4 @@ const Scanner = ({ onScan, isLoading }) => {
   )
 }
 
-export default Scanner
+export default React.memo(Scanner)

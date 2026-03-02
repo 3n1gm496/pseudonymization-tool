@@ -2,6 +2,21 @@ import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import { useToast } from '../hooks/useToast'
 
+/**
+ * @typedef {import('../types').Batch} Batch
+ * @typedef {import('../types').Finding} Finding
+ * @typedef {import('../types').ApplyRequest} ApplyRequest
+ */
+
+/**
+ * FindingsTable Component - Interactive table for reviewing and modifying detected findings
+ * 
+ * @param {Object} props
+ * @param {Batch} props.batch - Batch data containing findings array
+ * @param {function(ApplyRequest): Promise<void>} props.onApply - Callback when user applies decisions
+ * @param {boolean} props.isLoading - Loading state for apply operation
+ * @returns {React.ReactElement}
+ */
 const FindingsTable = ({ batch, onApply, isLoading }) => {
   const [decisions, setDecisions] = useState({})
   const { showToast } = useToast()
@@ -199,4 +214,4 @@ const FindingsTable = ({ batch, onApply, isLoading }) => {
   )
 }
 
-export default FindingsTable
+export default React.memo(FindingsTable)

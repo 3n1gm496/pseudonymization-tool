@@ -28,6 +28,12 @@ logger = logging.getLogger(__name__)
 
 
 def _scrub_sensitive(value: Any) -> Any:
+    """
+    Rimuove dati sensibili dai log.
+    ✅ FIX #18: Enhanced sanitization - paths, UUIDs, timestamps
+    """
+    import re
+    
     if isinstance(value, dict):
         cleaned = {}
         for key, item in value.items():
@@ -40,6 +46,12 @@ def _scrub_sensitive(value: Any) -> Any:
         return cleaned
     if isinstance(value, list):
         return [_scrub_sensitive(item) for item in value]
+    if isinstance(value, str):
+        # ✅ Scrub file paths (e.g., /home/admin/... → /home/***)
+        value = re.sub(r'/home/[^/\s]+', '/home/***', value)
+        value = re.sub(r'/tmp/[^/\s]+', '/tmp/***', value)
+        # ✅ Scrub full UUIDs (keep first 8 chars for debugging: xxxx-xxxx-... → xxxx-****)
+        value = re.sub(r'\b([a-f0-9]{8})-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\b', r'\1-****', value)
     return value
 
 

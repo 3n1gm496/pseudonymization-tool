@@ -253,47 +253,45 @@ def cleanup_batch(batch_id: str) -> None:
 def cleanup_inactive_batches() -> int:
     """
     Rimuove i batch inattivi. Restituisce il numero di batch rimossi.
-    ✅ FIX: Check expiration INSIDE _global_lock to prevent TOCTOU race condition
+    ✅ FIX #1: Single atomic lock region - no TOCTOU window between check and delete
     """
-    expired_bids = []
+    cleaned_count = 0
     
-    # Step 1: Identify expired batches (under main lock to prevent TOCTOU)
+    # Single lock acquisition - no race window
     with _global_lock:
         now = time.time()
         expired_bids = [bid for bid, last in _last_activity.items() 
                         if now - last > BATCH_INACTIVITY_TIMEOUT_SECONDS]
-    
-    # Step 2: Clean them up (still under same lock context)
-    if expired_bids:
-        with _global_lock:
-            # Double-check expiration is still valid (re-check under lock)
-            now = time.time()
-            for bid in expired_bids:
-                if bid in _last_activity and now - _last_activity[bid] > BATCH_INACTIVITY_TIMEOUT_SECONDS:
-                    # Only cleanup if still expired
-                    batch_dir = TEMP_BASE_DIR / bid
-                    if batch_dir.exists():
-                        try:
-                            shutil.rmtree(batch_dir)
-                            logger.info("Directory temporanea rimossa per batch: id=%s", bid)
-                        except Exception as e:
-                            logger.error("Errore rimozione directory batch %s: %s", bid, e)
-
-                    if bid in _passphrases:
-                        _passphrases[bid] = ""
-                        _passphrases.pop(bid, None)
+        
+        # Clean them up immediately (still holding lock)
+        for bid in expired_bids:
+            # Double-check still expired (activity could have updated during iteration)
+            if bid in _last_activity and now - _last_activity[bid] > BATCH_INACTIVITY_TIMEOUT_SECONDS:
+                batch_dir = TEMP_BASE_DIR / bid
+                if batch_dir.exists():
                     try:
-                        from app.core.pipeline import _clear_parse_results
+                        shutil.rmtree(batch_dir)
+                        logger.info("Directory temporanea rimossa per batch: id=%s", bid)
+                    except Exception as e:
+                        logger.error("Errore rimozione directory batch %s: %s", bid, e)
 
-                        _clear_parse_results(bid)
-                    except Exception:
-                        pass
-                    _engines.pop(bid, None)
-                    _decisions.pop(bid, None)
-                    _batches.pop(bid, None)
-                    _last_activity.pop(bid, None)
+                if bid in _passphrases:
+                    _passphrases[bid] = ""
+                    _passphrases.pop(bid, None)
+                try:
+                    from app.core.pipeline import _clear_parse_results
+
+                    _clear_parse_results(bid)
+                except Exception:
+                    pass
+                _engines.pop(bid, None)
+                _decisions.pop(bid, None)
+                _batches.pop(bid, None)
+                _last_activity.pop(bid, None)
+                _batch_start_times.pop(bid, None)
+                cleaned_count += 1
     
-    return len(expired_bids)
+    return cleaned_count
 
 
 def start_cleanup_scheduler() -> None:

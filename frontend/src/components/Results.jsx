@@ -3,6 +3,19 @@ import axios from 'axios'
 import { useToast } from '../hooks/useToast'
 import PrepareForAI from './PrepareForAI'
 
+/**
+ * @typedef {import('../types').Batch} Batch
+ */
+
+/**
+ * Results Component - Displays pseudonymization results and download options
+ * 
+ * @param {Object} props
+ * @param {Batch} props.batch - Batch data with findings and status
+ * @param {string} props.pseudonymizedText - Pseudonymized text output (for text scans)
+ * @param {function(): void} props.onNewScan - Callback to start a new scan
+ * @returns {React.ReactElement}
+ */
 const Results = ({ batch, pseudonymizedText, onNewScan }) => {
   const { showToast } = useToast()
   const [copied, setCopied] = React.useState(false)
@@ -134,4 +147,4 @@ const Results = ({ batch, pseudonymizedText, onNewScan }) => {
   )
 }
 
-export default Results
+export default React.memo(Results)
