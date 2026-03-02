@@ -5,8 +5,8 @@ Workflows for preparing pseudonymized data for external AI services and revertin
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [Flusso "Prepara per AI"](#flusso-prepara-per-ai)
-3. [Flusso "Decifera Risposta AI"](#flusso-decifera-risposta-ai)
+2. [Flusso "Pseudonimizza" (Principale)](#flusso-pseudonimizza-principale)
+3. [Flusso "Decifra Risposta AI"](#flusso-decifra-risposta-ai)
 4. [Flusso "Revert Batch ZIP"](#flusso-revert-batch-zip)
 5. [Sicurezza e Passphrase](#sicurezza-e-passphrase)
 6. [Workflow Completo Esempio](#workflow-completo-esempio)
@@ -16,134 +16,119 @@ Workflows for preparing pseudonymized data for external AI services and revertin
 
 ## Overview
 
-Pseudonymization transforms sensitive data into placeholder values (e.g., `mario.rossi@acme.com` → `EMAIL_001`). The tool provides three workflows:
+Pseudonymization transforms sensitive data into placeholder values (e.g., `mario.rossi@acme.com` → `EMAIL_001`). The tool provides two main workflows after pseudonymization:
 
 | Workflow | When to Use | Input | Output |
 |----------|-------------|-------|--------|
-| **Prepare for AI** | Export pseudonymized text for external AI model | Pseudonymized text + passphrase | Encrypted mapping file |
 | **Decrypt AI Response** | Process AI response containing your pseudonyms | AI output + mapping.enc + passphrase | Decrypted original text |
-| **Revert Batch** | Fully reverse pseudonymization of a batch | Batch ZIP file | Reverted ZIP file |
+| **Revert Batch ZIP** | Fully reverse pseudonymization of a batch | Batch ZIP file + mapping.enc + passphrase | Fully reverted ZIP file |
 
 ### Typical Workflow
 
 ```
 1. Upload sensitive data to the tool
    ↓
-2. Select "Pseudonymize" → download pseudonymized text + mapping.enc
+2. Pseudonymize (Scan → Review → Apply)
    ↓
-3. Send pseudonymized text to external AI (e.g., ChatGPT, Claude)
+3. From Results: Download passphrase + mapping.enc + pseudonymized text + ZIP
    ↓
-4. Receive AI response containing your pseudonyms
+4. [Optional] Send pseudonymized text to external AI
    ↓
-5. Use "Decrypt AI Response" with mapping.enc + passphrase
-   ↓
-6. Receive decrypted output with original data restored
+5. [If using AI] Use "Decrypt AI Response" to revert output
+   OR
+   [If batch reversal needed] Use "Revert Batch ZIP" on stored ZIP
 ```
 
 ---
 
-## Flusso "Prepara per AI"
+## Flusso "Pseudonimizza" (Principale)
 
 ### Quando usare questo flusso
 
-- **Scenario:** Vuoi inviare dati sensibili a un modello AI (ChatGPT, Claude, LLaMA, ecc.)
-- **Problema:** Non puoi riversare i dati originali a terzi
-- **Soluzione:** Pseudonimizza localmente, invia solo i placeholder
+- **Scenario:** Hai completato la pseudonimizzazione (Scansione → Revisione → Applicazione)
+- **Risultato:** Ricevi testo pseudonimizzato, passphrase visibile, e file mapping.enc cifrato
 
 ### Step-by-step
 
-#### Step 1: Select "Prepare for AI" from Menu
+#### Step 1: Complete Pseudonymization Flow
 
-In the **Revert Panel** (right section), click **"Prepare for AI"**.
+In the main tool interface:
+1. **Scan** — Upload files or text, select policy
+2. **Review** — View and approve/customize finding pseudonyms
+3. **Apply** — Generate pseudonymized output
 
-```
-┌─ Pseudonymization Tool ─────────────────────┐
-│                                             │
-│  [Scanner]   [Review]   [Results]          │
-│                                             │
-│  [Revert Panel]  ← A DESTRA                │
-│   - Prepara per AI    ← CLICCA QUI         │
-│   - Decifera Risposta                      │
-│   - Revert Batch ZIP                       │
-│                                             │
-└─────────────────────────────────────────────┘
-```
+#### Step 2: Access Results Section
 
-#### Step 2: Select a Completed Batch
-
-The "Prepare for AI" tab displays a selector:
-```
-Select pseudonymized batch
-[Dropdown with batch list]
-```
-
-**Select the batch** that has already been pseudonymized.
-
-#### Step 3: View Pseudonymized Text
-
-Once the batch is selected, you will see:
+After applying, you automatically go to **Results** tab which shows:
 
 ```
-┌─ PSEUDONYMIZED TEXT ────────────────────────┐
-│                                             │
-│ User EMAIL_001 created project CUSTOM_001   │
-│ on IPV4_001 at 2026-02-28                  │
-│                                             │
-│ [Copy to Clipboard]                         │
-│                                             │
-└─────────────────────────────────────────────┘
+┌─ RESULTS (Pseudonymization Complete) ──────────────────┐
+│                                                         │
+│ [Pseudonymized Text area]                              │
+│ - Buttons: [Copy] [Scarica TXT]                        │
+│ OR                                                      │
+│ [Files/Batch Info]                                      │
+│ - Button: [Scarica ZIP]                                │
+│                                                         │
+│ [Stats: # entities, safety label, mode]                │
+│                                                         │
+├─────────────────────────────────────────────────────────┤
+│ 🔐 PASSPHRASE E MAPPING CIFRATO (sezione arancione)    │
+│                                                         │
+│ Passphrase per Decifrazione:                           │
+│ [••••••••••••••••] [👁️] [📋 Copia]                    │
+│                                                         │
+│ File di Mapping Cifrato:                               │
+│ "Scarica questo file per decifrare risposte AI..."    │
+│ [📥 Scarica mapping.enc]                               │
+│                                                         │
+│ ⚠️ Conserva securely file e passphrase                │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
 ```
 
-Click **"Copy to Clipboard"** to copy the text.
+#### Step 3: Copy Passphrase
 
-#### Step 4: Download Encrypted Mapping File
+Click **"👁️"** to show passphrase, then **"📋 Copia"** to copy it.
 
-Nella sezione seguente, vedrai:
+**Store the passphrase securely.** You'll need it to decrypt AI responses or revert batches later.
 
-```
-┌─ FILE MAPPING (CIFRATO) ─────────────────────┐
-│                                             │
-│ mapping_<batch_id>.enc                      │
-│                                             │
-│ [⬇️ Scarica Mapping]                       │
-│                                             │
-│ ⚠️ Questo file contiene le corrispondenze: │
-│ EMAIL_001 ↔ mario.rossi@acme.com (CIFRATO) │
-│                                             │
-└─────────────────────────────────────────────┘
-```
+#### Step 4: Download Mapping.enc
 
-Clicca **"⬇️ Scarica Mapping"** e salva il file. **Conservalo al sicuro.**
+Click **"📥 Scarica mapping.enc"** to download the encrypted mapping file.
 
-#### Step 5: Copy the Decryption Passphrase
+**Important:** This file is encrypted with AES-256-GCM. Without your passphrase, it's unreadable (secure).
 
-Finally, you will see the passphrase you entered during pseudonymization:
+#### Step 5: Download Pseudonymized Output
 
-```
-┌─ DECRYPTION PASSPHRASE ──────────────────────┐
-│                                             │
-│ SuperSecurePassword123!@#                   │
-│                                             │
-│ [Copy Passphrase]                           │
-│                                             │
-│ ⚠️  Secure this passphrase carefully:       │
-│ You will need it to decrypt the mapping.enc │
-│                                             │
-└─────────────────────────────────────────────┘
-```
+Choose based on your input:
 
-**Do NOT send the passphrase to external services.**
+**For text input:**
+- Click **"Copia"** to copy pseudonymized text
+- Click **"📥 Scarica TXT"** to download as file
 
-### Summary: Prepare for AI Workflow
+**For file input:**
+- Click **"📥 Scarica ZIP"** which contains:
+  - `files/` — pseudonymized documents
+  - `report.html` — audit trail (navigable)
+  - `report.json` — structured data
+  - `mapping.enc` — encrypted mapping (also in ZIP)
 
-You now have three artifacts:
-1. **Pseudonymized text** — Send to external AI
-2. **mapping.enc** — Encrypted mapping file (store securely)
-3. **Passphrase** — Required to decrypt mapping (store securely)
+#### Step 6: You Now Have Three Assets
+
+1. **Pseudonymized Text** — Can be sent to external AI services
+2. **mapping.enc** — Encrypted mapping (keep safe, don't send to AI)
+3. **Passphrase** — Required to decrypt mapping (keep very safe, never send to AI)
+
+### Next Steps
+
+- **Sending to AI?** Send only the pseudonymized text (step 1). Keep mapping.enc and passphrase offline.
+- **Got AI Response?** Go to **Revert Panel → Decifra Risposta AI** (see section below)
+- **Need to Revert Entire Batch?** Go to **Revert Panel → Revert Batch ZIP** (see section below)
 
 ---
 
-## Decrypt AI Response
+## Flusso "Decifra Risposta AI"
 
 ### When to Use This Workflow
 
@@ -238,13 +223,13 @@ Click **"Decrypt Response"**:
 
 ---
 
-## Revert Batch
+## Flusso "Revert Batch ZIP"
 
 ### When to Use This Workflow
 
-- **Scenario:** You have a ZIP file from a pseudonymized batch and want to fully reverse the process
-- **Problem:** Multiple files in ZIP need to be de-pseudonymized at once
-- **Solution:** Upload ZIP + mapping.enc + passphrase
+- **Scenario:** You have a ZIP file previously downloaded from Results (containing pseudonymized files) and want to fully reverse the pseudonymization
+- **Problem:** Files in ZIP need to be de-pseudonymized completely
+- **Solution:** Upload ZIP + mapping.enc + passphrase to revert all files at once
 
 ### Step-by-Step
 

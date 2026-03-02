@@ -1,27 +1,20 @@
 import React, { useState } from 'react'
-import PrepareForAI from './PrepareForAI'
 import DecipherAIResponse from './DecipherAIResponse'
 import RevertBatchZip from './RevertBatchZip'
 
 const RevertPanel = ({ batch, pseudonymizedText, isLoading, setIsLoading, showToast }) => {
-  const [activeTab, setActiveTab] = useState('prepare')
+  const [activeTab, setActiveTab] = useState('decipher')
 
   const tabs = [
     {
-      id: 'prepare',
-      label: '📝 Prepara per AI',
-      component: PrepareForAI,
-      description: 'Esporta testo e mapping per inviarli all\'AI',
-    },
-    {
       id: 'decipher',
-      label: '🔓 Decifra risposta AI',
+      label: '🔓 Decifra Risposta AI',
       component: DecipherAIResponse,
       description: 'Decifera la risposta pseudonimizzata dell\'AI',
     },
     {
       id: 'zip',
-      label: '📦 Revert batch ZIP',
+      label: '📦 Revert Batch ZIP',
       component: RevertBatchZip,
       description: 'Revert completo di archivi ZIP del tool',
     },
