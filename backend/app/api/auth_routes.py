@@ -123,7 +123,14 @@ async def auth_login(req: dict, response: Response, request: Request):
 async def auth_logout(request: Request, response: Response):
     token = extract_token_from_request(request)
     destroy_session(token)
-    response.delete_cookie(key=SESSION_COOKIE_NAME, path="/")
+    # ✅ FIX: Delete cookie with all parameters to ensure browser recognizes it
+    response.delete_cookie(
+        key=SESSION_COOKIE_NAME,
+        path="/",
+        secure=SESSION_COOKIE_SECURE,
+        httponly=True,
+        samesite="strict"
+    )
     _audit_event(request, "auth_logout")
     return {"ok": True}
 

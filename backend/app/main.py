@@ -3,6 +3,7 @@ Punto di ingresso dell'applicazione Local Pseudonymization Tool.
 Il server è configurato per ascoltare SOLO su 127.0.0.1 (localhost).
 """
 
+import base64
 import logging
 import sys
 from contextlib import asynccontextmanager
@@ -14,7 +15,13 @@ from app.api.console_routes import router as console_router
 from app.api.revert_routes import router as revert_router
 from app.api.routes import router as api_router
 from app.api.settings_routes import router as settings_router
-from app.core.auth import auth_uses_default_password, extract_token_from_request, validate_session
+from app.core.auth import (
+    SESSION_COOKIE_NAME,
+    auth_uses_default_password,
+    extract_token_from_request,
+    validate_csrf_token,
+    validate_session,
+)
 from app.core.batch_manager import start_cleanup_scheduler
 from app.core.config import SERVER_HOST, SERVER_PORT, TEMP_BASE_DIR
 from app.core.profiles import get_config, print_profile_info
@@ -128,6 +135,70 @@ async def auth_middleware(request: Request, call_next):
             return JSONResponse(status_code=401, content={"detail": "Authentication required"})
         request.state.auth_user = username
 
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def csrf_middleware(request: Request, call_next):
+    """
+    Valida CSRF token per tutti i metodi mutanti (POST/PUT/DELETE/PATCH).
+    
+    Questo middleware protegge contro attacchi CSRF validando il token per tutte
+    le richieste che modificano lo stato del server. Eseguito dopo auth_middleware
+    per validare solo richieste autenticate.
+    """
+    # Skip per metodi sicuri (idempotenti)
+    if request.method in ["GET", "HEAD", "OPTIONS"]:
+        return await call_next(request)
+    
+    path = request.url.path
+    
+    # Path esclusi dalla validazione CSRF
+    csrf_exempt_paths = {
+        "/api/auth/login",  # Login non ha ancora token CSRF
+        "/api/health",      # Endpoint di monitoring
+        "/api/ready",       # Endpoint di monitoring
+        "/api/docs",        # Documentazione API
+    }
+    
+    if path in csrf_exempt_paths or path.startswith("/api/docs"):
+        return await call_next(request)
+    
+    # Skip se auth disabilitato (dev/test mode)
+    if not _profile_config.auth_enabled:
+        return await call_next(request)
+    
+    # Validazione CSRF token
+    try:
+        csrf_token = request.headers.get("X-CSRF-Token") or request.query_params.get("csrf_token")
+        session_cookie = request.cookies.get(SESSION_COOKIE_NAME)
+        
+        if not session_cookie or "." not in session_cookie:
+            logger.warning("CSRF validation failed: no valid session cookie (path=%s)", path)
+            return JSONResponse(status_code=403, content={"detail": "CSRF validation failed: no session"})
+        
+        # Extract session_id dal cookie (formato: base64_payload.signature)
+        try:
+            payload_b64 = session_cookie.split(".", 1)[0]
+            payload = base64.b64decode(payload_b64).decode("utf-8")
+            session_id = payload.split(":", 1)[0]
+        except Exception as e:
+            logger.warning("CSRF validation failed: could not extract session_id: %s", e)
+            return JSONResponse(status_code=403, content={"detail": "CSRF validation failed: invalid session"})
+        
+        # Valida token CSRF usando la funzione esistente
+        if not validate_csrf_token(session_id, csrf_token):
+            logger.warning(
+                "CSRF validation failed: invalid or missing token (path=%s, session_id=%s...)",
+                path,
+                session_id[:8] if session_id else "unknown"
+            )
+            return JSONResponse(status_code=403, content={"detail": "CSRF token invalid or missing"})
+            
+    except Exception as e:
+        logger.error("CSRF middleware error: %s", e, exc_info=True)
+        return JSONResponse(status_code=403, content={"detail": "CSRF validation failed"})
+    
     return await call_next(request)
 
 
