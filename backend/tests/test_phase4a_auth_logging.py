@@ -43,7 +43,7 @@ def test_create_validate_and_destroy_session():
     auth.AUTH_ENABLED = True
     auth._sessions.clear()
     try:
-        token, _expires = auth.create_session("admin")
+        token, _expires, _ = auth.create_session("admin")
         assert auth.validate_session(token) == "admin"
 
         auth.destroy_session(token)
@@ -60,7 +60,7 @@ def test_validate_session_invalid_signature_and_format():
         assert auth.validate_session(None) is None
         assert auth.validate_session("invalid-token") is None
 
-        token, _ = auth.create_session("admin")
+        token, _, _ = auth.create_session("admin")
         payload, sig = token.split(".", 1)
         tampered = f"{payload}.{sig[::-1]}"
         assert auth.validate_session(tampered) is None

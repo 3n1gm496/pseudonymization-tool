@@ -57,7 +57,17 @@ def temp_output_dir(tmp_path):
 def disable_auth_for_tests(monkeypatch):
     """
     Disable authentication for all tests to avoid CSRF validation.
-    This allows test client to make requests without session/CSRF tokens.
+    Uses object.__setattr__ to bypass frozen dataclass constraint.
     """
+    from app import main
     from app.core import auth
+    
+    # Use object.__setattr__ to bypass frozen dataclass constraint
+    object.__setattr__(main._profile_config, 'auth_enabled', False)
+    
+    # Also patch the module-level AUTH_ENABLED constant used by validate_csrf_dependency
     monkeypatch.setattr(auth, "AUTH_ENABLED", False)
+    yield
+    
+    # Restore original value after test
+    object.__setattr__(main._profile_config, 'auth_enabled', True)

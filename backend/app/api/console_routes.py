@@ -26,8 +26,9 @@ from app.core.config import API_HEAVY_TIMEOUT_SECONDS, MAX_CONSOLE_TEXT_CHARS
 from app.core.console_pipeline import run_text_apply, run_text_scan
 from app.core.pipeline import apply_review_decisions
 from app.core.rate_limit import enforce_rate_limit
+from app.core.auth import validate_csrf_dependency
 from app.models.schemas import Batch, BatchConfig, BatchMode, PresetName, ReviewAction
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 

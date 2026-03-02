@@ -45,7 +45,7 @@ def _audit_event(request: Optional[Request], action: str, **details: Any) -> Non
     logger.info("AUDIT action=%s user=%s ip=%s details=%s", action, user, ip, cleaned)
 
 
-@router.post("/revert/preview", dependencies=[Depends(validate_csrf_dependency)])
+@router.post("/revert/preview")
 async def revert_preview(
     request: Request,
     archive: UploadFile = File(...),
@@ -76,7 +76,7 @@ async def revert_preview(
     return result
 
 
-@router.post("/revert/apply", dependencies=[Depends(validate_csrf_dependency)])
+@router.post("/revert/apply")
 async def revert_apply(
     request: Request,
     archive: UploadFile = File(...),
@@ -117,7 +117,7 @@ async def revert_apply(
     )
 
 
-@router.post("/revert/text/preview", dependencies=[Depends(validate_csrf_dependency)])
+@router.post("/revert/text/preview")
 async def revert_text_preview(
     request: Request,
     mapping_file: UploadFile = File(...),
@@ -154,7 +154,7 @@ async def revert_text_preview(
     return result
 
 
-@router.post("/revert/text/apply", dependencies=[Depends(validate_csrf_dependency)])
+@router.post("/revert/text/apply")
 async def revert_text_apply(
     request: Request,
     mapping_file: UploadFile = File(...),

@@ -362,7 +362,7 @@ async def _run_batch_scan_safe(batch_id: str) -> Batch:
 # ─── Batch (Upload File) ──────────────────────────────────────────────────────
 
 
-@router.post("/batches", dependencies=[Depends(validate_csrf_dependency)])
+@router.post("/batches")
 async def create_new_batch(
     request: Request,
     files: List[UploadFile] = File(...),
@@ -481,7 +481,7 @@ async def get_findings(batch_id: str):
     return {"batch_id": batch_id, "findings": _findings_list(batch), "total": len(batch.findings)}
 
 
-@router.post("/batches/{batch_id}/review", dependencies=[Depends(validate_csrf_dependency)])
+@router.post("/batches/{batch_id}/review")
 async def submit_review(batch_id: str, review_request: SubmitReviewRequest, request: Request):
     """
     Persiste le decisioni di review per il batch.
@@ -529,7 +529,7 @@ async def submit_review(batch_id: str, review_request: SubmitReviewRequest, requ
     }
 
 
-@router.post("/batches/{batch_id}/apply", dependencies=[Depends(validate_csrf_dependency)])
+@router.post("/batches/{batch_id}/apply")
 async def apply_batch(batch_id: str, request: Request):
     """
     Applica le sostituzioni usando le decisions persistite.
@@ -688,7 +688,7 @@ async def download_batch(batch_id: str, background_tasks: BackgroundTasks, reque
     return FileResponse(path=str(zip_path), media_type="application/zip", filename=zip_path.name)
 
 
-@router.delete("/batches/{batch_id}", dependencies=[Depends(validate_csrf_dependency)])
+@router.delete("/batches/{batch_id}")
 async def delete_batch(batch_id: str):
     batch = get_batch(batch_id)
     if not batch:
@@ -697,7 +697,7 @@ async def delete_batch(batch_id: str):
     return {"message": f"Batch {batch_id} eliminato."}
 
 
-@router.post("/batches/{batch_id}/passphrase/regenerate", dependencies=[Depends(validate_csrf_dependency)])
+@router.post("/batches/{batch_id}/passphrase/regenerate")
 async def regenerate_batch_passphrase(batch_id: str):
     batch = get_batch(batch_id)
     if not batch:
