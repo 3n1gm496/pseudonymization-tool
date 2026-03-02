@@ -5,7 +5,10 @@ import os
 import secrets
 import threading
 import time
-from typing import Optional, Tuple
+from typing import Optional, Tuple, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from fastapi import Request
 
 # Lazy import to avoid circular dependency
 _config_cache = None
@@ -179,7 +182,7 @@ def cleanup_csrf_token(session_id: str) -> None:
 
 
 def validate_csrf_dependency(
-    request: "Request",  # type: ignore
+    request: "Request",
 ) -> None:
     """
     FastAPI dependency for CSRF validation.
