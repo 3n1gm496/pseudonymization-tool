@@ -286,6 +286,12 @@ def test_pdf_transform_layout_warning_emitted(tmp_path):
 
 def test_image_low_confidence_warning(tmp_path):
     """Verify image parser warns about low OCR confidence words."""
+    pytest.importorskip("pytesseract", reason="pytesseract not installed")
+    try:
+        import pytesseract
+        pytesseract.get_tesseract_version()
+    except Exception:
+        pytest.skip("Tesseract OCR not available in this environment")
     # Create image with text
     from PIL import Image, ImageDraw, ImageFont
 
@@ -309,31 +315,39 @@ def test_image_low_confidence_warning(tmp_path):
 
 
 def test_image_no_tesseract_warning(tmp_path, monkeypatch):
-    """Verify image parser emits clear warning when Tesseract is not available."""
+    """Verify image parser fails gracefully with clear error when Tesseract is not available."""
+    pytest.importorskip("pytesseract", reason="pytesseract not installed")
+    import pytesseract
+
     # Create dummy image
     img = Image.new("RGB", (100, 100), color="white")
     img_path = tmp_path / "test_no_tess.png"
     img.save(str(img_path))
 
-    # Mock Tesseract unavailability
-    def mock_check_output(*args, **kwargs):
-        raise FileNotFoundError("tesseract not found")
+    # Mock pytesseract.image_to_data to simulate Tesseract unavailability
+    def mock_image_to_data(*args, **kwargs):
+        raise FileNotFoundError("tesseract is not installed or it's not in your PATH")
 
-    import subprocess
-
-    monkeypatch.setattr(subprocess, "check_output", mock_check_output)
+    monkeypatch.setattr(pytesseract, "image_to_data", mock_image_to_data)
 
     parser = ImageParser()
     result = parser.parse(img_path)
 
-    # Should succeed but with warning
-    assert result.success
-    tess_warning = any("tesseract" in w.lower() for w in result.warnings)
-    # Note: Current implementation may not emit this warning if pytesseract catches the error differently
+    # When Tesseract is unavailable, parser should fail with a clear error message
+    # (not silently succeed) — this is the correct production behaviour
+    assert not result.success, "Parser should fail when Tesseract is unavailable"
+    assert result.error_message is not None
+    assert "tesseract" in result.error_message.lower() or "ocr" in result.error_message.lower()
 
 
 def test_image_exif_stripped(tmp_path):
     """Verify image parser strips EXIF metadata."""
+    pytest.importorskip("pytesseract", reason="pytesseract not installed")
+    try:
+        import pytesseract
+        pytesseract.get_tesseract_version()
+    except Exception:
+        pytest.skip("Tesseract OCR not available in this environment")
     from PIL import Image
 
     # Create JPG with EXIF

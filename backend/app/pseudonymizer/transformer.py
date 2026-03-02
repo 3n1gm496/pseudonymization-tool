@@ -214,7 +214,9 @@ def _rebuild_pdf_from_pages(pages_pseudo: List[str], output_path: Path) -> List[
                 pdf.multi_cell(0, 5, safe_line)
 
         pdf.output(str(output_path))
-        warnings.append("PDF rebuild completato. Layout potrebbe differire.")
+        warnings.append(
+            "PDF rebuild completato (fpdf2). Il layout potrebbe essere differente dall'originale."
+        )
         return warnings
 
     except Exception as fpdf_err:
@@ -240,7 +242,9 @@ def _rebuild_pdf_from_pages(pages_pseudo: List[str], output_path: Path) -> List[
 
         doc_rl = SimpleDocTemplate(str(output_path), pagesize=A4)
         doc_rl.build(story)
-        warnings.append("PDF rebuild (reportlab) ok. Layout differente.")
+        warnings.append(
+            "PDF rebuild completato (reportlab). Il layout potrebbe essere differente dall'originale."
+        )
         return warnings
 
     except Exception as rl_err:
