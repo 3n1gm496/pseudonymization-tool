@@ -1,33 +1,39 @@
 # Docker Compose: Pseudonymization Tool v4.0
-# Modes:
-#   - dev:  development (console logs visible)
-#   - prod: production (hardened)
+#
+# SETUP INIZIALE:
+#   1. cp .env.example .env
+#   2. Modifica .env con valori sicuri (AUTH_PASSWORD, REDIS_PASSWORD, ecc.)
+#   3. docker compose up --build -d
 #
 # Services:
-#   - redis:6              → Session storage + message broker for Celery
+#   - redis                 → Session storage + message broker per Celery (solo rete interna)
 #   - pseudonymization-tool → FastAPI backend + frontend (multi-stage build)
-#   - celery-worker        → Async task processor for long-running scans/applies
-#   - flower               → Celery task monitoring (dev mode, optional)
+#   - celery-worker         → Async task processor per scan/apply lunghi
+#   - flower (opzionale)    → Dashboard Celery, attiva solo con: --profile monitoring
 #
 # Usage:
-#   docker compose up --build          # Build & run (dev profile)
-#   docker compose up --build -d       # Build & run in background
-#   COMPOSE_PROFILES=prod docker compose up --build  # Production build
-#   docker compose down                # Stop & remove
+#   docker compose up --build -d                              # Start (senza Flower)
+#   docker compose --profile monitoring up --build -d         # Start con Flower
+#   docker compose down                                        # Stop & remove
 
 services:
   # ─────────────────────────────────────────────────────────────────────────
-  # Session Store + Message Broker for Celery
+  # Session Store + Message Broker per Celery
+  # NOTA: nessuna porta esposta sull'host — accessibile solo internamente
   # ─────────────────────────────────────────────────────────────────────────
   redis:
     image: redis:6-alpine
     container_name: pseudonymization-redis
-    ports:
-      - "6379:6379"
+    # Abilita autenticazione Redis con password da .env
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+    # Nessuna porta esposta sull'host: Redis è accessibile solo dai container
+    # nella stessa rete Docker. Rimuove la superficie di attacco esterna.
+    expose:
+      - "6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -41,108 +47,112 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      # Multi-stage build:
-      # - Stage 1 (frontend-builder): Node.js 20 → builds React/Tailwind → frontend/dist/
-      # - Stage 2 (runtime): Python 3.12-slim → includes Tesseract OCR → serves frontend + API
-    
     container_name: pseudonymization-tool
     image: pseudonymization-tool:latest
-    
-    # API port exposed
+
     ports:
       - "8000:8000"
-    
-    # Configuration
+
     environment:
       PSEUDONYMIZER_PORT: "8000"
-      PSEUDONYMIZER_STATE_DIR: "/tmp/pseudonymizer_batches/state"
+      # Stato applicativo su volume dedicato (non in /tmp)
+      PSEUDONYMIZER_STATE_DIR: "/app/state"
       API_HEAVY_TIMEOUT_SECONDS: "180"
       MAX_UPLOAD_FILES_PER_BATCH: "20"
       MAX_CONSOLE_TEXT_CHARS: "200000"
       PYTHONUNBUFFERED: "1"
       AUTH_ENABLED: "true"
-      AUTH_USERNAME: "admin"
-      AUTH_PASSWORD: "admin123!"
-      # Redis Session Store
-      REDIS_URL: "redis://redis:6379/0"
-      # Celery Configuration
-      CELERY_BROKER_URL: "redis://redis:6379/1"
-      CELERY_RESULT_BACKEND: "redis://redis:6379/2"
+      AUTH_USERNAME: "${AUTH_USERNAME}"
+      # AUTH_PASSWORD letta da .env — nessun default hardcoded
+      AUTH_PASSWORD: "${AUTH_PASSWORD}"
+      # Redis con autenticazione
+      REDIS_URL: "redis://:${REDIS_PASSWORD}@redis:6379/0"
+      CELERY_BROKER_URL: "redis://:${REDIS_PASSWORD}@redis:6379/1"
+      CELERY_RESULT_BACKEND: "redis://:${REDIS_PASSWORD}@redis:6379/2"
       CELERY_WORKER_CONCURRENCY: "1"
-    
-    # Volume mounts (config + temp storage)
+
     volumes:
       - ./backend/config:/app/backend/config:ro
       - ./output_samples:/app/output_samples
       - pseudonymizer_tmp:/tmp/pseudonymizer_batches
-    
-    # Health check (API readiness)
+      - app_state:/app/state
+
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 20s
-    
-    # Depends on Redis (sole broker for Celery + session storage)
+
     depends_on:
       redis:
         condition: service_healthy
 
-    # Restart policy
     restart: unless-stopped
 
   # ─────────────────────────────────────────────────────────────────────────
-  # Celery Worker Service (Async task processor)
-  # Processes long-running scan and apply tasks from Redis message queue
+  # Celery Worker (Async task processor)
   # ─────────────────────────────────────────────────────────────────────────
   celery-worker:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: pseudonymization-celery-worker
-    command: celery -A app.core.tasks worker --loglevel=info --concurrency=1
+    command: ["celery", "-A", "app.core.tasks", "worker", "--loglevel=info", "--concurrency=1"]
+
     environment:
       PYTHONUNBUFFERED: "1"
-      PSEUDONYMIZER_STATE_DIR: "/tmp/pseudonymizer_batches/state"
-      REDIS_URL: "redis://redis:6379/0"
-      CELERY_BROKER_URL: "redis://redis:6379/1"
-      CELERY_RESULT_BACKEND: "redis://redis:6379/2"
+      PSEUDONYMIZER_STATE_DIR: "/app/state"
+      REDIS_URL: "redis://:${REDIS_PASSWORD}@redis:6379/0"
+      CELERY_BROKER_URL: "redis://:${REDIS_PASSWORD}@redis:6379/1"
+      CELERY_RESULT_BACKEND: "redis://:${REDIS_PASSWORD}@redis:6379/2"
       CELERY_WORKER_CONCURRENCY: "1"
-      # Inherit same config as main app
       MAX_UPLOAD_FILES_PER_BATCH: "20"
       MAX_CONSOLE_TEXT_CHARS: "200000"
+
     volumes:
       - ./backend/config:/app/backend/config:ro
       - ./output_samples:/app/output_samples
       - pseudonymizer_tmp:/tmp/pseudonymizer_batches
+      - app_state:/app/state
+
     depends_on:
       redis:
         condition: service_healthy
+
     restart: unless-stopped
 
   # ─────────────────────────────────────────────────────────────────────────
-  # Flower: Celery Task Monitoring (optional, dev mode)
-  # Access dashboard at http://localhost:5555
+  # Flower: Dashboard Celery (opzionale, solo profilo "monitoring")
+  # Avviare con: docker compose --profile monitoring up -d
+  # Dashboard: http://localhost:5555 (protetta da basic auth)
   # ─────────────────────────────────────────────────────────────────────────
   flower:
     image: mher/flower:2.0.1
     container_name: pseudonymization-flower
-    command: ["flower", "--broker=redis://redis:6379/1", "--port=5555", "--address=0.0.0.0"]
+    profiles:
+      - monitoring
+    command:
+      - "flower"
+      - "--broker=redis://:${REDIS_PASSWORD}@redis:6379/1"
+      - "--port=5555"
+      - "--address=0.0.0.0"
+      - "--basic_auth=${FLOWER_USER}:${FLOWER_PASSWORD}"
     ports:
       - "5555:5555"
     environment:
-      CELERY_BROKER_URL: "redis://redis:6379/1"
-      CELERY_RESULT_BACKEND: "redis://redis:6379/2"
+      CELERY_BROKER_URL: "redis://:${REDIS_PASSWORD}@redis:6379/1"
+      CELERY_RESULT_BACKEND: "redis://:${REDIS_PASSWORD}@redis:6379/2"
     depends_on:
       redis:
         condition: service_healthy
     restart: unless-stopped
 
-# Named volumes for persistence
+# Named volumes per persistenza
 volumes:
   pseudonymizer_tmp:
     driver: local
   redis_data:
     driver: local
-
+  app_state:
+    driver: local
