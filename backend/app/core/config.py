@@ -22,8 +22,11 @@ STATE_FILE = STATE_DIR / "state.json"
 CONFIG_DIR = BASE_DIR / "config"
 DICTIONARIES_DIR = CONFIG_DIR / "dictionaries"
 
-# Porta del server
-SERVER_HOST = "127.0.0.1"
+# Indirizzo di bind del server.
+# Default: 127.0.0.1 (sicuro per sviluppo locale).
+# In Docker/produzione impostare PSEUDONYMIZER_HOST=0.0.0.0 per rendere
+# il container raggiungibile dall'esterno.
+SERVER_HOST = os.environ.get("PSEUDONYMIZER_HOST", "127.0.0.1")
 SERVER_PORT = int(os.environ.get("PSEUDONYMIZER_PORT", "8000"))
 
 # Formati di file supportati
