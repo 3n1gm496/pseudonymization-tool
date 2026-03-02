@@ -100,9 +100,12 @@ def test_console_apply_contract(monkeypatch):
     assert "applied_count" in apply_data
 
 
-def test_batch_create_contract(monkeypatch):
-    monkeypatch.setattr(batches_routes, "run_scan_pipeline", lambda batch_id: batches_routes.get_batch(batch_id))
-
+def test_batch_create_contract():
+    """
+    Test batch creation endpoint contract.
+    After Phase 4 async refactor: returns 202 (Accepted) with task_id instead of 200.
+    Celery runs in EAGER mode for testing, so tasks execute synchronously.
+    """
     file_content = io.BytesIO(b"Utente: alice@example.com")
     response = client.post(
         "/api/batches",
@@ -114,12 +117,15 @@ def test_batch_create_contract(monkeypatch):
         files={"files": ("contract.txt", file_content, "text/plain")},
     )
 
-    assert response.status_code == 200
+    # After Phase 4: endpoint returns 202 (Accepted) with async task enqueued
+    assert response.status_code == 202
     body = response.json()
     assert "batch_id" in body
     assert "status" in body
     assert "files" in body
     assert "findings_count" in body
+    assert "task_id" in body  # Async task tracking
+    assert "message" in body  # Queue acknowledgment message
 
 
 def test_download_blocked_when_done_with_errors():

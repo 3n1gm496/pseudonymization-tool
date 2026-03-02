@@ -7,6 +7,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
+from app import __version__
+from app.core.audit import audit_event, scrub_sensitive
 from app.core.auth import (
     ADMIN_USERNAME,
     AUTH_ENABLED,
@@ -26,43 +28,7 @@ from fastapi import APIRouter, HTTPException, Request, Response
 router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
 
-
-def _scrub_sensitive(value: Any) -> Any:
-    """
-    Rimuove dati sensibili dai log.
-    ✅ FIX #18: Enhanced sanitization - paths, UUIDs, timestamps
-    """
-    import re
-    
-    if isinstance(value, dict):
-        cleaned = {}
-        for key, item in value.items():
-            key_l = str(key).lower()
-            if any(
-                token in key_l for token in ("password", "passphrase", "secret", "token", "api_key", "bind_password")
-            ):
-                continue
-            cleaned[key] = _scrub_sensitive(item)
-        return cleaned
-    if isinstance(value, list):
-        return [_scrub_sensitive(item) for item in value]
-    if isinstance(value, str):
-        # ✅ Scrub file paths (e.g., /home/admin/... → /home/***)
-        value = re.sub(r'/home/[^/\s]+', '/home/***', value)
-        value = re.sub(r'/tmp/[^/\s]+', '/tmp/***', value)
-        # ✅ Scrub full UUIDs (keep first 8 chars for debugging: xxxx-xxxx-... → xxxx-****)
-        value = re.sub(r'\b([a-f0-9]{8})-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\b', r'\1-****', value)
-    return value
-
-
-def _audit_event(request: Optional[Request], action: str, **details: Any) -> None:
-    user = "anonymous"
-    ip = "unknown"
-    if request is not None:
-        user = getattr(request.state, "auth_user", "anonymous")
-        ip = request.client.host if request.client else "unknown"
-    cleaned = _scrub_sensitive(details)
-    logger.info("AUDIT action=%s user=%s ip=%s details=%s", action, user, ip, cleaned)
+# Helper functions moved to app.core.audit module
 
 
 @router.get("/health")
@@ -70,7 +36,7 @@ async def health_check():
     return {
         "status": "ok",
         "service": "Local Pseudonymization Tool",
-        "version": "4.0.4",
+        "version": __version__,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -94,7 +60,7 @@ async def auth_login(req: dict, response: Response, request: Request):
     username = (req.get("username") or "").strip()
     password = req.get("password") or ""
     if not verify_credentials(username, password):
-        _audit_event(request, "auth_login_failed", username=username)
+        audit_event(request, "auth_login_failed", username=username)
         raise HTTPException(status_code=401, detail="Credenziali non valide")
 
     token, expires_at, csrf_token = create_session(username or ADMIN_USERNAME)
@@ -109,7 +75,7 @@ async def auth_login(req: dict, response: Response, request: Request):
     )
     # ✅ FIX: Return CSRF token in response header for frontend
     response.headers["X-CSRF-Token"] = csrf_token
-    _audit_event(request, "auth_login_success", username=username or ADMIN_USERNAME)
+    audit_event(request, "auth_login_success", username=username or ADMIN_USERNAME)
     return {
         "authenticated": True,
         "username": username or ADMIN_USERNAME,
@@ -131,7 +97,7 @@ async def auth_logout(request: Request, response: Response):
         httponly=True,
         samesite="strict"
     )
-    _audit_event(request, "auth_logout")
+    audit_event(request, "auth_logout")
     return {"ok": True}
 
 

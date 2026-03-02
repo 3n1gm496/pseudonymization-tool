@@ -1,5 +1,5 @@
 import React from 'react'
-import axios from 'axios'
+import axios from '../utils/axios'
 import { useToast } from '../hooks/useToast'
 import { copyToClipboard } from '../utils/text-export'
 

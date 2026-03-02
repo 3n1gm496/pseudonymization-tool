@@ -10,11 +10,13 @@ from typing import Any
 import structlog
 from structlog.typing import EventDict, Processor
 
+from app import __version__
+
 
 def add_app_context(logger: logging.Logger, method_name: str, event_dict: EventDict) -> EventDict:
     """Add application context to log entries."""
     event_dict["app"] = "pseudonymization-tool"
-    event_dict["version"] = "1.0.0"
+    event_dict["version"] = __version__
     return event_dict
 
 

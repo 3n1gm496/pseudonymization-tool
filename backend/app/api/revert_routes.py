@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from app.core.audit import audit_event, scrub_sensitive
 from app.core.config import MAX_CONSOLE_TEXT_CHARS, MAX_FILE_SIZE_BYTES
 from app.core.rate_limit import enforce_rate_limit
 from app.core.auth import validate_csrf_dependency
@@ -18,31 +19,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Resp
 router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
 
-
-def _scrub_sensitive(value: Any) -> Any:
-    if isinstance(value, dict):
-        cleaned = {}
-        for key, item in value.items():
-            key_l = str(key).lower()
-            if any(
-                token in key_l for token in ("password", "passphrase", "secret", "token", "api_key", "bind_password")
-            ):
-                continue
-            cleaned[key] = _scrub_sensitive(item)
-        return cleaned
-    if isinstance(value, list):
-        return [_scrub_sensitive(item) for item in value]
-    return value
-
-
-def _audit_event(request: Optional[Request], action: str, **details: Any) -> None:
-    user = "anonymous"
-    ip = "unknown"
-    if request is not None:
-        user = getattr(request.state, "auth_user", "anonymous")
-        ip = request.client.host if request.client else "unknown"
-    cleaned = _scrub_sensitive(details)
-    logger.info("AUDIT action=%s user=%s ip=%s details=%s", action, user, ip, cleaned)
+# Helper functions moved to app.core.audit module
 
 
 @router.post("/revert/preview")
@@ -66,7 +43,7 @@ async def revert_preview(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Impossibile analizzare archivio: {e}")
 
-    _audit_event(
+    audit_event(
         request,
         "revert_preview",
         archive_name=archive.filename,
@@ -98,7 +75,7 @@ async def revert_apply(
         raise HTTPException(status_code=400, detail=f"Revert fallito: {e}")
 
     out_name = (Path(archive.filename).stem or "batch") + "_reverted.zip"
-    _audit_event(
+    audit_event(
         request,
         "revert_apply",
         archive_name=archive.filename,
@@ -144,7 +121,7 @@ async def revert_text_preview(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Impossibile analizzare il mapping: {e}")
 
-    _audit_event(
+    audit_event(
         request,
         "revert_text_preview",
         mapping_name=mapping_file.filename,
@@ -181,7 +158,7 @@ async def revert_text_apply(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Decifratura fallita: {e}")
 
-    _audit_event(
+    audit_event(
         request,
         "revert_text_apply",
         mapping_name=mapping_file.filename,

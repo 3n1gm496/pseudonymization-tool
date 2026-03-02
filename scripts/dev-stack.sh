@@ -14,8 +14,11 @@ echo ""
 
 # Start backend in background
 echo "📍 Starting backend (port 8000)..."
-cd "$(dirname "$0")/backend"
-source venv/bin/activate 2>/dev/null || true
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+cd "$REPO_ROOT/backend"
+source "$REPO_ROOT/.venv/bin/activate" 2>/dev/null || true
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 &
 BACKEND_PID=$!
 
@@ -23,7 +26,7 @@ sleep 2
 
 # Start frontend in background
 echo "📍 Starting frontend (port 5173)..."
-cd "$(dirname "$0")/frontend"
+cd "$REPO_ROOT/frontend"
 npm install 2>/dev/null || echo "Dependencies already installed"
 npm run dev &
 FRONTEND_PID=$!

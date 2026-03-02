@@ -18,7 +18,6 @@ from fastapi.testclient import TestClient
 
 from app.core.auth import (
     ADMIN_USERNAME,
-    DEFAULT_ADMIN_PASSWORD,
     SESSION_COOKIE_NAME,
     SESSION_TTL_SECONDS,
     _b64,
@@ -155,11 +154,17 @@ class TestSessionManagement:
     """Test session creation, validation, and destruction."""
 
     def test_auth_uses_default_password(self):
-        """Test detection of default password."""
-        with patch("app.core.auth._password_env", DEFAULT_ADMIN_PASSWORD):
+        """Test detection of unconfigured password (✅ FIX #I-006)."""
+        # When _password_env is None (not configured), should return True
+        with patch("app.core.auth._password_env", None):
             assert auth_uses_default_password() is True
         
-        with patch("app.core.auth._password_env", "custom_password"):
+        # When _password_env is empty string (not configured), should return True
+        with patch("app.core.auth._password_env", ""):
+            assert auth_uses_default_password() is True
+        
+        # When _password_env is set to any value, should return False
+        with patch("app.core.auth._password_env", "configured_password"):
             assert auth_uses_default_password() is False
 
     def test_create_session_returns_valid_format(self, clear_sessions):

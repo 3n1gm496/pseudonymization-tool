@@ -17,10 +17,10 @@ import json
 import logging
 import time
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from app.core.config import CONFIG_DIR
+from app.core.audit import audit_event, scrub_sensitive
+from app.core.config import STATE_FILE
 from app.core.policies import get_enabled_entity_types, get_policy
 from app.core.rate_limit import enforce_rate_limit
 from app.models.schemas import EntityType, LdapConfig, PresetName
@@ -29,7 +29,7 @@ from fastapi import APIRouter, HTTPException, Request
 router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
 
-_STATE_FILE = CONFIG_DIR / "state.json"
+_STATE_FILE = STATE_FILE
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -46,32 +46,7 @@ def _resolve_preset(raw_value: str) -> PresetName:
     raise HTTPException(status_code=400, detail=f"Preset non valido: '{raw_value}'.")
 
 
-def _scrub_sensitive(value: Any) -> Any:
-    """Remove sensitive fields (passwords, secrets, tokens) from dictionaries."""
-    if isinstance(value, dict):
-        cleaned = {}
-        for key, item in value.items():
-            key_l = str(key).lower()
-            if any(
-                token in key_l for token in ("password", "passphrase", "secret", "token", "api_key", "bind_password")
-            ):
-                continue
-            cleaned[key] = _scrub_sensitive(item)
-        return cleaned
-    if isinstance(value, list):
-        return [_scrub_sensitive(item) for item in value]
-    return value
-
-
-def _audit_event(request: Optional[Request], action: str, **details: Any) -> None:
-    """Log audit event with user/IP info."""
-    user = "anonymous"
-    ip = "unknown"
-    if request is not None:
-        user = getattr(request.state, "auth_user", "anonymous")
-        ip = request.client.host if request.client else "unknown"
-    cleaned = _scrub_sensitive(details)
-    logger.info("AUDIT action=%s user=%s ip=%s details=%s", action, user, ip, cleaned)
+# Helper functions moved to app.core.audit module
 
 
 # ─── Settings: Persistenza server-side ────────────────────────────────────────
@@ -97,7 +72,7 @@ async def save_server_state(state: dict):
     Salva la configurazione lato server (no password, no PII).
     La password LDAP viene rimossa prima del salvataggio.
     """
-    safe_state = _scrub_sensitive(state)
+    safe_state = scrub_sensitive(state)
     try:
         _STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
         _STATE_FILE.write_text(json.dumps(safe_state, ensure_ascii=False, indent=2), encoding="utf-8")

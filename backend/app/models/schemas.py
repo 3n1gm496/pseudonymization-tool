@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from app import __version__
 from pydantic import BaseModel, Field
 
 # ─── Enumerazioni ────────────────────────────────────────────────────────────
@@ -173,6 +174,7 @@ class Batch(BaseModel):
     safety_label: SafetyLabel = SafetyLabel.SAFE_TO_UPLOAD
     residual_warnings: List[str] = Field(default_factory=list)
     policy_hash: Optional[str] = None  # SHA256 della policy usata
+    task_id: Optional[str] = None  # Celery task id corrente (scan/apply)
 
 
 # ─── Modelli API Request/Response ─────────────────────────────────────────────
@@ -228,7 +230,7 @@ class ReportSummary(BaseModel):
     safety_label: str
     residual_warnings: List[str]
     policy_hash: Optional[str] = None
-    app_version: str = "2.0.0-vNext"
+    app_version: str = __version__
 
 
 # ─── Modelli Console API (testo inline) ──────────────────────────────────────

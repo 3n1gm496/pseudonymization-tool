@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import axios from 'axios'
+import axios from '../utils/axios'
 import { copyToClipboard, downloadTextFile } from '../utils/text-export'
 
 const DecipherAIResponse = ({ isLoading, setIsLoading, showToast }) => {

@@ -9,6 +9,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from app.core.audit import audit_event, scrub_sensitive
 from app.core.batch_manager import (
     cleanup_batch,
     create_batch,
@@ -44,30 +45,7 @@ def _resolve_preset(raw_value: str) -> PresetName:
     raise HTTPException(status_code=400, detail=f"Preset non valido: '{raw_value}'.")
 
 
-def _scrub_sensitive(value: Any) -> Any:
-    if isinstance(value, dict):
-        cleaned = {}
-        for key, item in value.items():
-            key_l = str(key).lower()
-            if any(
-                token in key_l for token in ("password", "passphrase", "secret", "token", "api_key", "bind_password")
-            ):
-                continue
-            cleaned[key] = _scrub_sensitive(item)
-        return cleaned
-    if isinstance(value, list):
-        return [_scrub_sensitive(item) for item in value]
-    return value
-
-
-def _audit_event(request: Optional[Request], action: str, **details: Any) -> None:
-    user = "anonymous"
-    ip = "unknown"
-    if request is not None:
-        user = getattr(request.state, "auth_user", "anonymous")
-        ip = request.client.host if request.client else "unknown"
-    cleaned = _scrub_sensitive(details)
-    logger.info("AUDIT action=%s user=%s ip=%s details=%s", action, user, ip, cleaned)
+# Helper functions moved to app.core.audit module
 
 
 # ─── Console Apply Helpers ────────────────────────────────────────────────────
@@ -182,7 +160,7 @@ async def console_scan(req: dict, request: Request):
         fd = f.model_dump() if hasattr(f, "model_dump") else f.dict()
         findings_list.append(fd)
 
-    _audit_event(
+    audit_event(
         request,
         "console_scan_completed",
         batch_id=batch.batch_id,
@@ -242,7 +220,7 @@ async def console_apply(req: dict, request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
     # Step 4: Audit log
-    _audit_event(
+    audit_event(
         request,
         "console_apply_completed",
         batch_id=batch_id,
@@ -288,7 +266,7 @@ async def download_console_mapping(batch_id: str, request: Request):
             detail="File di mapping non disponibile. Assicurati di aver completato l'apply della pseudonimizzazione.",
         )
 
-    _audit_event(request, "console_mapping_download", batch_id=batch_id)
+    audit_event(request, "console_mapping_download", batch_id=batch_id)
     return FileResponse(
         path=str(mapping_path),
         media_type="application/octet-stream",

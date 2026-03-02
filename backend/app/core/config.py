@@ -13,6 +13,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 TEMP_BASE_DIR = Path(tempfile.gettempdir()) / "pseudonymizer_batches"
 TEMP_BASE_DIR.mkdir(parents=True, exist_ok=True)
 
+# Directory runtime per stato applicativo scrivibile (non in config read-only)
+STATE_DIR = Path(os.environ.get("PSEUDONYMIZER_STATE_DIR", str(TEMP_BASE_DIR / "state")))
+STATE_DIR.mkdir(parents=True, exist_ok=True)
+STATE_FILE = STATE_DIR / "state.json"
+
 # Directory di configurazione (dizionari, pattern custom)
 CONFIG_DIR = BASE_DIR / "config"
 DICTIONARIES_DIR = CONFIG_DIR / "dictionaries"
@@ -23,6 +28,31 @@ SERVER_PORT = int(os.environ.get("PSEUDONYMIZER_PORT", "8000"))
 
 # Formati di file supportati
 SUPPORTED_EXTENSIONS = {".txt", ".md", ".csv", ".docx", ".pdf", ".xlsx", ".jpg", ".jpeg", ".png"}
+
+
+def validate_writable_paths() -> None:
+    """
+    ✅ FIX #I-005: Validate that STATE_DIR is writable.
+    Fails early if running in environment with read-only filesystem (e.g., misconfigured Docker).
+    
+    Raises RuntimeError if paths are not writable.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # Test STATE_DIR writability
+    test_file = STATE_DIR / ".writable_test"
+    try:
+        test_file.write_text("test", encoding="utf-8")
+        test_file.unlink()
+        logger.info("✅ STATE_DIR writable: %s", STATE_DIR)
+    except (OSError, IOError, PermissionError) as e:
+        raise RuntimeError(
+            f"❌ STATE_DIR is not writable: {STATE_DIR}\n"
+            f"   This path must be mounted as read-write in Docker/K8s configs.\n"
+            f"   Error: {e}"
+        ) from e
+
 
 # Lingue OCR
 OCR_LANGUAGES = "ita+eng"

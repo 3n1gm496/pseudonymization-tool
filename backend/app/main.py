@@ -9,6 +9,7 @@ import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+from app import __version__
 from app.api.auth_routes import router as auth_router
 from app.api.batches_routes import router as batches_router
 from app.api.console_routes import router as console_router
@@ -17,14 +18,15 @@ from app.api.routes import router as api_router
 from app.api.settings_routes import router as settings_router
 from app.core.auth import (
     SESSION_COOKIE_NAME,
+    auth_uses_ephemeral_secret,
     auth_uses_default_password,
     extract_token_from_request,
     validate_csrf_token,
     validate_session,
 )
 from app.core.batch_manager import start_cleanup_scheduler
-from app.core.config import SERVER_HOST, SERVER_PORT, TEMP_BASE_DIR
-from app.core.profiles import get_config, print_profile_info
+from app.core.config import SERVER_HOST, SERVER_PORT, TEMP_BASE_DIR, validate_writable_paths
+from app.core.profiles import Profile, get_config, print_profile_info
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -56,9 +58,13 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     # Startup
     print_profile_info()
-    logger.info("Local Pseudonymization Tool — vNext v2.0.0")
+    logger.info("Local Pseudonymization Tool — v%s", __version__)
     logger.info("Server in ascolto su: http://%s:%s", SERVER_HOST, SERVER_PORT)
     logger.info("SICUREZZA: Nessuna chiamata di rete esterna verra' effettuata.")
+    
+    # ✅ FIX #I-005: Validate writable paths early
+    validate_writable_paths()
+    
     TEMP_BASE_DIR.mkdir(parents=True, exist_ok=True)
     try:
         from app.core.policies import save_default_policies
@@ -78,7 +84,12 @@ async def lifespan(app: FastAPI):
     if _profile_config.auth_enabled:
         logger.info("Autenticazione API: ATTIVA")
         if auth_uses_default_password():
-            logger.warning("AUTH_PASSWORD non impostata: uso password default (NON SICURO).")
+            logger.warning("⚠️  AUTH_PASSWORD non impostata (nessun default disponibile).")
+        if _profile_config.profile == Profile.PROD:
+            if auth_uses_default_password():
+                raise RuntimeError("❌ AUTH_PASSWORD obbligatorio in produzione (nessun default disponibile)")
+            if auth_uses_ephemeral_secret():
+                raise RuntimeError("❌ AUTH_SECRET deve essere configurato in produzione (no random generation)")
     else:
         logger.warning("Autenticazione API: DISATTIVATA")
     yield
@@ -94,7 +105,7 @@ docs_url = "/api/docs" if _profile_config.swagger_ui_enabled else None
 app = FastAPI(
     title="Local Pseudonymization Tool",
     description="Tool locale per la pseudonimizzazione di documenti sensibili. Solo uso locale.",
-    version="2.0.0-vNext",
+    version=__version__,
     docs_url=docs_url,
     redoc_url=None,
     lifespan=lifespan,

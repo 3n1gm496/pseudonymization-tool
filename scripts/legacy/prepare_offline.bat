@@ -14,7 +14,8 @@ REM ─────────────────────────�
 setlocal EnableDelayedExpansion
 
 set "SCRIPT_DIR=%~dp0"
-set "BACKEND_DIR=%SCRIPT_DIR%backend"
+for %%I in ("%SCRIPT_DIR%..\..") do set "REPO_ROOT=%%~fI"
+set "BACKEND_DIR=%REPO_ROOT%\backend"
 set "WHEELHOUSE_DIR=%SCRIPT_DIR%wheelhouse"
 
 echo.

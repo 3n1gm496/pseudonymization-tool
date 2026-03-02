@@ -3,7 +3,6 @@ Router API per i flussi batches (upload file e gestione ciclo di vita).
 Separato dal router monolitico per ridurre blast radius e accoppiamento.
 """
 
-import asyncio
 import json
 import logging
 import math
@@ -12,6 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from app.core.audit import audit_event, scrub_sensitive
 from app.core.batch_manager import (
     cleanup_batch,
     create_batch,
@@ -30,16 +30,16 @@ from app.core.batch_manager import (
     clear_batch_start_time,
 )
 from app.core.config import (
-    API_HEAVY_TIMEOUT_SECONDS,
     CONFIG_DIR,
     MAX_FILE_SIZE_BYTES,
     MAX_UPLOAD_FILES_PER_BATCH,
     SUPPORTED_EXTENSIONS,
 )
-from app.core.pipeline import apply_review_decisions, run_apply_pipeline, run_scan_pipeline
+from app.core.pipeline import apply_review_decisions
 from app.core.policies import get_enabled_entity_types, get_policy
 from app.core.rate_limit import enforce_rate_limit
 from app.core.auth import validate_csrf_dependency
+from app.core.tasks import apply_batch_task, get_task_status, scan_batch_task
 from app.models.schemas import (
     Batch,
     BatchConfig,
@@ -54,8 +54,6 @@ from app.models.schemas import (
 )
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
-from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse
 
 router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
@@ -197,39 +195,7 @@ def _resolve_preset(raw_value: str) -> PresetName:
     raise HTTPException(status_code=400, detail=f"Preset non valido: '{raw_value}'.")
 
 
-def _scrub_sensitive(value: Any) -> Any:
-    import re
-    
-    if isinstance(value, dict):
-        cleaned = {}
-        for key, item in value.items():
-            key_l = str(key).lower()
-            if any(
-                token in key_l for token in ("password", "passphrase", "secret", "token", "api_key", "bind_password")
-            ):
-                continue
-            cleaned[key] = _scrub_sensitive(item)
-        return cleaned
-    if isinstance(value, list):
-        return [_scrub_sensitive(item) for item in value]
-    if isinstance(value, str):
-        # ✅ FIX #18: Enhanced sanitization
-        # Remove file paths (security: don't leak filesystem structure)
-        value = re.sub(r'/(?:home|root|var)/\S+', '/***', value)
-        # Remove full UUIDs (potential timing attacks): show first 8 chars only
-        value = re.sub(r'\b[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\b', 'xxxx-xxxx-xxxx', value)
-        return value
-    return value
-
-
-def _audit_event(request: Optional[Request], action: str, **details: Any) -> None:
-    user = "anonymous"
-    ip = "unknown"
-    if request is not None:
-        user = getattr(request.state, "auth_user", "anonymous")
-        ip = request.client.host if request.client else "unknown"
-    cleaned = _scrub_sensitive(details)
-    logger.info("AUDIT action=%s user=%s ip=%s details=%s", action, user, ip, cleaned)
+# Helper functions moved to app.core.audit module
 
 
 # ─── Batch Input Validation & File Processing (Helper Functions) ───────────────
@@ -337,28 +303,6 @@ async def _process_uploaded_files(
     return files_stored, warnings, file_records
 
 
-async def _run_batch_scan_safe(batch_id: str) -> Batch:
-    """
-    Esegue la scan pipeline con timeout e error handling.
-    Solleva HTTPException in caso di timeout o errore critico.
-    """
-    try:
-        batch = await asyncio.wait_for(
-            run_in_threadpool(run_scan_pipeline, batch_id),
-            timeout=API_HEAVY_TIMEOUT_SECONDS,
-        )
-        return batch
-    except asyncio.TimeoutError:
-        cleanup_batch(batch_id)
-        raise HTTPException(
-            status_code=504,
-            detail="Timeout durante la scansione del batch. Riduci dimensione o numero file.",
-        )
-    except Exception as e:
-        logger.error("Errore scansione batch %s: %s", batch_id, e)
-        raise HTTPException(status_code=500, detail=f"Errore durante la scansione: {e}")
-
-
 # ─── Batch (Upload File) ──────────────────────────────────────────────────────
 
 
@@ -402,29 +346,35 @@ async def create_new_batch(
     update_batch(batch)
     set_batch_start_time(batch.batch_id)  # ✅ FIX #3: Update timing
 
-    # Step 5: Scansione batch con timeout
-    batch = await _run_batch_scan_safe(batch.batch_id)
+    # Step 5: Enqueue async scan task (non-blocking)
+    batch.status = BatchStatus.SCANNING
+    update_batch(batch)
+    scan_task = scan_batch_task.delay(batch.batch_id)
+    batch.task_id = scan_task.id
+    update_batch(batch)
 
     # Step 6: Audit log
-    _audit_event(
+    audit_event(
         request,
-        "batch_scan_completed",
+        "batch_scan_queued",
         batch_id=batch.batch_id,
+        task_id=scan_task.id,
         files_count=len(batch.files),
-        findings_count=len(batch.findings),
-        safety_label=batch.safety_label.value if batch.safety_label else "SAFE_TO_UPLOAD",
     )
 
     return JSONResponse(
+        status_code=202,
         content={
             "batch_id": batch.batch_id,
             "status": batch.status.value,
+            "task_id": scan_task.id,
             "mode": mode,
             "passphrase": pp,
             "files": [{"name": fr.original_name, "id": fr.file_id} for fr in batch.files],
-            "findings": _findings_list(batch),
-            "findings_count": len(batch.findings),
+            "findings": [],
+            "findings_count": 0,
             "safety_label": batch.safety_label.value if batch.safety_label else "SAFE_TO_UPLOAD",
+            "message": "Scansione accodata. Usa GET /api/batches/{batch_id} per lo stato.",
         },
         headers={
             "X-RateLimit-Limit": str(rate_info["limit"]),
@@ -465,11 +415,55 @@ async def get_batch_status(batch_id: str):
     return {
         "batch_id": batch.batch_id,
         "status": batch.status.value,
+        "task_id": batch.task_id,
         "files": [{"name": fr.original_name, "id": fr.file_id} for fr in batch.files],
         "findings": _findings_list(batch),
         "findings_count": len(batch.findings),
         "safety_label": batch.safety_label.value if batch.safety_label else "SAFE_TO_UPLOAD",
         "error_message": batch.error_message,
+    }
+
+
+@router.get("/batches/{batch_id}/status")
+async def get_batch_task_status(batch_id: str):
+    """
+    Endpoint lightweight per polling async.
+    Restituisce solo stato task/batch senza findings completi.
+    """
+    batch = get_batch(batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail=f"Batch non trovato: {batch_id}")
+
+    if not batch.task_id:
+        return {
+            "batch_id": batch.batch_id,
+            "task_id": None,
+            "status": batch.status.value,
+            "task_state": "NOT_QUEUED",
+            "error_message": batch.error_message,
+        }
+
+    task_info = get_task_status(batch.task_id)
+    task_state = str(task_info.get("status", "UNKNOWN")).upper()
+
+    if task_state == "FAILURE":
+        status = "error"
+    elif task_state in {"PENDING", "RECEIVED"}:
+        status = "pending"
+    elif task_state in {"STARTED", "RETRY"}:
+        status = "running"
+    elif task_state == "SUCCESS":
+        status = batch.status.value
+    else:
+        status = batch.status.value
+
+    return {
+        "batch_id": batch.batch_id,
+        "task_id": batch.task_id,
+        "status": status,
+        "task_state": task_state,
+        "error_message": batch.error_message or task_info.get("error"),
+        "result": task_info.get("result") if task_state == "SUCCESS" else None,
     }
 
 
@@ -509,7 +503,7 @@ async def submit_review(batch_id: str, review_request: SubmitReviewRequest, requ
 
     batch = apply_review_decisions(batch_id, review_request.decisions)
 
-    _audit_event(
+    audit_event(
         request,
         "batch_review_saved",
         batch_id=batch_id,
@@ -574,36 +568,14 @@ async def apply_batch(batch_id: str, request: Request):
             )
         apply_review_decisions(batch_id, decision_items)
 
-    # ✅ FIX #5a: Snapshot batch state before apply for rollback capability
-    original_status = batch.status
-    original_files = [f.model_copy(deep=True) for f in batch.files]
-
-    # ✅ Use thread-safe function instead of direct dict access
+    # Use thread-safe function instead of direct dict access
     started_at = get_batch_start_time(batch_id) or datetime.now(timezone.utc).isoformat()
-    
-    # ✅ FIX #5b: Try/except/finally with rollback on error
-    try:
-        # Update status to APPLYING to indicate operation in progress
-        batch.status = BatchStatus.APPLYING
-        update_batch(batch)
-        
-        zip_path = await asyncio.wait_for(
-            run_in_threadpool(run_apply_pipeline, batch_id, started_at),
-            timeout=API_HEAVY_TIMEOUT_SECONDS,
-        )
-    except asyncio.TimeoutError:
-        # ✅ FIX #5c: Rollback on timeout
-        batch.status = original_status
-        batch.files = original_files
-        update_batch(batch)
-        raise HTTPException(status_code=504, detail="Timeout durante apply del batch. Lo stato è stato ripristinato.")
-    except Exception as e:
-        # ✅ FIX #5d: Rollback on any other error
-        batch.status = original_status
-        batch.files = original_files
-        update_batch(batch)
-        logger.error("Errore apply batch %s (rollback eseguito): %s", batch_id, e)
-        raise HTTPException(status_code=500, detail=f"Errore durante apply (stato ripristinato): {str(e)}")
+
+    batch.status = BatchStatus.APPLYING
+    update_batch(batch)
+    apply_task = apply_batch_task.delay(batch_id, started_at)
+    batch.task_id = apply_task.id
+    update_batch(batch)
 
     decisions_count = len(decisions_map)
     rejected_count = sum(1 for d in decisions_map.values() if str(d.get("action", "")).lower() == "reject")
@@ -611,27 +583,23 @@ async def apply_batch(batch_id: str, request: Request):
     accepted_count = decisions_count - rejected_count - modified_count
     ignored_count = rejected_count
 
-    _audit_event(
+    audit_event(
         request,
-        "batch_apply_completed",
+        "batch_apply_queued",
         batch_id=batch_id,
+        task_id=apply_task.id,
         accepted_count=accepted_count,
         rejected_count=rejected_count,
         modified_count=modified_count,
     )
 
-    updated_batch = get_batch(batch_id)
-    download_ready = bool(
-        updated_batch
-        and updated_batch.status == BatchStatus.DONE
-        and updated_batch.safety_label == SafetyLabel.SAFE_TO_UPLOAD
-    )
-
     return JSONResponse(
+        status_code=202,
         content={
-            "message": "Trasformazioni applicate.",
+            "message": "Apply accodato. Usa GET /api/batches/{batch_id} per lo stato.",
             "batch_id": batch_id,
-            "download_ready": download_ready,
+            "task_id": apply_task.id,
+            "download_ready": False,
             "decisions_received_count": decisions_count,
             "accepted_count": accepted_count,
             "rejected_count": rejected_count,
@@ -683,7 +651,7 @@ async def download_batch(batch_id: str, background_tasks: BackgroundTasks, reque
             logger.info("Batch %s completed in %.2f seconds", batch_id, elapsed)
         except Exception as e:
             logger.warning("Failed to calculate batch timing: %s", e)
-    _audit_event(request, "batch_download", batch_id=batch_id, filename=zip_path.name)
+    audit_event(request, "batch_download", batch_id=batch_id, filename=zip_path.name)
     background_tasks.add_task(cleanup_batch, batch_id)
     return FileResponse(path=str(zip_path), media_type="application/zip", filename=zip_path.name)
 

@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react'
-import axios from 'axios'
+import axios from '../utils/axios'
 import { useToast } from '../hooks/useToast'
 
 /**
@@ -20,6 +20,29 @@ const Scanner = ({ onScan, isLoading }) => {
   const [scanLoading, setScanLoading] = useState(false)  // ✅ FIX #6: Local loading state for scans
   const fileInputRef = useRef(null)
   const { showToast } = useToast()
+
+  const pollBatchUntilReview = async (batchId, timeoutMs = 20 * 60 * 1000, intervalMs = 1500) => {
+    const startedAt = Date.now()
+
+    while (Date.now() - startedAt < timeoutMs) {
+      const statusResponse = await axios.get(`/api/batches/${batchId}/status`)
+      const currentBatch = statusResponse.data
+      const status = String(currentBatch?.status || '').toLowerCase()
+
+      if (status === 'review' || status === 'done' || status === 'done_with_errors') {
+        const fullBatchResponse = await axios.get(`/api/batches/${batchId}`)
+        return fullBatchResponse.data
+      }
+
+      if (status === 'error') {
+        throw new Error(currentBatch?.error_message || 'Errore durante la scansione del batch')
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, intervalMs))
+    }
+
+    throw new Error('Timeout attesa completamento scansione batch')
+  }
 
   const handleTextScan = async (e) => {
     e.preventDefault()
@@ -88,11 +111,22 @@ const Scanner = ({ onScan, isLoading }) => {
           // TODO: Update progress UI if implemented
         },
       })
-      onScan({ ...response.data, is_text_input: false })
+      let batchPayload = { ...response.data }
+
+      if (response.status === 202 && response.data?.batch_id) {
+        showToast('Scansione accodata, attendo completamento...', 'info')
+        const completedBatch = await pollBatchUntilReview(response.data.batch_id)
+        batchPayload = {
+          ...completedBatch,
+          passphrase: response.data.passphrase,
+        }
+      }
+
+      onScan({ ...batchPayload, is_text_input: false })
       showToast('File scansionato', 'success')
       setUploadedFile(null)
     } catch (error) {
-      showToast(error.response?.data?.detail || 'Errore durante lo scan', 'error')
+      showToast(error.response?.data?.detail || error.message || 'Errore durante lo scan', 'error')
     } finally {
       setScanLoading(false)  // ✅ Always reset loading state on error or success
     }

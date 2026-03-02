@@ -20,7 +20,7 @@ from app.core.batch_manager import (
     _last_activity,
 )
 from app.models.schemas import Batch, BatchConfig, BatchMode, PresetName
-from app.api.auth_routes import _scrub_sensitive
+from app.core.audit import scrub_sensitive
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -57,7 +57,7 @@ class TestIssue1CleanupSingleLock:
 
 
 class TestIssue18LogSanitization:
-    """Test enhanced _scrub_sensitive function"""
+    """Test enhanced scrub_sensitive function"""
 
     def test_scrub_removes_passwords(self):
         """Verify password fields are removed"""
@@ -66,7 +66,7 @@ class TestIssue18LogSanitization:
             "password": "secret123",
             "api_key": "key123",
         }
-        cleaned = _scrub_sensitive(data)
+        cleaned = scrub_sensitive(data)
         assert "username" in cleaned
         assert "password" not in cleaned
         assert "api_key" not in cleaned
@@ -77,7 +77,7 @@ class TestIssue18LogSanitization:
             "error": "File not found: /home/admin/sensitive/file.txt",
             "path": "/tmp/batch_123/uploads/secret.pdf",
         }
-        cleaned = _scrub_sensitive(data)
+        cleaned = scrub_sensitive(data)
         assert "/home/admin" not in cleaned["error"]
         assert "/home/***" in cleaned["error"]
         assert "/tmp/batch_123" not in cleaned["path"]
@@ -89,7 +89,7 @@ class TestIssue18LogSanitization:
             "batch_id": "353903d9-3182-4ee0-aa50-4e6f0acb692d",
             "finding_id": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
         }
-        cleaned = _scrub_sensitive(data)
+        cleaned = scrub_sensitive(data)
         assert "353903d9-****" in cleaned["batch_id"]
         assert "a1b2c3d4-****" in cleaned["finding_id"]
         # First 8 chars retained for debugging
@@ -108,7 +108,7 @@ class TestIssue18LogSanitization:
                 ]
             }
         }
-        cleaned = _scrub_sensitive(data)
+        cleaned = scrub_sensitive(data)
         assert "passphrase" not in cleaned["batch"]
         assert "b1c2d3e4-****" in cleaned["batch"]["id"]
         assert "/home/***" in cleaned["batch"]["files"][0]["path"]
@@ -124,7 +124,7 @@ class TestIntegrationAllFixes:
     """Integration tests validating multiple fixes work together"""
 
     def test_full_batch_lifecycle_with_cleanup(self):
-        """Test complete batch lifecycle: create → retrieve → cleanup"""
+        """Test complete batch lifecycle: create → expire → cleanup"""
         config = BatchConfig(mode=BatchMode.STRICT, preset=PresetName.SOC_LOGS)
         batch = Batch(config=config)
         batch = create_batch(batch)
@@ -134,10 +134,13 @@ class TestIntegrationAllFixes:
         assert retrieved is not None
         assert retrieved.batch_id == batch.batch_id
         
-        # Manual cleanup of test batch
+        # Expire batch
         with _global_lock:
-            _batches.pop(batch.batch_id, None)
-            _last_activity.pop(batch.batch_id, None)
+            _last_activity[batch.batch_id] = time.time() - 400
+        
+        # Cleanup
+        cleaned = cleanup_inactive_batches()
+        assert cleaned == 1
         
         # Verify batch removed
         with _global_lock:
@@ -215,26 +218,22 @@ class TestPerformanceOptimizations:
                 _last_activity.pop(b.batch_id, None)
 
     def test_cleanup_scales_with_many_batches(self):
-        """Verify cleanup mechanism doesn't error with many batches"""
+        """Verify cleanup remains efficient with many batches"""
         config = BatchConfig(mode=BatchMode.LIGHT, preset=PresetName.POLICY_DOCS)
         
-        # Create 50 batches
-        batch_ids = []
+        # Create 50 expired batches
         for _ in range(50):
             batch = Batch(config=config)
             batch = create_batch(batch)
-            batch_ids.append(batch.batch_id)
+            with _global_lock:
+                _last_activity[batch.batch_id] = time.time() - 400  # Expired
         
-        # Manual cleanup of test batches
-        with _global_lock:
-            for bid in batch_ids:
-                _batches.pop(bid, None)
-                _last_activity.pop(bid, None)
+        start = time.time()
+        cleaned = cleanup_inactive_batches()
+        elapsed = time.time() - start
         
-        # Verify all cleaned
-        with _global_lock:
-            for bid in batch_ids:
-                assert bid not in _batches
+        assert cleaned == 50
+        assert elapsed < 1.0, f"Cleanup of 50 batches took {elapsed:.2f}s (expected <1s)"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

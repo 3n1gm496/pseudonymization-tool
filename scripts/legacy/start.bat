@@ -7,8 +7,9 @@ REM ─────────────────────────�
 setlocal EnableDelayedExpansion
 
 set "SCRIPT_DIR=%~dp0"
-set "BACKEND_DIR=%SCRIPT_DIR%backend"
-set "VENV_DIR=%SCRIPT_DIR%.venv"
+for %%I in ("%SCRIPT_DIR%..\..") do set "REPO_ROOT=%%~fI"
+set "BACKEND_DIR=%REPO_ROOT%\backend"
+set "VENV_DIR=%REPO_ROOT%\.venv"
 set "LOG_FILE=%SCRIPT_DIR%install.log"
 set "HOST=127.0.0.1"
 set "PORT=8000"

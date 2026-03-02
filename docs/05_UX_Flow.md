@@ -1,7 +1,7 @@
 # UX Flow e User Journey
 
 **Autore:** Team Engineering
-**Versione:** 4.0.4
+**Versione:** 4.1.0 (Phase 4)
 **Data:** 2026-03-02
 
 ---
@@ -16,6 +16,121 @@ L'esperienza utente è progettata come un **workflow lineare a 3 fasi** con una 
 2. **Review Phase** — Revisione dei finding, personalizzazione pseudonimi
 3. **Results Phase** — Download dei file, accesso a passphrase e mapping
 4. **Revert Panel (Opzionale)** — Decifrare risposte AI o reversi batch precedenti
+
+---
+
+## Phase 4: Async UX Pattern
+
+**Background Processing with Polling**
+
+Con l'architettura asincrona (Phase 4), le scansioni di lunga durata vengono eseguite in background, garantendo che l'interfaccia rimanga responsiva e l'utente riceva feedback visivo sul progresso.
+
+### Async Flow Diagram
+
+```
+User clicks "Scan"
+       ↓
+POST /api/batches → 202 Accepted + task_id
+       ↓
+Frontend: "Scan in coda..."
+       ↓
+[Polling Loop - every 2 seconds]
+GET /api/batches/{id}/status
+       ↓
+┌──────────────────────────────────────────┐
+│  Status: PENDING                         │
+│  UI: "⏳ Scan in coda, attendere..."    │
+└──────────────────────────────────────────┘
+       ↓
+┌──────────────────────────────────────────┐
+│  Status: STARTED                         │
+│  UI: "▶️ Scansione in corso... 0%"      │
+└──────────────────────────────────────────┘
+       ↓ (optional progress updates)
+┌──────────────────────────────────────────┐
+│  Status: PROGRESS                        │
+│  Progress: 45%                           │
+│  UI: "▶️ Scansione in corso... 45%"     │
+│  Current: "Processing document3.pdf..."  │
+└──────────────────────────────────────────┘
+       ↓
+┌──────────────────────────────────────────┐
+│  Status: SUCCESS                         │
+│  UI: "✅ Scansione completata!"         │
+│  Result: {findings: 42, files: 5}       │
+│  → Auto-switch to Review tab             │
+└──────────────────────────────────────────┘
+       OR (error case)
+┌──────────────────────────────────────────┐
+│  Status: FAILURE                         │
+│  UI: "❌ Errore: {error_message}"       │
+│  → Show error toast + stay on Scan tab  │
+└──────────────────────────────────────────┘
+```
+
+### UI Components (Phase 4)
+
+**Progress Indicator:**
+```jsx
+// Scan in corso
+<div className="progress-container">
+  <div className="spinner"></div>
+  <p>Scansione in corso... {progress}%</p>
+  {currentFile && <small>Processing: {currentFile}</small>}
+</div>
+```
+
+**Status Badge:**
+```jsx
+{status === "pending" && <Badge color="gray">In coda</Badge>}
+{status === "started" && <Badge color="blue">In corso</Badge>}
+{status === "success" && <Badge color="green">Completato</Badge>}
+{status === "failed" && <Badge color="red">Errore</Badge>}
+```
+
+**Polling Implementation (Frontend):**
+```javascript
+async function pollBatchStatus(batchId) {
+  const maxAttempts = 300; // 10 minutes (2s interval)
+  let attempts = 0;
+  
+  const interval = setInterval(async () => {
+    try {
+      const response = await fetch(`/api/batches/${batchId}/status`);
+      const data = await response.json();
+      
+      // Update UI with progress
+      setProgress(data.progress || 0);
+      setStatus(data.status);
+      setCurrentFile(data.current_file);
+      
+      // Check if completed
+      if (data.status === "completed") {
+        clearInterval(interval);
+        showToast("Scansione completata!", "success");
+        switchToReviewTab();
+      } else if (data.status === "failed") {
+        clearInterval(interval);
+        showToast(`Errore: ${data.error}`, "error");
+      }
+      
+      // Timeout safeguard
+      if (++attempts >= maxAttempts) {
+        clearInterval(interval);
+        showToast("Timeout: scansione troppo lunga", "warning");
+      }
+    } catch (error) {
+      console.error("Polling error:", error);
+    }
+  }, 2000); // Poll every 2 seconds
+}
+```
+
+**User Feedback:**
+- **Pending**: Spinner + "Scan in coda, attendere..."
+- **Started**: Progress bar + percentage + current file
+- **Success**: Checkmark + "Completato!" + auto-navigate to Review
+- **Failure**: Error icon + error message + "Riprova" button
 
 ---
 

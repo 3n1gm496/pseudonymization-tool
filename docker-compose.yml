@@ -3,6 +3,12 @@
 #   - dev:  development (console logs visible)
 #   - prod: production (hardened)
 #
+# Services:
+#   - redis:6              → Session storage + message broker for Celery
+#   - pseudonymization-tool → FastAPI backend + frontend (multi-stage build)
+#   - celery-worker        → Async task processor for long-running scans/applies
+#   - flower               → Celery task monitoring (dev mode, optional)
+#
 # Usage:
 #   docker compose up --build          # Build & run (dev profile)
 #   docker compose up --build -d       # Build & run in background
@@ -10,6 +16,27 @@
 #   docker compose down                # Stop & remove
 
 services:
+  # ─────────────────────────────────────────────────────────────────────────
+  # Session Store + Message Broker for Celery
+  # ─────────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:6-alpine
+    container_name: pseudonymization-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # FastAPI Backend + Frontend (multi-stage React build)
+  # ─────────────────────────────────────────────────────────────────────────
   pseudonymization-tool:
     build:
       context: .
@@ -28,6 +55,7 @@ services:
     # Configuration
     environment:
       PSEUDONYMIZER_PORT: "8000"
+      PSEUDONYMIZER_STATE_DIR: "/tmp/pseudonymizer_batches/state"
       API_HEAVY_TIMEOUT_SECONDS: "180"
       MAX_UPLOAD_FILES_PER_BATCH: "20"
       MAX_CONSOLE_TEXT_CHARS: "200000"
@@ -35,6 +63,12 @@ services:
       AUTH_ENABLED: "true"
       AUTH_USERNAME: "admin"
       AUTH_PASSWORD: "admin123!"
+      # Redis Session Store
+      REDIS_URL: "redis://redis:6379/0"
+      # Celery Configuration
+      CELERY_BROKER_URL: "redis://redis:6379/1"
+      CELERY_RESULT_BACKEND: "redis://redis:6379/2"
+      CELERY_WORKER_CONCURRENCY: "1"
     
     # Volume mounts (config + temp storage)
     volumes:
@@ -50,11 +84,65 @@ services:
       retries: 3
       start_period: 20s
     
+    # Depends on Redis (sole broker for Celery + session storage)
+    depends_on:
+      redis:
+        condition: service_healthy
+
     # Restart policy
     restart: unless-stopped
 
-# Named volume for batch temp storage
+  # ─────────────────────────────────────────────────────────────────────────
+  # Celery Worker Service (Async task processor)
+  # Processes long-running scan and apply tasks from Redis message queue
+  # ─────────────────────────────────────────────────────────────────────────
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pseudonymization-celery-worker
+    command: celery -A app.core.tasks worker --loglevel=info --concurrency=1
+    environment:
+      PYTHONUNBUFFERED: "1"
+      PSEUDONYMIZER_STATE_DIR: "/tmp/pseudonymizer_batches/state"
+      REDIS_URL: "redis://redis:6379/0"
+      CELERY_BROKER_URL: "redis://redis:6379/1"
+      CELERY_RESULT_BACKEND: "redis://redis:6379/2"
+      CELERY_WORKER_CONCURRENCY: "1"
+      # Inherit same config as main app
+      MAX_UPLOAD_FILES_PER_BATCH: "20"
+      MAX_CONSOLE_TEXT_CHARS: "200000"
+    volumes:
+      - ./backend/config:/app/backend/config:ro
+      - ./output_samples:/app/output_samples
+      - pseudonymizer_tmp:/tmp/pseudonymizer_batches
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Flower: Celery Task Monitoring (optional, dev mode)
+  # Access dashboard at http://localhost:5555
+  # ─────────────────────────────────────────────────────────────────────────
+  flower:
+    image: mher/flower:2.0.1
+    container_name: pseudonymization-flower
+    command: ["flower", "--broker=redis://redis:6379/1", "--port=5555", "--address=0.0.0.0"]
+    ports:
+      - "5555:5555"
+    environment:
+      CELERY_BROKER_URL: "redis://redis:6379/1"
+      CELERY_RESULT_BACKEND: "redis://redis:6379/2"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+# Named volumes for persistence
 volumes:
   pseudonymizer_tmp:
+    driver: local
+  redis_data:
     driver: local
 

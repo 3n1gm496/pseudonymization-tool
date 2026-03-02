@@ -7,8 +7,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKEND_DIR="$SCRIPT_DIR/backend"
-VENV_DIR="$SCRIPT_DIR/.venv"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+BACKEND_DIR="$REPO_ROOT/backend"
+VENV_DIR="$REPO_ROOT/.venv"
 WHEELHOUSE_DIR="$SCRIPT_DIR/wheelhouse"
 LOG_FILE="$SCRIPT_DIR/install.log"
 HOST="127.0.0.1"

@@ -53,6 +53,49 @@ def temp_output_dir(tmp_path):
     return output_dir
 
 
+@pytest.fixture(scope="session", autouse=True)
+def setup_test_credentials():
+    """
+    ✅ FIX #I-006: Set test credentials for authentication tests.
+    AUTH_PASSWORD must be explicitly configured (no hardcoded default).
+    """
+    import os
+    os.environ["AUTH_PASSWORD"] = "admin123!"
+    os.environ["AUTH_SECRET"] = "test-secret-key-32-chars-min-1234567890ab"
+    yield
+
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_celery_for_testing():
+    """
+    Configure Celery for testing mode (EAGER execution without broker).
+    This executes tasks synchronously in the test process, eliminating the need
+    for a running Redis broker or Celery worker.
+    """
+    from app.core.tasks import celery_app
+    
+    # CRITICAL: Enable EAGER mode so tasks execute synchronously
+    celery_app.conf.task_always_eager = True
+    # Eagerly execute tasks with no delay (no retry delays)
+    celery_app.conf.task_eager_propagates = True
+    yield
+
+
+@pytest.fixture(scope="session", autouse=True)
+def mock_redis_for_tests():
+    """
+    Mock Redis client for testing to avoid connection timeouts.
+    Tests use in-memory session/CSRF storage with fallback.
+    """
+    import os
+
+    # Use localhost with closed port for fast-fail connect (no DNS latency)
+    # This triggers fallback to in-memory storage in auth.py/batch_manager.py.
+    os.environ["REDIS_URL"] = "redis://127.0.0.1:1/0"
+
+    yield
+
+
 @pytest.fixture(scope="function", autouse=True)
 def disable_auth_for_tests(monkeypatch):
     """

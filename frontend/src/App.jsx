@@ -42,6 +42,29 @@ const App = () => {
     bootstrapAuth()
   }, [])
 
+  const pollBatchUntilApplied = async (batchId, timeoutMs = 25 * 60 * 1000, intervalMs = 1500) => {
+    const startedAt = Date.now()
+
+    while (Date.now() - startedAt < timeoutMs) {
+      const statusResponse = await axios.get(`/api/batches/${batchId}/status`)
+      const currentBatch = statusResponse.data
+      const status = String(currentBatch?.status || '').toLowerCase()
+
+      if (status === 'done' || status === 'done_with_errors') {
+        const fullBatchResponse = await axios.get(`/api/batches/${batchId}`)
+        return fullBatchResponse.data
+      }
+
+      if (status === 'error') {
+        throw new Error(currentBatch?.error_message || 'Errore durante apply del batch')
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, intervalMs))
+    }
+
+    throw new Error('Timeout attesa completamento apply batch')
+  }
+
   const handleLogin = async (username, password) => {
     setIsLoading(true)
     try {
@@ -90,13 +113,24 @@ const App = () => {
         })
         setPseudonymizedText(response.data.pseudonymized_text || '')
       } else {
-        await axios.post(`/api/batches/${batchId}/apply`)
+        const applyResponse = await axios.post(`/api/batches/${batchId}/apply`)
+
+        if (applyResponse.status === 202) {
+          showToast('Apply accodato, attendo completamento...', 'info')
+          const completedBatch = await pollBatchUntilApplied(batchId)
+          setBatch((prev) => ({
+            ...completedBatch,
+            passphrase: prev?.passphrase,
+            is_text_input: false,
+          }))
+        }
+
         setPseudonymizedText('')
       }
       setCurrentStep('results')
       showToast('Pseudonimizzazione completata', 'success')
     } catch (error) {
-      showToast(error.response?.data?.detail || 'Errore durante l\'applicazione', 'error')
+      showToast(error.response?.data?.detail || error.message || 'Errore durante l\'applicazione', 'error')
     } finally {
       setIsLoading(false)
     }
