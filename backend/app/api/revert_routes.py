@@ -11,8 +11,9 @@ from typing import Any, Dict, List, Optional
 
 from app.core.config import MAX_CONSOLE_TEXT_CHARS, MAX_FILE_SIZE_BYTES
 from app.core.rate_limit import enforce_rate_limit
+from app.core.auth import validate_csrf_dependency
 from app.core.revert import apply_revert, apply_revert_text, preview_revert, preview_revert_text
-from fastapi import APIRouter, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
 
 router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
@@ -44,7 +45,7 @@ def _audit_event(request: Optional[Request], action: str, **details: Any) -> Non
     logger.info("AUDIT action=%s user=%s ip=%s details=%s", action, user, ip, cleaned)
 
 
-@router.post("/revert/preview")
+@router.post("/revert/preview", dependencies=[Depends(validate_csrf_dependency)])
 async def revert_preview(
     request: Request,
     archive: UploadFile = File(...),
@@ -75,7 +76,7 @@ async def revert_preview(
     return result
 
 
-@router.post("/revert/apply")
+@router.post("/revert/apply", dependencies=[Depends(validate_csrf_dependency)])
 async def revert_apply(
     request: Request,
     archive: UploadFile = File(...),
@@ -116,7 +117,7 @@ async def revert_apply(
     )
 
 
-@router.post("/revert/text/preview")
+@router.post("/revert/text/preview", dependencies=[Depends(validate_csrf_dependency)])
 async def revert_text_preview(
     request: Request,
     mapping_file: UploadFile = File(...),
@@ -153,7 +154,7 @@ async def revert_text_preview(
     return result
 
 
-@router.post("/revert/text/apply")
+@router.post("/revert/text/apply", dependencies=[Depends(validate_csrf_dependency)])
 async def revert_text_apply(
     request: Request,
     mapping_file: UploadFile = File(...),

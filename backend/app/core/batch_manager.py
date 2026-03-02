@@ -11,6 +11,8 @@ import logging
 import shutil
 import threading
 import time
+from contextlib import contextmanager
+from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -72,6 +74,63 @@ def clear_batch_start_time(batch_id: str) -> Optional[str]:
     """Remove and return batch start time (thread-safe)."""
     with _global_lock:
         return _batch_start_times.pop(batch_id, None)
+
+
+# ─── Atomic Operations Context Manager ─────────────────────────────────────────
+# ✅ FIX #H2: Atomic transactions with rollback support
+
+
+@contextmanager
+def atomic_batch_operation(batch_id: str):
+    """
+    Context manager for atomic batch operations with automatic rollback on error.
+    
+    Maintains a snapshot of batch state and rolls back all changes if an exception occurs.
+    Prevents concurrent modifications of the same batch during the operation.
+    
+    Usage:
+        try:
+            with atomic_batch_operation(batch_id) as snapshot:
+                # Perform batch operations
+                batch = get_batch(batch_id)
+                batch.status = BatchStatus.APPLYING
+                update_batch(batch)
+                # ... more operations ...
+        except Exception:
+            # Automatically rolled back to snapshot
+            pass
+    
+    Args:
+        batch_id: ID of batch to operate on atomically
+        
+    Yields:
+        Tuple of snapshots: (batch, decisions, passphrases, engines)
+    """
+    with _global_lock:
+        # Capture snapshot of current batch state
+        batch = _batches.get(batch_id)
+        if not batch:
+            raise ValueError(f"Batch {batch_id} not found")
+        
+        batch_snapshot = deepcopy(batch)
+        decisions_snapshot = deepcopy(_decisions.get(batch_id, {}))
+        passphrase_snapshot = _passphrases.get(batch_id)
+        engine_snapshot = _engines.get(batch_id)  # Engines not deep-copied (stateful objects)
+        
+        try:
+            # Yield control to caller while holding lock
+            yield (batch_snapshot, decisions_snapshot, passphrase_snapshot, engine_snapshot)
+        except Exception as e:
+            # On error, restore snapshots
+            logger.error("Atomic operation failed for batch %s: %s. Rolling back.", batch_id, e)
+            if batch_id in _batches:
+                _batches[batch_id] = batch_snapshot
+            if decisions_snapshot:
+                _decisions[batch_id] = decisions_snapshot
+            if passphrase_snapshot:
+                _passphrases[batch_id] = passphrase_snapshot
+            # Engine not rolled back (stateful, would be incorrect)
+            raise
 
 
 # ─── CRUD batch ───────────────────────────────────────────────────────────────

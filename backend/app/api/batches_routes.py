@@ -39,6 +39,7 @@ from app.core.config import (
 from app.core.pipeline import apply_review_decisions, run_apply_pipeline, run_scan_pipeline
 from app.core.policies import get_enabled_entity_types, get_policy
 from app.core.rate_limit import enforce_rate_limit
+from app.core.auth import validate_csrf_dependency
 from app.models.schemas import (
     Batch,
     BatchConfig,
@@ -51,7 +52,7 @@ from app.models.schemas import (
     SafetyLabel,
     SubmitReviewRequest,
 )
-from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
@@ -61,6 +62,48 @@ logger = logging.getLogger(__name__)
 
 # File di stato server-side (no password, no PII)
 _STATE_FILE = CONFIG_DIR / "state.json"
+
+
+def _sanitize_filename(filename: str, max_length: int = 200) -> str:
+    """
+    Sanitizza filename per upload sicuro.
+    
+    Security Fix #C2: Filename sanitization
+    - Rimuove null bytes
+    - Normalizza Unicode (NFC)
+    - Whitelist: alphanumeric, dots, dash, underscore, space
+    - Rimuove leading dots (hidden files)
+    - Max length 200 caratteri
+    - Empty fallback to UUID
+    """
+    import re
+    import uuid
+    import unicodedata
+    
+    # Remove null bytes
+    filename = filename.replace('\x00', '')
+    
+    # Normalize Unicode (decompose + recompose to prevent attack via combining chars)
+    filename = unicodedata.normalize('NFC', filename)
+    
+    # Whitelist: allow only safe characters
+    # Keep alphanumerics, dots, dash, underscore, space
+    safe = re.sub(r'[^a-zA-Z0-9._\-\s]', '_', filename)
+    
+    # Remove leading dots (prevent hidden files)
+    safe = safe.lstrip('.')
+    
+    # Ensure not empty
+    if not safe or safe.isspace():
+        safe = f"file_{uuid.uuid4().hex[:8]}"
+    
+    # Limit length (filesystem max is 255, keep margin)
+    if len(safe) > max_length:
+        name_part, ext_part = Path(safe).stem, Path(safe).suffix
+        safe = name_part[:max_length - len(ext_part)] + ext_part
+    
+    logger.debug("Filename sanitized: %r → %r", filename, safe)
+    return safe
 
 
 def _calculate_entropy(s: str) -> float:
@@ -81,10 +124,12 @@ def _validate_passphrase(passphrase: str) -> None:
     """
     Valida la passphrase per lunghezza ed entropia minima.
     Security Fix #7: Weak password prevention
+    Security Fix #C1: Specific exception handling (was bare except)
     """
     try:
         from app.core.config import MIN_PASSPHRASE_ENTROPY, MIN_PASSPHRASE_LENGTH
-    except:
+    except (ImportError, AttributeError) as e:
+        logger.warning("Failed to import passphrase config: %s. Using defaults.", e)
         MIN_PASSPHRASE_LENGTH = 12
         MIN_PASSPHRASE_ENTROPY = 2.5
 
@@ -273,7 +318,8 @@ async def _process_uploaded_files(
             continue
 
         # Storage con deduplicazione
-        safe_name = file_path.name
+        # ✅ FIX #C2: Use sanitized filename
+        safe_name = _sanitize_filename(file_path.name)
         dest_path = upload_dir / safe_name
         counter = 1
         while dest_path.exists():
@@ -316,7 +362,7 @@ async def _run_batch_scan_safe(batch_id: str) -> Batch:
 # ─── Batch (Upload File) ──────────────────────────────────────────────────────
 
 
-@router.post("/batches")
+@router.post("/batches", dependencies=[Depends(validate_csrf_dependency)])
 async def create_new_batch(
     request: Request,
     files: List[UploadFile] = File(...),
@@ -435,7 +481,7 @@ async def get_findings(batch_id: str):
     return {"batch_id": batch_id, "findings": _findings_list(batch), "total": len(batch.findings)}
 
 
-@router.post("/batches/{batch_id}/review")
+@router.post("/batches/{batch_id}/review", dependencies=[Depends(validate_csrf_dependency)])
 async def submit_review(batch_id: str, review_request: SubmitReviewRequest, request: Request):
     """
     Persiste le decisioni di review per il batch.
@@ -483,7 +529,7 @@ async def submit_review(batch_id: str, review_request: SubmitReviewRequest, requ
     }
 
 
-@router.post("/batches/{batch_id}/apply")
+@router.post("/batches/{batch_id}/apply", dependencies=[Depends(validate_csrf_dependency)])
 async def apply_batch(batch_id: str, request: Request):
     """
     Applica le sostituzioni usando le decisions persistite.
@@ -642,7 +688,7 @@ async def download_batch(batch_id: str, background_tasks: BackgroundTasks, reque
     return FileResponse(path=str(zip_path), media_type="application/zip", filename=zip_path.name)
 
 
-@router.delete("/batches/{batch_id}")
+@router.delete("/batches/{batch_id}", dependencies=[Depends(validate_csrf_dependency)])
 async def delete_batch(batch_id: str):
     batch = get_batch(batch_id)
     if not batch:
@@ -651,7 +697,7 @@ async def delete_batch(batch_id: str):
     return {"message": f"Batch {batch_id} eliminato."}
 
 
-@router.post("/batches/{batch_id}/passphrase/regenerate")
+@router.post("/batches/{batch_id}/passphrase/regenerate", dependencies=[Depends(validate_csrf_dependency)])
 async def regenerate_batch_passphrase(batch_id: str):
     batch = get_batch(batch_id)
     if not batch:

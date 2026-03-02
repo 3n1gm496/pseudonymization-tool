@@ -70,7 +70,7 @@ async def health_check():
     return {
         "status": "ok",
         "service": "Local Pseudonymization Tool",
-        "version": "4.0.0",
+        "version": "4.0.4",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -97,7 +97,7 @@ async def auth_login(req: dict, response: Response, request: Request):
         _audit_event(request, "auth_login_failed", username=username)
         raise HTTPException(status_code=401, detail="Credenziali non valide")
 
-    token, expires_at = create_session(username or ADMIN_USERNAME)
+    token, expires_at, csrf_token = create_session(username or ADMIN_USERNAME)
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
         value=token,
@@ -107,6 +107,8 @@ async def auth_login(req: dict, response: Response, request: Request):
         max_age=SESSION_TTL_SECONDS,
         path="/",
     )
+    # ✅ FIX: Return CSRF token in response header for frontend
+    response.headers["X-CSRF-Token"] = csrf_token
     _audit_event(request, "auth_login_success", username=username or ADMIN_USERNAME)
     return {
         "authenticated": True,

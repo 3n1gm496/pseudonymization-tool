@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import axios from 'axios'
+import axios, { setCsrfToken } from './utils/axios'
 import Header from './components/Header'
 import Scanner from './components/Scanner'
 import FindingsTable from './components/FindingsTable'
@@ -17,8 +17,6 @@ const MemoizedRevertPanel = React.memo(RevertPanel)
 const MemoizedSettingsPanel = React.memo(SettingsPanel)
 
 const App = () => {
-  axios.defaults.withCredentials = true
-
   const [currentStep, setCurrentStep] = useState('scanner') // scanner | findings | results
   const [toolMode, setToolMode] = useState('pseudonymize') // pseudonymize | revert
   const [batch, setBatch] = useState(null)
@@ -49,6 +47,11 @@ const App = () => {
     try {
       const response = await axios.post('/api/auth/login', { username, password })
       setAuthUser(response.data.username)
+      // ✅ FIX #C3: Extract CSRF token from response header and cache it
+      const csrfTokenFromResponse = response.headers['x-csrf-token']
+      if (csrfTokenFromResponse) {
+        setCsrfToken(csrfTokenFromResponse)
+      }
       showToast('Login effettuato', 'success')
     } catch (error) {
       showToast(error.response?.data?.detail || 'Login fallito', 'error')

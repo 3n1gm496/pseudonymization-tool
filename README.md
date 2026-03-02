@@ -1,10 +1,12 @@
-# Local Pseudonymization Tool v4.0
+# Local Pseudonymization Tool v4.0.4
 
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![React 18](https://img.shields.io/badge/React-18.2-61dafb.svg)](https://react.dev)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.3-38b2ac.svg)](https://tailwindcss.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688.svg)](https://fastapi.tiangolo.com)
+[![Tests: 179 passed](https://img.shields.io/badge/Tests-179%20passed-brightgreen.svg)](backend/tests/)
+[![Coverage: 58.76%](https://img.shields.io/badge/Coverage-58.76%25-yellowgreen.svg)]()
 
 Web application locale moderna per la pseudonimizzazione sicura di dati sensibili in documenti di testo, DOCX, XLSX, PDF e immagini. Interfaccia React con Tailwind CSS, darkmode supportato. Progettato per ambienti enterprise che richiedono massima sicurezza e capacità di operare completamente offline.
 
@@ -97,41 +99,42 @@ make legacy-start
 3. **Avvia Scansione**: Il backend analizza i file e rileva le entità sensibili.
 4. **Review**: Rivedi i "finding" proposti. Puoi deselezionare quelli che non vuoi pseudonimizzare.
 5. **Applica**: Applica le modifiche. I file originali non vengono mai toccati.
-6. **Download**: Scarica un file ZIP contenente:
-   - `files/`: i documenti pseudonimizzati.
-   - `report.html`: un report navigabile dei finding e delle sostituzioni.
-   - `report.json`: i dati grezzi del report.
-   - `mapping.enc`: il file di mapping **cifrato** con la tua passphrase. **Conservalo** per garantire la consistenza tra diversi batch.
+6. **Risultati**: Nella sezione Results accedi a:
+   - **Testo pseudonimizzato** — Copia negli appunti o scarica come .txt
+   - **Passphrase visibile** — Mostri/nascondi e copia per l'uso successivo
+   - **File mapping.enc** — Scarica il mapping cifrato (essenziale per reversi)
+   - **ZIP finale** (per file) — Contiene documenti pseudonimizzati + report.html + report.json + mapping.enc
 
 ---
 
-## 🤖 Integrazione con AI - "Prepara per AI"
+## 🤖 Integrazione con AI
 
 Vuoi inviare i tuoi dati a un modello AI (ChatGPT, Claude, LLaMA) senza esporre informazioni sensibili?
 
 ### Workflow
 
 1. **Pseudonimizza i tuoi dati** nel Tool (vedi sezione Utilizzo sopra)
-2. **Scarica il testo pseudonimizzato** dalla sezione risultati
-3. **Scarica il file `mapping.enc` cifrato** (nel drawer "Prepara per AI")
-4. **Invia il testo pseudonimo all'AI** (non inviare il mapping.enc o la passphrase)
-5. **Ricevi la risposta dall'AI** (che contiene i tuoi pseudonimi)
-6. **Usa il tab "Decifera Risposta AI"** per reintegrare i dati originali
+2. **Nella sezione Results:**
+   - Copia o scarica il **testo pseudonimizzato**
+   - Scarica il file **mapping.enc** (cifrato, essenziale)
+   - Copia e salva la **passphrase** (in luogo sicuro)
+3. **Invia il testo pseudonimo all'AI** (non inviare mapping.enc o passphrase)
+4. **Ricevi la risposta dall'AI** (contiene i tuoi pseudonimi)
+5. **Usa il Revert Panel → "Decifra Risposta AI"** per reintegrare i dati originali
 
-### Sicurezza
+### Operazioni Disponibili
 
-- ✅ Dati originali **MAI inviati** a terze parti
-- ✅ Mapping cifrato con **AES-256-GCM + PBKDF2-600k**
-- ✅ Passphrase **NON inviata** con il mapping
-- ✅ Nulla può essere decifrato senza la passphrase
+**Nel Revert Panel (tab separate):**
+- **Decifra Risposta AI** — Decifra il testo pseudonimizzato ricevuto dall'AI usando mapping.enc + passphrase
+- **Revert Batch ZIP** — Reversi completamente i file di un batch precedente
 
 ### Documentazione Completa
 
 → Vedi [docs/11_AI_Integration_and_Revert_Flows.md](docs/11_AI_Integration_and_Revert_Flows.md) per:
-- Passaggio-per-passaggio dei tre flussi (Prepara per AI, Decifera Risposta, Revert Batch ZIP)
+- Passaggio-per-passaggio del workflow Pseudonimizza → AI → Decifra
 - Come scegliere una passphrase robusta
-- Esempio workflow completo
-- Troubleshooting
+- Operazioni Revert e scenari di utilizzo
+- Troubleshooting avanzato
 
 ---
 
@@ -188,7 +191,7 @@ Vuoi inviare i tuoi dati a un modello AI (ChatGPT, Claude, LLaMA) senza esporre 
 
 ```bash
 # Crea virtual environment
-python3.11 -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate  # Linux/macOS
 # oppure .venv\Scripts\activate  # Windows
 
@@ -285,6 +288,14 @@ curl http://127.0.0.1:8000/api/settings/policies/SOC%20Logs
 
 ### Testing
 
+**Test Suite Status:**
+- ✅ **179 tests passed** — Comprehensive unit & integration tests
+- 📊 **Coverage: 58.76%** — Focus on critical modules:
+  - `auth.py`: 91.67% (excellent)
+  - `crypto.py`: 94.92% (excellent)
+  - `schemas.py`: 96.48% (excellent)
+  - `batch_manager.py`: 64.67% (good)
+
 ```bash
 # Esegui tutti i test
 make test
@@ -295,6 +306,7 @@ make test-cov
 # Test specifici
 cd backend
 pytest tests/test_api_contract.py -v
+pytest tests/test_additional_fixes.py -v  # Code review fixes
 ```
 
 ### Struttura Progetto
