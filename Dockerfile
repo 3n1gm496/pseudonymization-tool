@@ -11,11 +11,11 @@ WORKDIR /build/frontend
 # Copy package files
 COPY frontend/package*.json ./
 
-# ✅ FIX #19: Use npm ci for better build cache consistency
-# npm ci = clean install, respects lock file for exact versions
-RUN npm ci --only=production && \
+# ✅ FIX #19: Use npm install with explicit omit for dev dependencies
+# This generates package-lock.json automatically if missing
+RUN npm install --omit=dev && \
     npm install --save-dev vite @vitejs/plugin-react tailwindcss postcss autoprefixer && \
-    echo "✓ Node packages installed (lock file respected)"
+    echo "✓ Node packages installed"
 
 # Copy source
 COPY frontend/src ./src
