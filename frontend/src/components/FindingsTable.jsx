@@ -124,8 +124,17 @@ const FindingsTable = ({ batch, onApply, isLoading }) => {
             {batch.findings.length === 0 ? (
               <tbody>
                 <tr>
-                  <td colSpan="6" className="px-4 py-8 text-center text-slate-500 dark:text-slate-400">
-                    Nessuna entità trovata nel testo.
+                  <td colSpan="6" className="px-4 py-8 text-center">
+                    {/* ✅ FIX #M2: Improved empty state UX with positive messaging */}
+                    <div className="flex flex-col items-center justify-center py-4">
+                      <div className="text-4xl mb-3">✅</div>
+                      <p className="text-lg font-semibold text-green-600 dark:text-green-400 mb-2">
+                        Nessuna entità sensibile rilevata
+                      </p>
+                      <p className="text-sm text-slate-600 dark:text-slate-400">
+                        Il testo è sicuro per l'upload e la condivisione
+                      </p>
+                    </div>
                   </td>
                 </tr>
               </tbody>
