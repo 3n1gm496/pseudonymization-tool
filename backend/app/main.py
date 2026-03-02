@@ -144,8 +144,10 @@ async def csrf_middleware(request: Request, call_next):
     Valida CSRF token per tutti i metodi mutanti (POST/PUT/DELETE/PATCH).
     
     Questo middleware protegge contro attacchi CSRF validando il token per tutte
-    le richieste che modificano lo stato del server. Eseguito dopo auth_middleware
-    per validare solo richieste autenticate.
+    le richieste che modificano lo stato del server.
+    
+    NOTA: Registrato PRIMA di auth_middleware nel codice per essere eseguito DOPO
+    (middleware FastAPI sono LIFO: ultimo registrato = primo eseguito).
     """
     # Skip per metodi sicuri (idempotenti)
     if request.method in ["GET", "HEAD", "OPTIONS"]:
@@ -159,6 +161,7 @@ async def csrf_middleware(request: Request, call_next):
         "/api/health",      # Endpoint di monitoring
         "/api/ready",       # Endpoint di monitoring
         "/api/docs",        # Documentazione API
+        "/api/auth/me",     # Auth status check
     }
     
     if path in csrf_exempt_paths or path.startswith("/api/docs"):
@@ -168,37 +171,53 @@ async def csrf_middleware(request: Request, call_next):
     if not _profile_config.auth_enabled:
         return await call_next(request)
     
-    # Validazione CSRF token
-    try:
-        csrf_token = request.headers.get("X-CSRF-Token") or request.query_params.get("csrf_token")
-        session_cookie = request.cookies.get(SESSION_COOKIE_NAME)
-        
-        if not session_cookie or "." not in session_cookie:
-            logger.warning("CSRF validation failed: no valid session cookie (path=%s)", path)
-            return JSONResponse(status_code=403, content={"detail": "CSRF validation failed: no session"})
-        
-        # Extract session_id dal cookie (formato: base64_payload.signature)
-        try:
-            payload_b64 = session_cookie.split(".", 1)[0]
-            payload = base64.b64decode(payload_b64).decode("utf-8")
-            session_id = payload.split(":", 1)[0]
-        except Exception as e:
-            logger.warning("CSRF validation failed: could not extract session_id: %s", e)
-            return JSONResponse(status_code=403, content={"detail": "CSRF validation failed: invalid session"})
-        
-        # Valida token CSRF usando la funzione esistente
-        if not validate_csrf_token(session_id, csrf_token):
-            logger.warning(
-                "CSRF validation failed: invalid or missing token (path=%s, session_id=%s...)",
-                path,
-                session_id[:8] if session_id else "unknown"
-            )
-            return JSONResponse(status_code=403, content={"detail": "CSRF token invalid or missing"})
-            
-    except Exception as e:
-        logger.error("CSRF middleware error: %s", e, exc_info=True)
-        return JSONResponse(status_code=403, content={"detail": "CSRF validation failed"})
+    # Skip CSRF per path pubblici (stessa logica di auth_middleware)
+    # Se il path non richiede auth, non richiede CSRF
+    public_paths = {
+        "/api/health",
+        "/api/ready",
+        "/api/auth/login",
+        "/api/auth/me",
+        "/api/docs",
+    }
     
+    if path in public_paths or not path.startswith("/api"):
+        return await call_next(request)
+    
+    # ✅ Prima verifica se c'è una sessione attiva
+    # Se non c'è session cookie, delega ad auth_middleware (che darà 401)
+    # Questo garantisce l'ordine corretto: 401 (no auth) prima di 403 (CSRF)
+    session_cookie = request.cookies.get(SESSION_COOKIE_NAME)
+    if not session_cookie or "." not in session_cookie:
+        # No session cookie → richiesta non autenticata
+        # Skip CSRF validation, let auth_middleware handle it (will return 401)
+        return await call_next(request)
+    
+    # A questo punto abbiamo un session cookie, validiamo CSRF
+    csrf_token = request.headers.get("X-CSRF-Token") or request.query_params.get("csrf_token")
+    
+    # Extract session_id dal cookie (formato: base64_payload.signature)
+    # NOTA: Il payload è base64 URL-safe con padding strippato, come in auth.py
+    try:
+        payload_b64 = session_cookie.split(".", 1)[0]
+        # Add padding for base64 urlsafe decoding (same as auth.py _b64_decode)
+        padding = "=" * (-len(payload_b64) % 4)
+        payload = base64.urlsafe_b64decode((payload_b64 + padding).encode("utf-8")).decode("utf-8")
+        session_id = payload.split(":", 1)[0]
+    except Exception as e:
+        logger.warning("CSRF validation failed: could not extract session_id: %s", e)
+        return JSONResponse(status_code=403, content={"detail": "CSRF validation failed: invalid session"})
+    
+    # Valida token CSRF usando la funzione esistente
+    if not validate_csrf_token(session_id, csrf_token):
+        logger.warning(
+            "CSRF validation failed: invalid or missing token (path=%s, session_id=%s...)",
+            path,
+            session_id[:8] if session_id else "unknown"
+        )
+        return JSONResponse(status_code=403, content={"detail": "CSRF token invalid or missing"})
+    
+    # CSRF validated successfully, proceed with request
     return await call_next(request)
 
 
