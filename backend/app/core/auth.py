@@ -2,6 +2,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
 import secrets
 import threading
@@ -10,6 +11,8 @@ from typing import Optional, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from fastapi import Request
+
+logger = logging.getLogger(__name__)
 
 # Lazy import to avoid circular dependency
 _config_cache = None
@@ -35,7 +38,7 @@ def _env_flag(name: str, default: bool = False) -> bool:
 SESSION_COOKIE_NAME = os.environ.get("AUTH_SESSION_COOKIE", "pseudonymizer_session")
 SESSION_TTL_SECONDS = int(os.environ.get("AUTH_SESSION_TTL_SECONDS", "28800"))
 ADMIN_USERNAME = os.environ.get("AUTH_USERNAME", "admin")
-# ✅ FIX #I-006: Remove hardcoded default password — must be explicitly configured
+# No hardcoded default password — must be explicitly configured
 DEFAULT_ADMIN_PASSWORD = None  # Deprecated: no longer used in runtime
 
 # Get cookie secure flag from deployment profile
@@ -45,77 +48,130 @@ SESSION_COOKIE_SECURE = _get_config().cookie_secure
 AUTH_ENABLED = _get_config().auth_enabled
 
 
+def _get_secret_file_path() -> str:
+    """
+    Return the path for the persisted AUTH_SECRET file.
+
+    Uses PSEUDONYMIZER_STATE_DIR (a persistent Docker volume in production)
+    instead of /tmp (which is ephemeral and world-readable on some systems).
+    Falls back to a temp-based path only if STATE_DIR is not configured.
+    """
+    state_dir = os.environ.get("PSEUDONYMIZER_STATE_DIR")
+    if state_dir:
+        return os.path.join(state_dir, ".auth_secret")
+    # Fallback for local dev (no Docker volume configured)
+    import tempfile
+    return os.path.join(tempfile.gettempdir(), "pseudonymizer_batches", "state", ".auth_secret")
+
+
 def _load_or_create_secret() -> Tuple[str, bool]:
     """
-    ✅ FIX #I-006: Persist AUTH_SECRET to file to survive container restarts.
-    Returns: (secret_value, was_from_env_or_file)
+    Load or generate the AUTH_SECRET used for signing session tokens.
+
+    Priority order:
+      1. AUTH_SECRET environment variable (always wins — use in production)
+      2. Persisted file in STATE_DIR (survives container restarts)
+      3. Generate a new secret and persist it (first-run only)
+
+    Returns: (secret_value, is_persistent)
+      - is_persistent=True  → secret survives restarts (env var or file)
+      - is_persistent=False → ephemeral secret (file write failed); sessions
+                              will be invalidated on every restart
     """
-    # Priority 1: Environment variable (always wins)
-    if os.environ.get("AUTH_SECRET"):
-        return os.environ.get("AUTH_SECRET"), True
-    
-    # Priority 2: Persisted file in /tmp (survives container unless ephemeral)
-    secret_file = "/tmp/auth_secret.txt"
+    # Priority 1: Environment variable
+    env_secret = os.environ.get("AUTH_SECRET")
+    if env_secret and len(env_secret) >= 32:
+        return env_secret, True
+
+    # Priority 2: Persisted file in STATE_DIR
+    secret_file = _get_secret_file_path()
     if os.path.exists(secret_file):
         try:
-            with open(secret_file, "r") as f:
+            with open(secret_file, "r", encoding="utf-8") as f:
                 persisted = f.read().strip()
             if persisted and len(persisted) >= 32:
                 return persisted, True
-        except Exception:
-            pass
-    
+            logger.warning(
+                "auth: secret file exists but content is too short (%d chars) — regenerating",
+                len(persisted),
+            )
+        except OSError as exc:
+            logger.warning("auth: could not read secret file %s: %s — regenerating", secret_file, exc)
+
     # Priority 3: Generate and persist
     generated = secrets.token_urlsafe(48)
     try:
-        os.makedirs("/tmp", exist_ok=True)
-        with open(secret_file, "w") as f:
+        os.makedirs(os.path.dirname(secret_file), exist_ok=True)
+        with open(secret_file, "w", encoding="utf-8") as f:
             f.write(generated)
-        os.chmod(secret_file, 0o600)  # Read-only by app
-    except Exception:
-        pass  # If writing fails, use generated secret in-memory only
-    
-    return generated, False
+        os.chmod(secret_file, 0o600)
+        logger.info("auth: generated and persisted new AUTH_SECRET to %s", secret_file)
+        return generated, True
+    except OSError as exc:
+        logger.warning(
+            "auth: could not persist secret to %s: %s — using ephemeral secret. "
+            "Sessions will be invalidated on every restart.",
+            secret_file,
+            exc,
+        )
+        return generated, False
 
 
 _secret, _secret_from_env = _load_or_create_secret()
 _password_env = os.environ.get("AUTH_PASSWORD")  # No default fallback — must be explicit
 
-_sessions = {}
-_csrf_tokens = {}  # ✅ FIX #C3: CSRF token storage (session_id -> csrf_token)
+_sessions: dict = {}
+_csrf_tokens: dict = {}  # CSRF token storage (session_id -> csrf_token)
 _lock = threading.Lock()
-_redis_client_cached = None
-_redis_last_check = 0.0
+
+# Redis client cache — protected by _redis_lock to avoid race conditions
+_redis_client_cached: Optional[object] = None
+_redis_last_check: float = 0.0
+_redis_lock = threading.Lock()
 _REDIS_RETRY_INTERVAL_SECONDS = 5.0
 
 
 def _get_redis_client():
+    """
+    Return a connected Redis client, or None if Redis is unavailable.
+
+    Uses a dedicated lock (_redis_lock) to prevent race conditions on the
+    cached client and last-check timestamp. Falls back gracefully to
+    in-memory storage when Redis is not reachable.
+    """
     global _redis_client_cached, _redis_last_check
 
-    now = time.time()
-    if _redis_client_cached is not None:
-        return _redis_client_cached
-    if now - _redis_last_check < _REDIS_RETRY_INTERVAL_SECONDS:
-        return None
+    with _redis_lock:
+        now = time.time()
+        if _redis_client_cached is not None:
+            return _redis_client_cached
+        if now - _redis_last_check < _REDIS_RETRY_INTERVAL_SECONDS:
+            return None
 
-    _redis_last_check = now
-    redis_url = os.environ.get("REDIS_URL", "redis://redis:6379/0")
-    try:
-        from redis import Redis
+        _redis_last_check = now
+        redis_url = os.environ.get("REDIS_URL")
+        if not redis_url:
+            # No REDIS_URL configured — use in-memory fallback silently
+            return None
 
-        client = Redis.from_url(
-            redis_url,
-            decode_responses=True,
-            socket_timeout=0.3,
-            socket_connect_timeout=0.3,
-            retry_on_timeout=False,
-        )
-        client.ping()
-        _redis_client_cached = client
-        return client
-    except Exception:
-        _redis_client_cached = None
-        return None
+        try:
+            from redis import Redis
+
+            client = Redis.from_url(
+                redis_url,
+                decode_responses=True,
+                socket_timeout=0.3,
+                socket_connect_timeout=0.3,
+                retry_on_timeout=False,
+            )
+            client.ping()
+            _redis_client_cached = client
+            logger.debug("auth: Redis connection established (%s)", redis_url.split("@")[-1])
+            return client
+        except Exception as exc:
+            _redis_client_cached = None
+            logger.debug("auth: Redis unavailable, using in-memory fallback: %s", exc)
+            return None
 
 
 def _store_session(sid: str, username: str, expires_at: int, csrf_token: str) -> None:
@@ -144,7 +200,8 @@ def _get_session_expires(sid: str) -> Optional[int]:
         try:
             payload = json.loads(raw)
             return int(payload.get("expires_at", 0))
-        except Exception:
+        except (ValueError, KeyError, TypeError) as exc:
+            logger.warning("auth: malformed session payload for sid=%s: %s", sid[:8], exc)
             return None
 
     with _lock:
@@ -185,14 +242,15 @@ def _set_csrf_token(sid: str, token: str) -> None:
 
 
 def auth_uses_default_password() -> bool:
-    """✅ FIX #I-006: Returns True if AUTH_PASSWORD is not configured (dangerous)."""
-    return _password_env is None or _password_env == ""
+    """Returns True if AUTH_PASSWORD is not configured (dangerous in production)."""
+    return _password_env is None or _password_env == ""  # nosec B105 — empty string check, not a hardcoded password
 
 
 def auth_uses_ephemeral_secret() -> bool:
-    """✅ FIX #I-006: True when AUTH_SECRET not configured and generated at runtime.
-    
-    In production, this should fail at startup to ensure secret is persisted.
+    """True when AUTH_SECRET is not configured and was generated at runtime.
+
+    In production, AUTH_SECRET should be set via environment variable to ensure
+    sessions survive container restarts.
     """
     return not _secret_from_env
 
@@ -214,10 +272,11 @@ def _b64_decode(data: str) -> str:
 def verify_credentials(username: str, password: str) -> bool:
     if not AUTH_ENABLED:
         return True
-    # ✅ FIX: Handle _password_env=None case (no password configured)
     if _password_env is None:
         return False  # Auth enabled but no password configured → deny access
-    return hmac.compare_digest(username or "", ADMIN_USERNAME) and hmac.compare_digest(password or "", _password_env)
+    return hmac.compare_digest(username or "", ADMIN_USERNAME) and hmac.compare_digest(
+        password or "", _password_env
+    )
 
 
 def create_session(username: str) -> Tuple[str, int, str]:
@@ -278,7 +337,7 @@ def extract_token_from_request(request) -> Optional[str]:
     return None
 
 
-# ─── CSRF Protection (FIX #C3) ───────────────────────────────────────────────
+# ─── CSRF Protection ─────────────────────────────────────────────────────────
 
 
 def generate_csrf_token() -> str:
@@ -303,12 +362,11 @@ def validate_csrf_token(session_id: str, provided_token: Optional[str]) -> bool:
     """
     if not provided_token:
         return False
-    
+
     stored_token = _get_csrf_token(session_id)
     if not stored_token:
         return False
-    
-    # Constant-time comparison
+
     return hmac.compare_digest(stored_token, provided_token)
 
 
@@ -326,59 +384,50 @@ def validate_csrf_dependency(
     request: "Request",
 ) -> None:
     """
-    FastAPI dependency for CSRF validation.
-    
+    FastAPI dependency for CSRF validation on mutating endpoints.
+
     Usage in endpoints:
         @router.post(..., dependencies=[Depends(validate_csrf_dependency)])
         async def endpoint(...):
             ...
-    
-    The dependency extracts csrf_token from:
-    1. X-CSRF-Token header (recommended)
-    2. csrf_token query parameter (fallback)
-    
-    Note: Skips validation when AUTH_ENABLED is False (e.g., in tests)
+
+    Extracts the CSRF token from:
+      1. X-CSRF-Token header (recommended)
+      2. csrf_token query parameter (fallback)
+
+    Skips validation when AUTH_ENABLED is False (dev/test mode).
     """
-    import logging
-    from fastapi import Header, HTTPException
-    
-    logger = logging.getLogger(__name__)
-    
-    # ✅ FIX: Skip CSRF validation when authentication is disabled (e.g., dev/test mode)
+    from fastapi import HTTPException
+
     if not AUTH_ENABLED:
-        return  # No auth required, no CSRF check needed
-    
-    # Get CSRF token from either header or query
+        return
+
     csrf_from_header = request.headers.get("X-CSRF-Token")
     csrf_from_query = request.query_params.get("csrf_token")
     provided_csrf = csrf_from_header or csrf_from_query
-    
-    # Get session ID from cookie
+
     session_cookie = request.cookies.get(SESSION_COOKIE_NAME)
     if not session_cookie:
         logger.warning("CSRF validation failed: no session cookie")
         raise HTTPException(status_code=401, detail="No active session")
-    
-    # Extract session ID (format: base64_payload.signature)
+
     if "." not in session_cookie:
         logger.warning("CSRF validation failed: invalid session token format")
         raise HTTPException(status_code=401, detail="Invalid session")
-    
+
     try:
         payload_b64 = session_cookie.split(".", 1)[0]
         payload = _b64_decode(payload_b64)
         session_id = payload.split(":", 1)[0]
-    except Exception as e:
-        logger.warning("CSRF validation failed: could not extract session_id: %s", e)
+    except Exception as exc:
+        logger.warning("CSRF validation failed: could not extract session_id: %s", exc)
         raise HTTPException(status_code=401, detail="Invalid session")
-    
-    # Validate CSRF token
+
     if not validate_csrf_token(session_id, provided_csrf):
         logger.warning(
-            "CSRF validation failed: sid=%s (%s), provided_token_length=%s",
+            "CSRF validation failed: sid=%s, stored=%s, provided_len=%s",
             session_id[:8] if session_id else "unknown",
-            "valid" if _get_csrf_token(session_id) else "unknown",
-            len(provided_csrf) if provided_csrf else 0
+            "present" if _get_csrf_token(session_id) else "missing",
+            len(provided_csrf) if provided_csrf else 0,
         )
         raise HTTPException(status_code=403, detail="CSRF token invalid or missing")
-
