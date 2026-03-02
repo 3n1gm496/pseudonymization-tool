@@ -208,7 +208,8 @@ Il piano di remediation segue un approccio incrementale a basso rischio, con 4 f
 | 2026-03-02 | **FASE 1: Quick Security Wins** | `12c218b` | **✅ COMPLETATA** |
 | 2026-03-02 | ↳ Middleware CSRF globale | `12c218b` | Protetti 18 endpoint POST/PUT/DELETE |
 | 2026-03-02 | ↳ Fix invalidazione cookie sessione | `12c218b` | Cookie eliminato con parametri completi |
-| 2026-03-02 | ↳ Validazione completa | - | 181 test passed, 0 regressioni |
+| 2026-03-02 | ↳ Test suite CSRF completa | `530c013` | **16 test CSRF** all'interno della suite complessiva |
+| 2026-03-02 | ↳ Validazione completa | - | **197 test passed**, 7 skipped, 0 failures |
 
 
 #### 🔄 In Corso
@@ -232,9 +233,11 @@ Il piano di remediation segue un approccio incrementale a basso rischio, con 4 f
 **Risultati Fase 1:**
 - ✅ 18 endpoint protetti da CSRF (POST/PUT/DELETE/PATCH)
 - ✅ Cookie di sessione correttamente invalidato al logout
-- ✅ 0 regressioni nei test esistenti
+- ✅ **16 test CSRF** implementati e passati (100%)
+- ✅ **197 test totali** nella suite completa (181 +16 nuovi)
+- ✅ **0 regressioni**, coverage mantenuta al 60%
 - ✅ Container riavviato e operativo
-- ✅ Middleware eseguito dopo autenticazione (UX ottimale)
+- ✅ Middleware eseguito nell'ordine corretto (auth → CSRF)
 
 **FASE 2: Crittografia** (da pianificare)
 
@@ -271,9 +274,10 @@ Il piano di remediation segue un approccio incrementale a basso rischio, con 4 f
 - [ ] Crittografia con AES-GCM + Argon2
 
 **Test:**
+- [x] Test suite CSRF completa (16/16 test) (\u2705 Fase 1)
 - [ ] Coverage >90% su auth.py
 - [ ] Coverage >80% su pipeline.py
-- [ ] Coverage globale >70%
+- [x] Coverage globale 60% mantenuta (\u2705 Fase 1)
 
 **Performance:**
 - [ ] Pipeline non bloccante (attesa <2s per API response)
