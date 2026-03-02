@@ -239,22 +239,42 @@ Il piano di remediation segue un approccio incrementale a basso rischio, con 4 f
 - ✅ Container riavviato e operativo
 - ✅ Middleware eseguito nell'ordine corretto (auth → CSRF)
 
-**FASE 2: Crittografia** (da pianificare)
+**FASE 2: Crittografia** ✅ **SKIPPED - Already Secure** (2026-03-02)
 
-| # | Attività | Priorità | Impegno | Files Impattati | Note |
-|---|----------|----------|---------|-----------------|------|
-| 2.1 | Migrazione AES-ECB → AES-GCM | 🔴 Alta | 4h | `mapping/crypto.py` | Requires IV generation |
-| 2.2 | Implementazione Argon2 | 🔴 Alta | 3h | `mapping/crypto.py` | Replace SHA-256 derivation |
-| 2.3 | Backward compatibility layer | 🟠 Media | 2h | `mapping/crypto.py` | Supportare vecchi mapping |
-| 2.4 | Test completi crittografia | 🔴 Alta | 3h | `tests/test_crypto.py` | Unit + integration tests |
+**Scoperta:** Analisi di `mapping/crypto.py` rivela implementazione già conforme a best practices:
+- ✅ **AES-256-GCM** (non AES-ECB come riportato nel code review)
+- ✅ **PBKDF2-HMAC-SHA256** con 600.000 iterazioni (conforme NIST 2023)
+- ✅ Salt di 32 byte, Nonce di 12 byte
+- ✅ Versioning + magic header per backward compatibility v1+v2
+- ✅ Gestione coretta di InvalidTag exception
 
-**FASE 3: Test Coverage** (da pianificare)
+**Decisione:** Nessuna modifica richiesta. Code review report era basato su analisi errata del codice. Encryption è già sicura.
 
-| # | Attività | Priorità | Impegno | Files Impattati | Note |
-|---|----------|----------|---------|-----------------|------|
-| 3.1 | Test unitari auth.py | 🔴 Alta | 6h | `tests/test_auth.py` | Session, CSRF, logout |
-| 3.2 | Test integrazione pipeline | 🔴 Alta | 8h | `tests/test_pipeline_integration.py` | End-to-end flows |
-| 3.3 | Test e2e API | 🟠 Media | 6h | `tests/test_api_e2e.py` | Simulare client HTTP |
+| # | Attività | Priorità | Stato | Files Impattati | Note |
+|---|----------|----------|-------|-----------------|------|
+| 2.1 | Validazione AES-GCM + PBKDF2 | 🔴 Alta | ✅ Verified | `mapping/crypto.py` | Già implementato correttamente |
+| 2.2 | Rimozione discrepanza da code review | 🟡 Bassa | ✅ Documented | `code_review_report.md` | Report errato, crypto.py è sicuro |
+| 2.3 | Opzione futura: Argon2 | ⚪ Optional | 📋 Backlog | `mapping/crypto.py` | Se maggiore performance richiesta |
+
+**FASE 3: Test Coverage** (📋 In Pianificazione - 2026-03-02)
+
+**Obiettivi:**
+- Aumentare coverage su moduli critici: auth.py (target >90%), pipeline.py (target >80%)
+- Test unitari per tutte le funzioni pubbliche
+- Test di integrazione per flow completi (login → scan → logout)
+- Test e2e per API REST (richieste multistore, errori edge case)
+
+**Deliverables:**
+1. `tests/test_auth_complete.py` - 25+ test per auth.py (session, CSRF, logout, token expiry)
+2. `tests/test_pipeline_integration.py` - 15+ test per pipeline.py (batch processing, cancellation)
+3. `tests/test_api_e2e.py` - 10+ test per scenari reali end-to-end
+
+| # | Attività | Priorità | Impegno | Files Impattati | Status | Note |
+|---|----------|----------|---------|-----------------|--------|------|
+| 3.1 | Analisi coverage attuale | 🔴 Alta | 1h | `core/auth.py`, `core/pipeline.py` | 🔄 In Progress | Identificare gap di coverage |
+| 3.2 | Test unitari auth.py | 🔴 Alta | 6h | `tests/test_auth_complete.py` | 📋 Planned | Session, CSRF, logout, expiry |
+| 3.3 | Test integrazione pipeline | 🔴 Alta | 8h | `tests/test_pipeline_integration.py` | 📋 Planned | End-to-end batch flows |
+| 3.4 | Test e2e API | 🟠 Media | 6h | `tests/test_api_e2e.py` | 📋 Planned | Simulare client HTTP reale |
 
 **FASE 4: Architettura** (da pianificare)
 
@@ -297,3 +317,4 @@ Il piano di remediation segue un approccio incrementale a basso rischio, con 4 f
 | 2026-03-02 | Middleware CSRF globale invece di Depends() | Protezione automatica per tutti gli endpoint, meno codice duplicato | Depends(validate_csrf_dependency) su ogni endpoint |
 | 2026-03-02 | CSRF middleware dopo auth_middleware | UX migliore: errore 401 prima di 403 per richieste non autenticate | Eseguire prima (validare CSRF anche senza sessione) |
 | 2026-03-02 | Skip ottimizzazione Dockerfile | Già ottimizzato con requirements.txt installato prima del codice | Ulteriori ottimizzazioni (alpine, cleanup aggressivo) |
+| 2026-03-02 | Skip Fase 2 (Crittografia) | crypto.py già implementa AES-GCM + PBKDF2 (conforme best practices) | Upgrade Argon2 (bassa priorità) |
