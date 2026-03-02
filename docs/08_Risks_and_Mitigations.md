@@ -1,8 +1,8 @@
 # Rischi e Mitigazioni
 
 **Autore:** Manus AI
-**Versione:** 1.0 (MVP)
-**Data:** 2026-02-25
+**Versione:** 4.0.4
+**Data:** 2026-03-02
 
 ---
 

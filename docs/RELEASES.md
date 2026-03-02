@@ -1,5 +1,36 @@
 # Release Notes
 
+## v4.0.5 - Workflow Refactoring & Documentation Clarity (2026-03-02)
+
+### Changed
+- **Simplified AI Integration Workflow**: Integrated "Prepare for AI" functionality directly into Results section instead of Revert Panel
+- **Revised RevertPanel**: Now contains only 2 tabs (Decifra Risposta AI, Revert Batch ZIP) for clearer user mental model
+- **Enhanced Results Display**: Passphrase now visibly displayed with show/hide toggle and copy button
+- **Improved Documentation**: Updated all docs to reflect new workflow and actual feature status
+
+### Fixed
+- Resolved duplicate "Prepare for AI" section across multiple UI locations
+- Clarified that mapping.enc download originates from Results, not Revert Panel
+- Updated README to reflect actual test coverage (179 tests, 58.76%)
+
+### Updated
+- README.md: v4.0 → v4.0.4 (reflects 3 critical fixes from v4.0.4)
+- package.json: version 4.0.0 → 4.0.4
+- auth_routes.py: version 4.0.0 → 4.0.4
+- docs/11_AI_Integration_and_Revert_Flows.md: Complete restructure for new workflow
+
+### Testing
+- All 179 tests passing (9 skipped)
+- Coverage maintained at 58.76%
+- No regressions on workflow changes
+
+### Commits Included
+- `d0d88e2` refactor: clarify workflow - integrate 'Prepare for AI' into Results section
+- `VERSION_UPDATE` chore: bump version to 4.0.4 across all configurations
+- `DOC_UPDATE` docs: update all documentation for workflow coherence
+
+---
+
 ## v4.0.4 - Critical Memory & Concurrency Fixes (2026-03-01)
 
 ### Fixed

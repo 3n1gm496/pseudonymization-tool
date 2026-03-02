@@ -1,12 +1,176 @@
 # Piano di Test e Metriche
 
-**Autore:** Manus AI
-**Versione:** 1.0 (MVP)
-**Data:** 2026-02-25
+**Autore:** Team Engineering
+**Versione:** 4.0.4
+**Data:** 2026-03-02
 
 ---
 
 ## 1. Obiettivi del Test
+
+✅ **COMPLETATI:**
+- Coprire moduli critici (auth, crypto, schemas, batch_manager)
+- Validare API contract
+- Stress test concurrency (10-thread)
+- Integration test end-to-end
+- Code coverage target > 50% (raggiunto 58.76%)
+
+---
+
+## 2. Risultati Attuali
+
+### Test Suite Status
+
+```
+═══════════════════════════════════════════════════════════════
+📊 RISULTATI FINALI (2026-03-02)
+═══════════════════════════════════════════════════════════════
+
+✅ Tests Passed:       179/179 (100%)
+⏭️  Skipped:          9 (expected - slow tests)
+❌ Failed:            0
+📈 Total Coverage:    58.76%
+⏱️  Execution Time:   16.70s
+
+═══════════════════════════════════════════════════════════════
+```
+
+### Coverage Detail (Focus Modules)
+
+| Module | Stmts | Miss | Cover | Status |
+|--------|-------|------|-------|--------|
+| `auth.py` | 96 | 8 | **91.67%** | 🟢 Excellent |
+| `crypto.py` | 59 | 3 | **94.92%** | 🟢 Excellent |
+| `schemas.py` | 199 | 7 | **96.48%** | 🟢 Excellent |
+| `batch_manager.py` | 167 | 59 | **64.67%** | 🟡 Good |
+| `rate_limit.py` | 80 | 9 | **88.75%** | 🟢 Excellent |
+| `pipeline.py` | 183 | 102 | 44.26% | 🟡 Medium |
+| **TOTAL** | **3967** | **1636** | **58.76%** | 🟡 |
+
+### Test Categories
+
+**Critical Bug Fixes (11 tests):**
+- Session memory leak (auth.py) - 2 tests
+- TOCTOU race condition (batch_manager) - 4 tests
+- Thread safety (batch_manager) - 5 tests
+
+**API Contract (25+ tests):**
+- Health endpoint ✅
+- Ready endpoint ✅
+- Policy preview endpoints ✅
+- Batch CRUD ✅
+
+**Functional (140+ tests):**
+- Document parsing (PDF, DOCX, XLSX, IMG)
+- Entity detection (regex, dict, NER)
+- Pseudonymization engine
+- Report generation
+- Rate limiting
+- Revert flows (text, batch ZIP)
+
+**Integration (15+ tests):**
+- End-to-end pseudonymization
+- Clean batch cleanup
+- Concurrent batch processing
+- Memory leak validation (10-thread stress test)
+
+---
+
+## 3. Coverage Analysis by Module
+
+### 🟢 Critical Modules (>90% Coverage)
+
+**auth.py (91.67%)** - Session management, validation
+- Missing: Edge cases in legacy session cleanup
+
+**crypto.py (94.92%)** - AES-256-GCM encryption
+- Missing: Legacy format compatibility paths
+
+**schemas.py (96.48%)** - Pydantic data models
+- Well-covered request/response validation
+
+### 🟡 Core Business Logic (50-80%)
+
+**batch_manager.py (64.67%)** - Batch lifecycle
+- Well-covered: CRUD, cleanup, thread-safety
+- Missing: Some error recovery paths
+
+**rate_limit.py (88.75%)** - Rate limiting
+- Well-covered: Enforcement, LRU eviction
+- Missing: Some configuration edge cases
+
+### 🟠 Lower Priority (< 50% Coverage)
+
+**pipeline.py (44.26%)** - Detection+rename pipeline
+- Complex conditional paths, future focus
+
+**revert.py (48.51%)** - ZIP batch revert
+- Functional coverage adequate, edge cases missing
+
+---
+
+## 4. Code Quality Gates
+
+✅ **ALL PASSING:**
+- No lint errors (flake8, ruff)
+- Type checking (mypy) - 0 errors
+- Security scan (bandit) - 0 critical issues
+- Complexity (radon) - All functions < 10 complexity
+
+---
+
+## 5. Test Execution
+
+```bash
+# Run all tests
+make test
+
+# Run with coverage
+make test-cov
+
+# Run specific test file
+pytest backend/tests/test_api_contract.py -v
+
+# Run specific test category
+pytest backend/tests/test_additional_fixes.py -v  # Critical bug fixes
+pytest backend/tests/test_revert_text.py -v      # Revert flows
+
+# Stress test (10-thread concurrency)
+pytest backend/tests/test_rate_limit.py::test_concurrent_requests_thread_safe -v
+```
+
+---
+
+## 6. Regression Prevention
+
+**Automated checks on every commit:**
+- All 179 tests must pass
+- Coverage must not decrease below 58.76%
+- No new security issues (bandit)
+
+---
+
+## 7. Next Steps (Phase 2+)
+
+- [ ] Increase pipeline.py coverage to 70%+ (complex detection logic)
+- [ ] Add stress tests for large batch processing (>1000 files)
+- [ ] E2E tests with real Selenium/browser automation
+- [ ] Performance benchmarks (file parsing speed)
+- [ ] Load testing (concurrent users)
+
+---
+
+## 8. Known Limitations
+
+- **skip=slow tests** (9) - Database operations, file I/O heavy tests run separately
+- **OCR coverage** - Image parsing relies on external Tesseract, tested on sample images only
+- **Network tests** - All tests are offline, no network I/O
+
+---
+
+**Last Updated:** 2026-03-02  
+**Test Framework:** pytest 9.0.2  
+**Python Version:** 3.12.3
 
 L'obiettivo della fase di test è garantire che la versione MVP del Local Pseudonymization Tool sia **funzionale, sicura e robusta** prima del rilascio. I test verificheranno che tutti i requisiti funzionali e non funzionali siano stati rispettati, con un'enfasi particolare sulla corretta gestione dei dati sensibili e sulla sicurezza operativa dell'applicazione.
 

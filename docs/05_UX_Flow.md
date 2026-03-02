@@ -1,53 +1,249 @@
-# UX Flow e Wireframe Concettuali
+# UX Flow e User Journey
 
-**Autore:** Manus AI
-**Versione:** 1.0 (MVP)
-**Data:** 2026-02-25
+**Autore:** Team Engineering
+**Versione:** 4.0.4
+**Data:** 2026-03-02
 
 ---
 
-## 1. Panoramica del Flusso Utente
+## Overview
 
-L'esperienza utente è progettata per essere lineare e guidata, riducendo al minimo l'ambiguità per l'operatore tecnico. Il flusso si articola in quattro passaggi principali, ospitati in una singola pagina web (SPA) che aggiorna dinamicamente la sua vista.
+L'esperienza utente è progettata come un **workflow lineare a 3 fasi** con una **sezione opzionale di reversione**.
 
-1.  **Configurazione e Upload:** L'utente imposta i parametri del batch e carica i file.
-2.  **Scansione e Attesa:** Il sistema processa i file e l'utente attende il completamento.
-3.  **Review e Decisione:** L'utente analizza i risultati e prende decisioni su ogni entità trovata.
-4.  **Finalizzazione e Download:** L'utente applica le modifiche e scarica gli artefatti finali.
+### Fasi Principali
 
-## 2. Wireframe Concettuali e Passaggi Dettagliati
+1. **Scan Phase** — Upload file/testo, selezione policy, avvio scansione
+2. **Review Phase** — Revisione dei finding, personalizzazione pseudonimi
+3. **Results Phase** — Download dei file, accesso a passphrase e mapping
+4. **Revert Panel (Opzionale)** — Decifrare risposte AI o reversi batch precedenti
 
-Di seguito sono descritte le schermate principali dell'interfaccia utente.
+---
 
-### Schermata 1: Pagina di Avvio (Stato Iniziale)
+## Flusso Dettagliato
 
-**Descrizione:** È la prima vista che l'utente incontra. È pulita e focalizzata sull'azione principale: iniziare un nuovo batch.
+### FASE 1: SCAN (Scanner Component)
+
+**Stato iniziale:**
+- Tre tab: **Scanner**, **Review**, **Results** 
+- Di default aperto: **Scanner** tab
+- Lo scanner rimane disponibile durante tutte le fasi
+
+**Componenti visibili:**
+```
+┌─────────────────────────────────────────────────┐
+│         Modalità Input (Radio Selection)        │
+│  ( ) Text Input    (o) File Upload             │
+└─────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────┐
+│ SELECT POLICY (Policy Selector Component)       │
+│                                                │
+│ Preset: [SOC Logs ▼]                          │
+│                                                │
+│ Preview delle entità che saranno scansionate   │
+│ - HOSTNAME, IPV4, EMAIL, CUSTOM_CODES, ...    │
+└──────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────┐
+│ DETTAGLI BATCH (Readonly Info)                 │
+│                                                │
+│ Batch ID: [abc123...def789] (truncated)       │
+│ Safety Label: MEDIUM                           │
+│ Created: 2026-03-02T10:30:00                   │
+└──────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────┐
+│ FILE/TEXT INPUT AREA                           │
+│                                                │
+│ IF TEXT MODE:                                  │
+│   [Large textarea for pasting text]            │
+│   Placeholder: "Incolla testo..."              │
+│                                                │
+│ IF FILE MODE:                                  │
+│   [Drag & drop zone]                           │
+│   Oppure [Click to browse]                     │
+│   Supported: TXT, CSV, MD, DOCX, XLSX, PDF,.. │
+└──────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────┐
+│ PASSPHRASE & SCAN CONTROLS                     │
+│                                                │
+│ Passphrase: [________________] [👁] [👁]       │
+│                                                │
+│ [🔍 Scan] [🔄 Clear]                          │
+└──────────────────────────────────────────────────┘
+
+│ [ℹ️ Spinner mentre processa]                  │
+```
+
+**Flusso:**
+1. User seleziona modalità (text/file)
+2. User sceglie policy (o default SOC Logs)
+3. User inserisce passphrase
+4. User carica testo/file
+5. User clicca "Scan" → va a Review tab automaticamente
+
+---
+
+### FASE 2: REVIEW (FindingsTable + Results Preview)
+
+**Tab automaticamente attivato** dopo scan completato.
 
 **Componenti:**
-- **Area Drag & Drop:** Un'ampia zona centrale invita l'utente a trascinare i file o a cliccare per selezionarli dal filesystem.
-- **Opzioni di Configurazione:**
-    - **Selettore Modalità:** Un radio button o toggle per scegliere tra `Light` e `Strict` (default: `Light`).
-    - **Campo Passphrase:** Un campo di testo per inserire la passphrase per la cifratura del mapping. Un'icona permette di visualizzare la password.
-    - **Checkbox Dry-Run:** Una casella di controllo per attivare la modalità di sola scansione.
-- **Pulsante di Azione:** Un pulsante "Avvia Scansione", disabilitato finché non viene caricato almeno un file e inserita una passphrase.
-
-**Wireframe Concettuale:**
 ```
-+--------------------------------------------------------------------+
-|                      Local Pseudonymization Tool                   |
-+--------------------------------------------------------------------+
-|                                                                    |
-|   +------------------------------------------------------------+   |
-|   |                                                            |   |
-|   |          Trascina qui i file o clicca per caricare         |   |
-|   |                                                            |   |
-|   +------------------------------------------------------------+   |
-|                                                                    |
-|   File caricati: (nessuno)                                         |
-|                                                                    |
-|   ---------------------------------------------------------------- |
-|                                                                    |
-|   Modalità:  (o) Light   ( ) Strict                              |
+┌────────────────────────────────────────────┐
+│ FINDINGS SUMMARY                          │
+│ Entities scanned: 42 | Unique: 28        │
+│ Safety Label: SENSITIVE                   │
+└────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────┐
+│ FILTRI & SEARCH                           │
+│ [Entity Type ▼] [File ▼] [Confidence ▼]   │
+│ Search: [____________]                    │
+└────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────┐
+│ FINDINGS TABLE (Scrollable)                                   │
+├─────────────────────────────────────────────────────────────┤
+│ Entity      Original          Pseudonym    Source    Conf. ✓ │
+├─────────────────────────────────────────────────────────────┤
+│ EMAIL       mario@acme.com    EMAIL_001    file.txt  0.95[✓] │
+│ IPV4        10.0.0.1          IPV4_001     logs.pdf  1.00[✓] │
+│ HOSTNAME    server.acme.com   HOST_001     email     0.87[ ] │
+│ ...                                                          │
+└────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────┐
+│ PSEUDONYM CUSTOMIZATION (On Row Select)    │
+│                                            │
+│ Original: mario@acme.com                   │
+│ Current Pseudonym: [EMAIL_001________]     │
+│ [Update]                                   │
+└────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────┐
+│ ACTION BUTTONS                             │
+│ [Apply All] [Reset] [Download Report]     │
+└────────────────────────────────────────────┘
+```
+
+**Interazioni:**
+- Click row → edita pseudonimo
+- Checkbox per include/exclude entità
+- "Apply All" → genera pseudo, va a Results
+
+---
+
+### FASE 3: RESULTS (Passphrase + Mapping + Downloads)
+
+**Tab automaticamente attivato** dopo Apply.
+
+**Layout:**
+```
+┌──────────────────────────────────────────────────┐
+│ PSEUDONYMIZED OUTPUT SECTION                    │
+│                                                 │
+│ IF TEXT INPUT:                                  │
+│   │ User EMAIL_001 created CUSTOM_001          │
+│   │ on IPV4_001 at 2026-02...                  │
+│   │                                             │
+│   [Copy] [Download TXT]                        │
+│                                                 │
+│ IF FILE INPUT:                                  │
+│   ✓ Scanned 5 files → Pseudonymized 3         │
+│   [Download ZIP] [Download Report HTML]       │
+│                                                 │
+└──────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────┐
+│ 🔐 PASSPHRASE & MAPPING CIFRATO                │
+│                                                 │
+│ Passphrase (per decifrazione):                │
+│ [••••••••••••••••] [👁] [Copy] [Show]         │
+│                                                 │
+│ File di Mapping Cifrato:                       │
+│ mapping_abc123.enc (stored securely)           │
+│ ✓ Download mapping.enc                        │
+│                                                 │
+│ ⚠️ Conserva entrambi per decifrazione risposte │
+│                                                 │
+└──────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────┐
+│ STATS & METADATA                               │
+│ Batch ID: abc123...def789                      │
+│ Pseudonymized Entities: 28                     │
+│ Safety Label: SENSITIVE                        │
+│ Processed at: 2026-03-02T10:35:00              │
+└──────────────────────────────────────────────────┘
+
+[New Scan] [Download Report]
+```
+
+---
+
+### FASE 4 (OPZIONALE): REVERT PANEL
+
+**Accessibile da sidebar/drawer**, quando user ha mapping.enc + passphrase.
+
+**TAB 1: Decifra Risposta AI**
+```
+┌──────────────────────────────────────────┐
+│ Upload Mapping File                     │
+│ [Choose mapping_abc.enc...]             │
+│                                         │
+│ Enter Passphrase:                       │
+│ [________________] [👁]                 │
+│                                         │
+│ Paste AI Response:                      │
+│ [Large textarea]                        │
+│                                         │
+│ [Preview Decryption]                    │
+│ Matches found: 3/3 ✓                    │
+│                                         │
+│ [Apply Decryption] → Download           │
+└──────────────────────────────────────────┘
+```
+
+**TAB 2: Revert Batch ZIP**
+```
+┌──────────────────────────────────────────┐
+│ Upload Previous Batch ZIP                │
+│ [Choose batch-abc123.zip...]             │
+│                                         │
+│ Enter Passphrase:                       │
+│ [________________] [👁]                 │
+│                                         │
+│ [Preview Revert]                        │
+│ Files to revert: 5                      │
+│ Mapping entries: 28                     │
+│                                         │
+│ [Apply Revert] → Download reverted ZIP  │
+└──────────────────────────────────────────┘
+```
+
+---
+
+## State Management
+
+**Scanner → Review → Results flussi:**
+- Scanner: Colleziona file + policy + passphrase → /api/batches POST
+- Review: Mostra findings da batch → /api/findings GET
+- Results: Mostra output + mapping + passphrase (in frontend state)
+
+**Revert Panel flussi:**
+- Decifra: Upload .enc + passphrase → /api/revert/decipher
+- Revert Zip: Upload ZIP + .enc + passphrase → /api/revert/batch
+
+---
+
+## Accessibility Notes
+
+✅ ARIA labels su tutti i tab  
+✅ Keyboard navigation (Tab, Enter)  
+✅ Dark mode con sufficiente contrast  
+✅ Toast notifications per feedback (success, error, warning)
 |                                                                    |
 |   Passphrase: [___________________________________________] [👁]   |
 |                                                                    |
