@@ -210,7 +210,7 @@ def _validate_upload_input(
     if passphrase:
         _validate_passphrase(passphrase)
 
-    # ✅ FIX #4a: Validate mode strictly - don't silently default
+    # Validate mode strictly - don't silently default
     try:
         batch_mode = BatchMode(mode.lower())
     except ValueError:
@@ -220,7 +220,7 @@ def _validate_upload_input(
             detail=f"Modalità non valida: '{mode}'. Valide: {valid_modes}",
         )
 
-    # ✅ FIX #4b: Validate preset - _resolve_preset already raises on invalid
+    # Validate preset - _resolve_preset already raises on invalid
     batch_preset = _resolve_preset(preset)
     return batch_mode, batch_preset
 
@@ -274,7 +274,7 @@ async def _process_uploaded_files(
             continue
 
         # Storage con deduplicazione
-        # ✅ FIX #C2: Use sanitized filename
+        # Use sanitized filename
         safe_name = _sanitize_filename(file_path.name)
         dest_path = upload_dir / safe_name
         counter = 1
@@ -319,7 +319,7 @@ async def create_new_batch(
     batch = create_batch(batch)
     pp = passphrase if passphrase else generate_passphrase()
     store_passphrase(batch.batch_id, pp)
-    set_batch_start_time(batch.batch_id)  # ✅ FIX #3: Thread-safe timing
+    set_batch_start_time(batch.batch_id)  # Thread-safe timing
 
     # Step 3: Caricamento file (con validazione)
     files_stored, warnings, file_records = await _process_uploaded_files(batch.batch_id, files)
@@ -334,7 +334,7 @@ async def create_new_batch(
         )
 
     update_batch(batch)
-    set_batch_start_time(batch.batch_id)  # ✅ FIX #3: Update timing
+    set_batch_start_time(batch.batch_id)  # Update timing
 
     # Step 5: Enqueue async scan task (non-blocking)
     batch.status = BatchStatus.SCANNING
@@ -517,7 +517,7 @@ async def submit_review(batch_id: str, review_request: SubmitReviewRequest, requ
 async def apply_batch(batch_id: str, request: Request):
     """
     Applica le sostituzioni usando le decisions persistite.
-    ✅ FIX #5: Added error handling with state rollback on failure.
+    Added error handling with state rollback on failure.
     """
     rate_info = enforce_rate_limit(request, "batch_apply", limit=20)
 
@@ -530,7 +530,7 @@ async def apply_batch(batch_id: str, request: Request):
             detail=f"Batch non in review (stato: {batch.status.value}).",
         )
 
-    # ✅ CRITICAL FIX #4: Validate passphrase exists before applying
+    # Validate passphrase exists before applying
     # Prevents silent failures when zip download would fail due to missing passphrase
     passphrase = get_passphrase(batch_id)
     if not passphrase:
@@ -632,8 +632,8 @@ async def download_batch(batch_id: str, background_tasks: BackgroundTasks, reque
         raise HTTPException(status_code=404, detail="File ZIP non trovato.")
     zip_path = zip_files[0]
 
-    # ✅ FIX #16: Log performance metrics when batch completes
-    started_at_iso = clear_batch_start_time(batch_id)  # ✅ FIX #3: Thread-safe clear
+    # Log performance metrics when batch completes
+    started_at_iso = clear_batch_start_time(batch_id)  # Thread-safe clear
     if started_at_iso:
         try:
             started_at = datetime.fromisoformat(started_at_iso)

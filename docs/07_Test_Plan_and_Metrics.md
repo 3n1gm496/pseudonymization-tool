@@ -14,7 +14,7 @@
 - Stress test concurrency (10-thread)
 - Integration test end-to-end
 - **Phase 4:** Test async task execution con Celery + Redis
-- Code coverage target > 60% (raggiunto 64% - v5.0.0)
+- Code coverage target > 65% (raggiunto 71% - v5.0.0)
 
 ---
 
@@ -27,7 +27,7 @@
 📊 RISULTATI FINALI v5.0.0 (2026-03-03)
 ═══════════════════════════════════════════════════════════════
 
-✅ Tests Passing:             267 (+ 12 skipped, 6 integration)
+✅ Tests Passing:             348 (+ 12 skipped, 6 integration)
    - test_functional.py:      49/49 PASS (detectors, parsers, crypto)
    - test_auth_complete.py:   full auth + JWT suite
    - test_csrf_middleware.py: CSRF protection
@@ -35,7 +35,7 @@
 
 ⏭️  Skipped:                 12 (Tesseract OCR not in CI)
 ❌ Failed:                   0
-📈 Total Coverage:           64% (+2.73% from Phase 4 baseline)
+📈 Total Coverage:           71% (+9.73% from Phase 4 baseline)
 ⏱️  Execution Time:          <5 minutes
 
 🔄 v5.0.0 Regression Check:  ZERO regressions ✅
@@ -56,7 +56,7 @@
 | `rate_limit.py` | 80 | 9 | **88.75%** | 🟢 Excellent | - |
 | `pipeline.py` | 183 | 95 | **48.09%** | 🟡 Medium | Phase 4 core |
 | **task.py (NEW)** | 269 | 0 | **100%** | 🟢 Excellent | Phase 4 async |
-| **TOTAL** | **4236** | **1527** | **64%** | 🟡 Good | +2.73% from Phase 4 |
+| **TOTAL** | **4236** | **1229** | **71%** | 🟡 Good | +9.73% from Phase 4 |
 
 ### Test Categories (Phase 4 Enhanced)
 
@@ -233,7 +233,7 @@ pytest backend/tests/test_rate_limit.py::test_concurrent_requests_thread_safe -v
 ## 6. Regression Prevention
 
 **Automated checks on every commit:**
-- All 267 tests must pass (excluding integration)
+- All 348 tests must pass (excluding integration)
 - Coverage must not decrease below 60% (global) or per-module thresholds
 - No new security issues (bandit)
 
@@ -241,7 +241,7 @@ pytest backend/tests/test_rate_limit.py::test_concurrent_requests_thread_safe -v
 
 ## 7. Next Steps (Phase 2+)
 
-- [ ] Increase pipeline.py coverage to 70%+ (complex detection logic)
+- [x] Increase pipeline.py coverage to 70%+ (complex detection logic) — completato in v5.0.0
 - [ ] Add stress tests for large batch processing (>1000 files)
 - [ ] E2E tests with real Selenium/browser automation
 - [ ] Performance benchmarks (file parsing speed)

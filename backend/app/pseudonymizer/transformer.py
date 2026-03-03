@@ -254,7 +254,6 @@ def transform_pdf_file(
     original_path: Path,
     output_path: Path,
     findings: List[Finding],
-    strict: bool = False,
 ) -> List[str]:
     """
     Trasforma PDF testuale in PDF pseudonimizzato (PDF→PDF).

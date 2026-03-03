@@ -73,7 +73,7 @@ async def auth_login(req: dict, response: Response, request: Request):
         max_age=SESSION_TTL_SECONDS,
         path="/",
     )
-    # ✅ FIX: Return CSRF token in response header for frontend
+    # Return CSRF token in response header for frontend
     response.headers["X-CSRF-Token"] = csrf_token
     audit_event(request, "auth_login_success", username=username or ADMIN_USERNAME)
     return {
@@ -89,7 +89,7 @@ async def auth_login(req: dict, response: Response, request: Request):
 async def auth_logout(request: Request, response: Response):
     token = extract_token_from_request(request)
     destroy_session(token)
-    # ✅ FIX: Delete cookie with all parameters to ensure browser recognizes it
+    # Delete cookie with all parameters to ensure browser recognizes it
     response.delete_cookie(
         key=SESSION_COOKIE_NAME, path="/", secure=SESSION_COOKIE_SECURE, httponly=True, samesite="strict"
     )
@@ -118,7 +118,7 @@ async def auth_me(request: Request, response: Response):
     if not username:
         raise HTTPException(status_code=401, detail="Non autenticato")
 
-    # ✅ CSRF bootstrap: include the CSRF token so the frontend can restore it
+    # CSRF bootstrap: include the CSRF token so the frontend can restore it
     # after a page reload without requiring a new login.
     csrf_token = get_csrf_token_for_session(token)
     if csrf_token:

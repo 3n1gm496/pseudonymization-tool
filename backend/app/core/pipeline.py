@@ -127,7 +127,7 @@ def run_scan_pipeline(batch_id: str) -> Batch:
     # Mantieni i finding di testo inline già presenti
     existing_text_findings = [f for f in batch.findings if f.is_text_input]
 
-    # ✅ CRITICAL FIX #2: Deduplication by finding_id + (entity_type, original_value) to prevent duplicates on rescans & multi-detector hits
+    # Deduplication by finding_id + (entity_type, original_value) to prevent duplicates on rescans & multi-detector hits
     seen_ids = set()
     seen_values = set()  # Track (entity_type, original_value, file_id) to prevent multi-detector duplicates
     deduplicated_findings = []

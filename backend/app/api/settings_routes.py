@@ -1,5 +1,5 @@
 """
-Settings & LDAP Configuration Router — Local Pseudonymization Tool v4.0
+Settings & LDAP Configuration Router — Local Pseudonymization Tool v5.0.0
 
 Flussi:
   - GET/POST /api/settings/state      → persistenza config server-side

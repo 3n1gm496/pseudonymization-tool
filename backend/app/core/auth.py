@@ -38,8 +38,7 @@ def _env_flag(name: str, default: bool = False) -> bool:
 SESSION_COOKIE_NAME = os.environ.get("AUTH_SESSION_COOKIE", "pseudonymizer_session")
 SESSION_TTL_SECONDS = int(os.environ.get("AUTH_SESSION_TTL_SECONDS", "28800"))
 ADMIN_USERNAME = os.environ.get("AUTH_USERNAME", "admin")
-# No hardcoded default password — must be explicitly configured
-DEFAULT_ADMIN_PASSWORD = None  # Deprecated: no longer used in runtime
+# No hardcoded default password — must be explicitly configured via AUTH_PASSWORD env var
 
 # Get cookie secure flag from deployment profile
 SESSION_COOKIE_SECURE = _get_config().cookie_secure

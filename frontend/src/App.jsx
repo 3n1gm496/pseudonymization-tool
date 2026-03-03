@@ -8,7 +8,7 @@ import RevertPanel from './components/RevertPanel'
 import SettingsPanel from './components/SettingsPanel'
 import { useToast } from './hooks/useToast'
 import LoginForm from './components/LoginForm'
-// ✅ FIX #13: Memoize heavy components to prevent unnecessary re-renders
+// Memoize heavy components to prevent unnecessary re-renders
 const MemoizedScanner = memo(Scanner)
 const MemoizedFindingsTable = memo(FindingsTable)
 const MemoizedResults = memo(Results)
@@ -26,7 +26,7 @@ const App = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const { showToast, ToastContainer } = useToast()
 
-  // ✅ FIX: Ref per cancellare il polling in corso quando l'utente fa reset/logout
+  // Ref per cancellare il polling in corso quando l'utente fa reset/logout
   // Usando un ref (non state) per evitare re-render e per essere leggibile
   // in modo sincrono all'interno del loop async senza closure stale.
   const pollingCancelledRef = useRef(false)
@@ -63,7 +63,7 @@ const App = () => {
     pollingCancelledRef.current = false
 
     while (Date.now() - startedAt < timeoutMs) {
-      // ✅ FIX: Controlla la cancellazione prima di ogni richiesta HTTP
+      // Controlla la cancellazione prima di ogni richiesta HTTP
       if (pollingCancelledRef.current) {
         throw new Error('Polling cancellato dall\'utente')
       }
@@ -81,7 +81,7 @@ const App = () => {
         throw new Error(currentBatch?.error_message || 'Errore durante apply del batch')
       }
 
-      // ✅ FIX: Controlla la cancellazione anche durante l'attesa tra un poll e l'altro
+      // Controlla la cancellazione anche durante l'attesa tra un poll e l'altro
       await new Promise((resolve, reject) => {
         const timer = setTimeout(resolve, intervalMs)
         // Controlla ogni 100ms se il polling è stato cancellato
@@ -105,7 +105,7 @@ const App = () => {
     try {
       const response = await axios.post('/api/auth/login', { username, password })
       setAuthUser(response.data.username)
-      // ✅ FIX #C3: Extract CSRF token from response header and cache it
+      // Extract CSRF token from response header and cache it
       const csrfTokenFromResponse = response.headers['x-csrf-token']
       if (csrfTokenFromResponse) {
         setCsrfToken(csrfTokenFromResponse)
@@ -120,7 +120,7 @@ const App = () => {
   }
 
   const handleLogout = async () => {
-    // ✅ FIX: Cancella il polling in corso prima di fare logout
+    // Cancella il polling in corso prima di fare logout
     pollingCancelledRef.current = true
     try {
       await axios.post('/api/auth/logout')
@@ -167,7 +167,7 @@ const App = () => {
       setCurrentStep('results')
       showToast('Pseudonimizzazione completata', 'success')
     } catch (error) {
-      // ✅ FIX: Non mostrare errore se il polling è stato cancellato intenzionalmente
+      // Non mostrare errore se il polling è stato cancellato intenzionalmente
       if (error.message === "Polling cancellato dall'utente") {
         return
       }
@@ -178,7 +178,7 @@ const App = () => {
   }
 
   const handleReset = () => {
-    // ✅ FIX: Cancella il polling in corso prima di resettare lo stato
+    // Cancella il polling in corso prima di resettare lo stato
     pollingCancelledRef.current = true
     setBatch(null)
     setPseudonymizedText(null)

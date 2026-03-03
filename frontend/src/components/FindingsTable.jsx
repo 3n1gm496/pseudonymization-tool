@@ -21,7 +21,7 @@ const FindingsTable = ({ batch, onApply, isLoading }) => {
   const [decisions, setDecisions] = useState({})
   const { showToast } = useToast()
 
-  // ✅ CRITICAL FIX #3: Initialize decisions when batch.findings changes
+  // Initialize decisions when batch.findings changes
   // This ensures that when user uploads a new file, the findings state is synced
   useEffect(() => {
     setDecisions(
@@ -125,7 +125,7 @@ const FindingsTable = ({ batch, onApply, isLoading }) => {
               <tbody>
                 <tr>
                   <td colSpan="6" className="px-4 py-8 text-center">
-                    {/* ✅ FIX #M2: Improved empty state UX with positive messaging */}
+                    {/* Improved empty state UX with positive messaging */}
                     <div className="flex flex-col items-center justify-center py-4">
                       <div className="text-4xl mb-3">✅</div>
                       <p className="text-lg font-semibold text-green-600 dark:text-green-400 mb-2">

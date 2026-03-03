@@ -189,7 +189,7 @@ class CreateBatchRequest(BaseModel):
 class ReviewDecisionItem(BaseModel):
     finding_id: str
     action: ReviewAction
-    # ✅ FIX #H1: Input validation - limit modified_pseudonym length to prevent DoS
+    # Input validation - limit modified_pseudonym length to prevent DoS
     modified_pseudonym: Optional[str] = Field(None, max_length=500)
 
 

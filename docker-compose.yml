@@ -1,4 +1,4 @@
-# Docker Compose: Pseudonymization Tool v4.0
+# Docker Compose: Pseudonymization Tool v5.0.0
 #
 # SETUP INIZIALE:
 #   1. cp .env.example .env

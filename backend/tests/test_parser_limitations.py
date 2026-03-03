@@ -268,7 +268,7 @@ def test_pdf_transform_layout_warning_emitted(tmp_path):
     ]
 
     output_path = tmp_path / "output.pdf"
-    warnings = transform_pdf_file(pdf_path, output_path, findings, strict=False)
+    warnings = transform_pdf_file(pdf_path, output_path, findings)
 
     # Check for layout warning
     layout_warning = any("layout" in w.lower() and "differente" in w.lower() for w in warnings)

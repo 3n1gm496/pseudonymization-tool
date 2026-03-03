@@ -328,6 +328,7 @@ Vuoi inviare i tuoi dati a un modello AI (ChatGPT, Claude, LLaMA) senza esporre 
 ### Operational & Deployment
 - **[docs/08_Risks_and_Mitigations.md](docs/08_Risks_and_Mitigations.md)** — Analisi rischi e mitigazioni.
 - **[docs/17_Deployment_Profiles.md](docs/17_Deployment_Profiles.md)** — Profili deployment (DEV, STAGING, PROD), configurazione per ambiente.
+- **[docs/18_Deployment_Guide.md](docs/18_Deployment_Guide.md)** — Guida completa al deployment: Docker Compose, Kubernetes, Systemd.
 - **[docs/16_Rate_Limit_Robustness.md](docs/16_Rate_Limit_Robustness.md)** — Rate limiting, cleanup auto, memory bounds.
 
 ### Planning & Roadmap

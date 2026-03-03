@@ -202,7 +202,7 @@ Examples:
 **Test coverage**:
 - Rate limiter module: **88%** (77 statements, 9 missed)
 - Missed lines: Edge cases in cleanup thread logging
-- Total tests: **267 passed, 12 skipped**
+- Total tests: **348 passed, 12 skipped**
 
 ---
 
@@ -326,10 +326,10 @@ ERROR Rate limiter cleanup error: <exception details>
 14. `test_unknown_client_ip_handled`: Missing request.client → "unknown" client ID
 15. `test_zero_limit_blocks_all_requests`: limit=0 → immediate 429
 
-### Integration Tests (267 functional tests)
+### Integration Tests (348 functional tests)
 
 All existing tests pass after refactoring:
-- **267 passed, 12 skipped** (CI verified)
+- **348 passed, 12 skipped** (CI verified)
 - No regressions in batch/console/revert/settings endpoints
 - Rate limiting still functional across all routers
 
@@ -433,7 +433,7 @@ curl http://localhost:8000/api/rate-limiter/stats
 ### Deployment Checklist
 
 1. ✅ Update code (git pull latest P2-3 changes)
-2. ✅ Run tests: `make test` → verify 267 passed
+2. ✅ Run tests: `make test` → verify 348 passed
 3. ✅ Restart server: `make restart` → cleanup thread auto-starts
 4. ✅ Check logs: Verify "Rate limiter cleanup thread started" message
 5. ⚠️ Monitor memory: Check RAM usage stabilizes after 24 hours
@@ -543,7 +543,7 @@ if client_ip in RATE_LIMIT_WHITELIST:
 
 - **Before**: 4 duplicated implementations, unbounded memory growth
 - **After**: 1 centralized module, max 1 MB memory, auto-cleanup every 60s
-- **Test coverage**: 88% (rate_limit.py), 267 tests passing
+- **Test coverage**: 88% (rate_limit.py), 348 tests passing
 - **LOC**: +160 net (240 added - 80 removed duplicates)
 
 ### Maturity Assessment
