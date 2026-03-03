@@ -12,7 +12,9 @@ pylint==3.0.3
 
 # Security
 bandit==1.7.7
-safety==3.0.1
+# pip-audit sostituisce safety 3.x che richiede API key per funzionare in CI
+# pip-audit non richiede autenticazione e usa il database OSV/PyPI ufficiale
+pip-audit==2.7.3
 
 # Type checking
 mypy==1.8.0
