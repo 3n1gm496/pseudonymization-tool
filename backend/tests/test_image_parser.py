@@ -5,11 +5,9 @@ PIL/Pillow è usato per creare immagini reali in memoria.
 Coverage target: ≥80%
 """
 
-import io
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 from PIL import Image
 
 # ─────────────────────────────────────────────────────────────────────────────

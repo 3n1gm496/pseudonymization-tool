@@ -2,12 +2,95 @@
 Test per app.core.tasks — scan_batch_task, apply_batch_task, get_task_status, revoke_task.
 Celery è configurato in EAGER mode da conftest.py (task_always_eager=True).
 Coverage target: ≥70%
+
+Retry policy verificata:
+- RecoverableError (e sottoclassi): ritentata fino a 3 volte
+- CriticalError (e sottoclassi): NON ritentata — fallisce immediatamente
+- ValueError, TypeError, KeyError, AttributeError: NON ritentati
 """
 
 from unittest.mock import MagicMock, patch
 
 import pytest
-from app.core.tasks import apply_batch_task, get_task_status, revoke_task, scan_batch_task
+from app.core.exceptions import (
+    BatchNotFoundError,
+    BatchStateError,
+    CriticalError,
+    ParsingError,
+    RecoverableError,
+    TransformError,
+)
+from app.core.tasks import (
+    NON_RETRYABLE_EXCEPTIONS,
+    DatabaseTask,
+    apply_batch_task,
+    get_task_status,
+    revoke_task,
+    scan_batch_task,
+)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DatabaseTask retry policy
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestDatabaseTaskRetryPolicy:
+    """Verifica che la retry policy di DatabaseTask sia configurata correttamente."""
+
+    def test_autoretry_for_includes_recoverable_error(self):
+        """autoretry_for deve includere RecoverableError."""
+        assert RecoverableError in DatabaseTask.autoretry_for
+
+    def test_autoretry_for_includes_io_errors(self):
+        """autoretry_for deve includere IOError, OSError, MemoryError, TimeoutError."""
+        assert IOError in DatabaseTask.autoretry_for
+        assert OSError in DatabaseTask.autoretry_for
+        assert MemoryError in DatabaseTask.autoretry_for
+        assert TimeoutError in DatabaseTask.autoretry_for
+
+    def test_dont_autoretry_for_includes_critical_error(self):
+        """dont_autoretry_for deve includere CriticalError."""
+        assert CriticalError in DatabaseTask.dont_autoretry_for
+
+    def test_dont_autoretry_for_includes_value_error(self):
+        """dont_autoretry_for deve includere ValueError."""
+        assert ValueError in DatabaseTask.dont_autoretry_for
+
+    def test_dont_autoretry_for_includes_type_and_key_errors(self):
+        """dont_autoretry_for deve includere TypeError, KeyError, AttributeError."""
+        assert TypeError in DatabaseTask.dont_autoretry_for
+        assert KeyError in DatabaseTask.dont_autoretry_for
+        assert AttributeError in DatabaseTask.dont_autoretry_for
+
+    def test_non_retryable_exceptions_constant(self):
+        """NON_RETRYABLE_EXCEPTIONS deve essere una tupla con almeno CriticalError e ValueError."""
+        assert isinstance(NON_RETRYABLE_EXCEPTIONS, tuple)
+        assert CriticalError in NON_RETRYABLE_EXCEPTIONS
+        assert ValueError in NON_RETRYABLE_EXCEPTIONS
+
+    def test_max_retries_is_3(self):
+        """max_retries deve essere 3."""
+        assert DatabaseTask.retry_kwargs["max_retries"] == 3
+
+    def test_retry_backoff_enabled(self):
+        """retry_backoff deve essere True."""
+        assert DatabaseTask.retry_backoff is True
+
+    def test_critical_error_subclasses_are_non_retryable(self):
+        """BatchStateError e BatchNotFoundError (sottoclassi di CriticalError) devono essere non-retryable."""
+        assert issubclass(BatchStateError, CriticalError)
+        assert issubclass(BatchNotFoundError, CriticalError)
+        # Verificare che siano incluse tramite la gerarchia
+        assert issubclass(BatchStateError, NON_RETRYABLE_EXCEPTIONS)
+        assert issubclass(BatchNotFoundError, NON_RETRYABLE_EXCEPTIONS)
+
+    def test_recoverable_error_subclasses_are_retryable(self):
+        """ParsingError e TransformError (sottoclassi di RecoverableError) devono essere retryable."""
+        assert issubclass(ParsingError, RecoverableError)
+        assert issubclass(TransformError, RecoverableError)
+        assert issubclass(ParsingError, DatabaseTask.autoretry_for)
+        assert issubclass(TransformError, DatabaseTask.autoretry_for)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # scan_batch_task
@@ -40,12 +123,13 @@ class TestScanBatchTask:
         assert result["safety_label"] == "SAFE_TO_UPLOAD"
         assert result["status"] == "review"
 
-    def test_scan_task_batch_not_found(self):
-        """Task di scan con batch inesistente solleva ValueError o Retry (eager mode)."""
-        from celery.exceptions import Retry
-
+    def test_scan_task_batch_not_found_raises_value_error_not_retried(self):
+        """
+        ValueError (batch not found) è non-transitorio: deve fallire immediatamente
+        senza retry (in eager mode solleva ValueError direttamente, non Retry).
+        """
         with patch("app.core.tasks.get_batch", return_value=None):
-            with pytest.raises((ValueError, Retry)):
+            with pytest.raises(ValueError, match="Batch not found"):
                 scan_batch_task.apply(args=["batch-nonexistent"]).get()
 
     def test_scan_task_pipeline_error_marks_batch_as_error(self):
@@ -65,6 +149,26 @@ class TestScanBatchTask:
         ):
             with pytest.raises((RuntimeError, Retry)):
                 scan_batch_task.apply(args=["batch-error-001"]).get()
+
+    def test_scan_task_critical_error_not_retried(self):
+        """
+        CriticalError (non-transitorio) deve fallire immediatamente senza retry.
+        In eager mode, dont_autoretry_for impedisce la generazione di Retry.
+        """
+        mock_batch = MagicMock()
+        mock_batch.status = MagicMock()
+
+        with (
+            patch("app.core.tasks.get_batch", return_value=mock_batch),
+            patch("app.core.tasks.update_batch"),
+            patch(
+                "app.core.tasks.run_scan_pipeline",
+                side_effect=BatchStateError("batch-critical-001", "SCANNING", "scan_again"),
+            ),
+        ):
+            # BatchStateError è CriticalError — non deve generare Retry
+            with pytest.raises(BatchStateError):
+                scan_batch_task.apply(args=["batch-critical-001"]).get()
 
     def test_scan_task_pipeline_error_batch_not_found_on_recovery(self):
         """Task di scan che fallisce e non trova il batch in recovery non solleva eccezioni aggiuntive."""
@@ -141,12 +245,13 @@ class TestApplyBatchTask:
         assert result["zip_path"] == "/tmp/output.zip"
         assert result["status"] == "done"
 
-    def test_apply_task_batch_not_found(self):
-        """Task di apply con batch inesistente solleva ValueError o Retry (eager mode)."""
-        from celery.exceptions import Retry
-
+    def test_apply_task_batch_not_found_raises_value_error_not_retried(self):
+        """
+        ValueError (batch not found) è non-transitorio: deve fallire immediatamente
+        senza retry (in eager mode solleva ValueError direttamente, non Retry).
+        """
         with patch("app.core.tasks.get_batch", return_value=None):
-            with pytest.raises((ValueError, Retry)):
+            with pytest.raises(ValueError, match="Batch not found"):
                 apply_batch_task.apply(args=["batch-nonexistent", "2026-01-01T00:00:00"]).get()
 
     def test_apply_task_pipeline_error_marks_batch_as_error(self):
@@ -166,6 +271,24 @@ class TestApplyBatchTask:
         ):
             with pytest.raises((RuntimeError, Retry)):
                 apply_batch_task.apply(args=["batch-apply-error", "2026-01-01T00:00:00"]).get()
+
+    def test_apply_task_critical_error_not_retried(self):
+        """
+        CriticalError (non-transitorio) deve fallire immediatamente senza retry.
+        """
+        mock_batch = MagicMock()
+        mock_batch.status = MagicMock()
+
+        with (
+            patch("app.core.tasks.get_batch", return_value=mock_batch),
+            patch("app.core.tasks.update_batch"),
+            patch(
+                "app.core.tasks.run_apply_pipeline",
+                side_effect=BatchStateError("batch-apply-critical", "REVIEW", "apply_again"),
+            ),
+        ):
+            with pytest.raises(BatchStateError):
+                apply_batch_task.apply(args=["batch-apply-critical", "2026-01-01T00:00:00"]).get()
 
     def test_apply_task_pipeline_error_batch_not_found_on_recovery(self):
         """Task di apply che fallisce e non trova il batch in recovery non solleva eccezioni aggiuntive."""

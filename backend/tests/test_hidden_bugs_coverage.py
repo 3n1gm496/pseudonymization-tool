@@ -43,7 +43,6 @@ class TestSessionMemoryLeakFix:
         assert initial_count >= 1
 
         # Manually add an expired session directly (bypassing create_session)
-        expired_token = "expired.token.here"
         with auth_lock:
             _sessions["expired_sid"] = 0  # Expiration time in the past
 
@@ -136,7 +135,7 @@ class TestCleanupTOCTOUFix:
             _last_activity["test_recent"] = time.time()
 
         # Run cleanup
-        removed = cleanup_inactive_batches()
+        cleanup_inactive_batches()
 
         # Should NOT have removed this batch
         with _global_lock:

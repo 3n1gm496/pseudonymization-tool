@@ -31,7 +31,7 @@ def test_text_export_utils_file_exists():
 
     for func_name in required_functions:
         assert (
-            f"function {func_name}" in content or f"const {func_name}" in content or f"export" in content
+            f"function {func_name}" in content or f"const {func_name}" in content or "export" in content
         ), f"Function {func_name} not found in text-export.js"
         print(f"  ✓ Function {func_name} present")
 
@@ -43,7 +43,7 @@ def test_text_export_utils_exports():
 
     # Check for export statements
     assert "export" in content, "No export statements found"
-    print(f"\n✓ Exports are properly configured")
+    print("\n✓ Exports are properly configured")
 
     # Verify the file doesn't have syntax errors by checking for balanced braces
     open_braces = content.count("{")
@@ -67,8 +67,8 @@ def test_copy_to_clipboard_implementation():
         "navigator.clipboard" in content or "clipboard" in content.lower()
     ), "copyToClipboard should use navigator.clipboard API"
 
-    print(f"\n✓ copyToClipboard implementation verified")
-    print(f"  Uses navigator.clipboard API")
+    print("\n✓ copyToClipboard implementation verified")
+    print("  Uses navigator.clipboard API")
 
 
 def test_download_text_file_implementation():
@@ -82,9 +82,9 @@ def test_download_text_file_implementation():
     # Check for download trigger
     assert "download" in content.lower(), "downloadTextFile should trigger file download"
 
-    print(f"\n✓ downloadTextFile implementation verified")
-    print(f"  Uses Blob API")
-    print(f"  Includes download trigger mechanism")
+    print("\n✓ downloadTextFile implementation verified")
+    print("  Uses Blob API")
+    print("  Includes download trigger mechanism")
 
 
 def test_download_binary_file_implementation():
@@ -95,8 +95,8 @@ def test_download_binary_file_implementation():
     # Both download functions should be similar but handle binary data
     assert "download" in content.lower(), "downloadBinaryFile should trigger file download"
 
-    print(f"\n✓ downloadBinaryFile implementation verified")
-    print(f"  Includes download mechanism for binary data")
+    print("\n✓ downloadBinaryFile implementation verified")
+    print("  Includes download mechanism for binary data")
 
 
 def test_revert_panel_uses_export_utils():
@@ -108,7 +108,7 @@ def test_revert_panel_uses_export_utils():
 
     frontend_dir = Path(__file__).parent.parent.parent / "frontend/src/components"
 
-    print(f"\n✓ Checking component imports...")
+    print("\n✓ Checking component imports...")
 
     for component_name in components:
         component_path = frontend_dir / component_name
