@@ -20,7 +20,7 @@ Web application locale moderna per la pseudonimizzazione sicura di dati sensibil
 - **⚡ Architettura Asincrona** — Elaborazione con Celery + Redis, scalabile e resiliente
 - **⚙️ Modalità Flessibili** — `light` (solo entità di rete) e `strict` (tutte le entità PII)
 - **🧭 Input Unificato** — testo inline e upload documenti disponibili nello stesso flusso
-- **🛡️ Preset Policy** — `SOC Logs`, `Policy Docs`, `Email Headers` con preview entità abilitate
+- **🛡️ Preset Policy** — Profilo `SOC Logs` applicato automaticamente (massima copertura: rete, identità, path)
 - **👁️ Review Manuale** — Interfaccia per rivedere e approvare/rifiutare ogni pseudonimo proposto
 - **📊 Report Dettagliati** — HTML navigabile e JSON strutturato per audit trail
 - **✅ Readiness API** — endpoint `/api/ready` per distinguere processo attivo da servizio pronto
@@ -261,9 +261,7 @@ Vedi [docs/04_Policies.md](docs/04_Policies.md) per dettagli sulle policy di sca
 ## 💡 Utilizzo
 
 1. **Upload**: Trascina i file da processare nell'area di upload
-2. **Configura**: Seleziona la modalità (`light` o `strict`) e inserisci una **passphrase robusta** (essenziale per la sicurezza del mapping).
-   - Seleziona il preset policy (`SOC Logs`, `Policy Docs`, `Email Headers`).
-   - Verifica la preview delle entità abilitate prima della scansione.
+2. **Configura**: Inserisci una **passphrase robusta** (essenziale per la sicurezza del mapping). Il profilo di scansione `SOC Logs` viene applicato automaticamente.
 3. **Avvia Scansione**: Il backend analizza i file e rileva le entità sensibili.
 4. **Review**: Rivedi i "finding" proposti. Puoi deselezionare quelli che non vuoi pseudonimizzare.
 5. **Applica**: Applica le modifiche. I file originali non vengono mai toccati.
@@ -319,7 +317,7 @@ Vuoi inviare i tuoi dati a un modello AI (ChatGPT, Claude, LLaMA) senza esporre 
 
 ### Workflow & Usabilità
 - **[docs/05_UX_Flow.md](docs/05_UX_Flow.md)** — Flussi utente interfaccia e casi d'uso.
-- **[docs/04_Policies.md](docs/04_Policies.md)** — Policy preset (SOC Logs, Policy Docs, Email Headers).
+- **[docs/04_Policies.md](docs/04_Policies.md)** — Policy di scansione: profili disponibili (`SOC Logs`, `Policy Docs`, `Email Headers`) e configurazione entità.
 - **[docs/11_AI_Integration_and_Revert_Flows.md](docs/11_AI_Integration_and_Revert_Flows.md)** — Integrazione AI, reversibilità, gestione passphrase.
 
 ### Testing & Qualità
@@ -421,7 +419,7 @@ Alternativamente, manuale:
 
 📊 **Workflow**
 - Scanner unificato (testo + file)
-- Policy preview real-time
+- Profilo `SOC Logs` applicato automaticamente
 - Findings table con review interattivo
 - Custom pseudonym personalizzato
 - Download ZIP con report (HTML + JSON)

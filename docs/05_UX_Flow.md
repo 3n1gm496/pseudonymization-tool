@@ -151,12 +151,10 @@ async function pollBatchStatus(batchId) {
 └─────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────┐
-│ SELECT POLICY (Policy Selector Component)       │
+│ PROFILO ATTIVO (Readonly)                      │
 │                                                │
-│ Preset: [SOC Logs ▼]                          │
-│                                                │
-│ Preview delle entità che saranno scansionate   │
-│ - HOSTNAME, IPV4, EMAIL, CUSTOM_CODES, ...    │
+│ Preset: SOC Logs (fisso — applicato auto)      │
+│ Entità: HOSTNAME, IPV4, EMAIL, CUSTOM_CODES... │
 └──────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────┐
@@ -193,9 +191,8 @@ async function pollBatchStatus(batchId) {
 
 **Flusso:**
 1. User seleziona modalità (text/file)
-2. User inserisce passphrase (preset `SOC Logs` fisso — nessuna selezione richiesta)
-3. User carica testo/file
-4. User clicca "Scan" → va a Review tab automaticamente
+2. User carica testo/file
+3. User clicca "Scan" → il backend applica automaticamente il profilo `SOC Logs` → va a Review tab
 
 ---
 
@@ -342,7 +339,7 @@ async function pollBatchStatus(batchId) {
 ## State Management
 
 **Scanner → Review → Results flussi:**
-- Scanner: Colleziona file + passphrase → /api/batches POST (preset `SOC Logs` come default fisso)
+- Scanner: Colleziona file + passphrase → /api/batches POST (profilo `SOC Logs` applicato automaticamente dal backend)
 - Review: Mostra findings da batch → /api/findings GET
 - Results: Mostra output + mapping + passphrase (in frontend state)
 
