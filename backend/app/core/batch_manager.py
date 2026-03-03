@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 # ─── Store in-memory ──────────────────────────────────────────────────────────
 _batches: Dict[str, Batch] = {}
-_passphrases: Dict[str, str] = {}  # batch_id -> passphrase (mai su disco)
+_passphrases: Dict[str, str] = {}  # batch_id -> passphrase (in memoria e Redis; su disco cifrata con AUTH_SECRET)
 _engines: Dict[str, object] = {}  # batch_id -> PseudonymEngine (persistente)
 _decisions: Dict[str, Dict[str, Any]] = {}  # batch_id -> {finding_id -> decision_dict}
 _last_activity: Dict[str, float] = {}  # batch_id -> timestamp ultima attività
@@ -255,10 +255,65 @@ def _load_decisions_from_disk(batch_id: str) -> Dict[str, Any]:
         return {}
 
 
+def _encrypt_passphrase_for_disk(passphrase: str) -> str:
+    """
+    Cifra la passphrase con AES-256-GCM usando l'AUTH_SECRET come chiave.
+    La passphrase su disco è inutilizzabile senza l'AUTH_SECRET del server.
+    Restituisce una stringa base64url-safe.
+    """
+    import base64
+    import hashlib
+
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    auth_secret = os.environ.get("AUTH_SECRET", "")
+    if not auth_secret:
+        # Se AUTH_SECRET non è configurato, non salvare su disco
+        raise ValueError("AUTH_SECRET non configurato: impossibile cifrare la passphrase per il disco")
+    # Deriva una chiave AES-256 dall'AUTH_SECRET con SHA-256 (è già un segreto ad alta entropia)
+    key = hashlib.sha256(auth_secret.encode("utf-8")).digest()
+    nonce = os.urandom(12)
+    aesgcm = AESGCM(key)
+    ciphertext = aesgcm.encrypt(nonce, passphrase.encode("utf-8"), None)
+    # Formato: nonce (12 bytes) + ciphertext — codificato in base64
+    return base64.urlsafe_b64encode(nonce + ciphertext).decode("ascii")
+
+
+def _decrypt_passphrase_from_disk(encrypted: str) -> Optional[str]:
+    """
+    Decifra la passphrase letta dal disco.
+    Restituisce None se AUTH_SECRET non è configurato o la decifratura fallisce.
+    """
+    import base64
+    import hashlib
+
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    auth_secret = os.environ.get("AUTH_SECRET", "")
+    if not auth_secret:
+        logger.warning("AUTH_SECRET non configurato: impossibile decifrare la passphrase dal disco")
+        return None
+    try:
+        raw = base64.urlsafe_b64decode(encrypted.encode("ascii"))
+        key = hashlib.sha256(auth_secret.encode("utf-8")).digest()
+        nonce, ciphertext = raw[:12], raw[12:]
+        aesgcm = AESGCM(key)
+        return aesgcm.decrypt(nonce, ciphertext, None).decode("utf-8")
+    except Exception as e:
+        logger.warning("Impossibile decifrare passphrase dal disco: %s", e)
+        return None
+
+
 def _save_passphrase_to_disk(batch_id: str, passphrase: str) -> None:
-    passphrase_path = _batch_passphrase_path(batch_id)
-    _atomic_write_text(passphrase_path, passphrase)
     _save_passphrase_to_redis(batch_id, passphrase)
+    try:
+        encrypted = _encrypt_passphrase_for_disk(passphrase)
+    except ValueError as e:
+        # AUTH_SECRET non configurato: skip disco, solo Redis e memoria
+        logger.warning("Passphrase non salvata su disco per batch %s: %s", batch_id, e)
+        return
+    passphrase_path = _batch_passphrase_path(batch_id)
+    _atomic_write_text(passphrase_path, encrypted)
     try:
         passphrase_path.chmod(0o600)
     except Exception as e:
@@ -274,7 +329,8 @@ def _load_passphrase_from_disk(batch_id: str) -> Optional[str]:
     if not passphrase_path.exists():
         return None
     try:
-        return passphrase_path.read_text(encoding="utf-8")
+        encrypted = passphrase_path.read_text(encoding="utf-8").strip()
+        return _decrypt_passphrase_from_disk(encrypted)
     except Exception as e:
         logger.warning("Impossibile leggere passphrase per batch %s: %s", batch_id, e)
         return None

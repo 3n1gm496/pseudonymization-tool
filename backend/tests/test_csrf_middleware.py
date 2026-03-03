@@ -9,6 +9,8 @@ Validates that:
 5. Session cookie logout includes all security parameters
 """
 
+import os
+
 import pytest
 from app.core.auth import SESSION_COOKIE_NAME, create_session, destroy_session
 from app.main import app
@@ -32,7 +34,7 @@ def enable_auth_for_csrf_tests(monkeypatch):
     # This is needed because _password_env is loaded at module import time
     import os
 
-    password = os.environ.get("AUTH_PASSWORD", "admin123!")
+    password = os.environ.get("AUTH_PASSWORD", "T3st-0nly-N0t-Pr0d!#2026")
     monkeypatch.setattr(auth, "_password_env", password)
 
     yield
@@ -248,7 +250,8 @@ class TestSessionCookieLogout:
         client = TestClient(app)
 
         # Login to get session
-        response = client.post("/api/auth/login", json={"username": "admin", "password": "admin123!"})
+        password = os.environ.get("AUTH_PASSWORD", "T3st-0nly-N0t-Pr0d!#2026")
+        response = client.post("/api/auth/login", json={"username": "admin", "password": password})
 
         assert response.status_code == 200
 

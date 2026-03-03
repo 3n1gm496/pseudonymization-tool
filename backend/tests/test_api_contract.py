@@ -1,4 +1,5 @@
 import io
+import os
 import zipfile
 
 from app.api import auth_routes, console_routes
@@ -183,7 +184,8 @@ def test_download_blocked_when_not_safe():
 def test_auth_login_sets_secure_cookie_by_default(monkeypatch):
     monkeypatch.setattr(auth_routes, "SESSION_COOKIE_SECURE", True)
 
-    response = client.post("/api/auth/login", json={"username": "admin", "password": "admin123!"})
+    password = os.environ.get("AUTH_PASSWORD", "T3st-0nly-N0t-Pr0d!#2026")
+    response = client.post("/api/auth/login", json={"username": "admin", "password": password})
     assert response.status_code == 200
     set_cookie = response.headers.get("set-cookie", "")
     assert "Secure" in set_cookie
@@ -192,7 +194,8 @@ def test_auth_login_sets_secure_cookie_by_default(monkeypatch):
 def test_auth_login_allows_dev_override_without_secure_cookie(monkeypatch):
     monkeypatch.setattr(auth_routes, "SESSION_COOKIE_SECURE", False)
 
-    response = client.post("/api/auth/login", json={"username": "admin", "password": "admin123!"})
+    password = os.environ.get("AUTH_PASSWORD", "T3st-0nly-N0t-Pr0d!#2026")
+    response = client.post("/api/auth/login", json={"username": "admin", "password": password})
     assert response.status_code == 200
     set_cookie = response.headers.get("set-cookie", "")
     assert "Secure" not in set_cookie
