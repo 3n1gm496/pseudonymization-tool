@@ -13,27 +13,23 @@ from typing import Dict, List, Optional
 from app.core.batch_manager import (
     get_batch,
     get_batch_dir,
-    get_engine,
     get_or_create_engine,
     get_passphrase,
     update_batch,
 )
-from app.core.exceptions import ApplyPipelineError, BatchStateError, ParsingError, ScanPipelineError, TransformError
+from app.core.exceptions import BatchStateError, ParsingError, TransformError
 from app.core.policies import get_confidence_threshold, get_enabled_entity_types, get_policy_hash
-from app.core.safety import compute_residual_warnings, compute_safety_label
-from app.detectors.engine import build_extra_detectors, detect_in_parse_result, residual_scan
+from app.core.safety import compute_safety_label
+from app.detectors.engine import build_extra_detectors, detect_in_parse_result
 from app.mapping.crypto import save_encrypted_mapping
 from app.models.schemas import (
     Batch,
-    BatchMode,
     BatchStatus,
-    FileRecord,
     FileStatus,
     Finding,
     PresetName,
     ReviewAction,
     ReviewDecisionItem,
-    SafetyLabel,
 )
 from app.parsers.base import ParseResult
 from app.parsers.factory import parse_file

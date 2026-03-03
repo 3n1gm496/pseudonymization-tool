@@ -3,15 +3,13 @@ Router API per i flussi batches (upload file e gestione ciclo di vita).
 Separato dal router monolitico per ridurre blast radius e accoppiamento.
 """
 
-import json
 import logging
 import math
-import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import List, Tuple
 
-from app.core.audit import audit_event, scrub_sensitive
+from app.core.audit import audit_event
 from app.core.batch_manager import (
     cleanup_batch,
     create_batch,
@@ -36,9 +34,7 @@ from app.core.config import (
     SUPPORTED_EXTENSIONS,
 )
 from app.core.pipeline import apply_review_decisions
-from app.core.policies import get_enabled_entity_types, get_policy
 from app.core.rate_limit import enforce_rate_limit
-from app.core.auth import validate_csrf_dependency
 from app.core.tasks import apply_batch_task, get_task_status, scan_batch_task
 from app.models.schemas import (
     Batch,
@@ -46,13 +42,12 @@ from app.models.schemas import (
     BatchMode,
     BatchStatus,
     FileRecord,
-    FileStatus,
     PresetName,
     ReviewAction,
     SafetyLabel,
     SubmitReviewRequest,
 )
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
 router = APIRouter(prefix="/api")

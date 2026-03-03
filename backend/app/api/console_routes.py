@@ -5,11 +5,8 @@ Separato dal router monolitico per ridurre blast radius e accoppiamento.
 
 import asyncio
 import logging
-import time
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
 
-from app.core.audit import audit_event, scrub_sensitive
+from app.core.audit import audit_event
 from app.core.batch_manager import (
     cleanup_batch,
     create_batch,
@@ -20,16 +17,13 @@ from app.core.batch_manager import (
     get_passphrase,
     store_passphrase,
     set_batch_start_time,
-    get_batch_start_time,
-    clear_batch_start_time,
 )
 from app.core.config import API_HEAVY_TIMEOUT_SECONDS, MAX_CONSOLE_TEXT_CHARS
 from app.core.console_pipeline import run_text_apply, run_text_scan
 from app.core.pipeline import apply_review_decisions
 from app.core.rate_limit import enforce_rate_limit
-from app.core.auth import validate_csrf_dependency
 from app.models.schemas import Batch, BatchConfig, BatchMode, PresetName, ReviewAction
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 

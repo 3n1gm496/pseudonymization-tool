@@ -4,12 +4,11 @@ in base alle decisioni di review dell'utente.
 """
 
 import logging
-import re
 import shutil
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from app.models.schemas import FileRecord, FileStatus, Finding, ReviewAction
+from app.models.schemas import Finding, ReviewAction
 from app.parsers.base import ParseResult
 
 logger = logging.getLogger(__name__)

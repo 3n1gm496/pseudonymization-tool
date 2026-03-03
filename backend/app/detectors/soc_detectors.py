@@ -5,10 +5,10 @@ Mail headers, Domain fragments, e detector con preprocessing/deobfuscation.
 
 import logging
 import re
-from typing import List, Optional
+from typing import List
 
 from app.detectors.base import BaseDetector, RawFinding
-from app.detectors.preprocessor import canonical_email, canonical_hostname, canonical_ip, canonical_url, deobfuscate
+from app.detectors.preprocessor import canonical_email, deobfuscate
 from app.models.schemas import EntityType
 from app.parsers.base import TextChunk
 

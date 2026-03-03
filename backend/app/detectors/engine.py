@@ -9,7 +9,6 @@ from typing import List, Optional
 from app.core.exceptions import DetectionError, DictionaryDetectionError, LDAPDetectionError
 from app.detectors.base import RawFinding
 from app.detectors.dictionary_detector import get_dictionary_detector
-from app.detectors.ldap_detector import LdapPersonDetector
 from app.detectors.regex_detectors import ALL_REGEX_DETECTORS
 from app.detectors.soc_detectors import SOC_DETECTORS, DomainFragmentDetector
 from app.models.schemas import EntityType
@@ -177,7 +176,6 @@ def detect_in_text(
     Esegue la detection su testo puro (per console/clipboard input).
     Crea un TextChunk virtuale.
     """
-    from pathlib import Path
 
     from app.parsers.base import TextChunk as TC
 

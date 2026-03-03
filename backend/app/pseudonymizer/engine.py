@@ -6,7 +6,7 @@ Genera pseudonimi consistenti per batch in modalità Light e Strict.
 import logging
 import re
 from collections import defaultdict
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from app.detectors.base import RawFinding
 from app.models.schemas import BatchMode, EntityType, Finding, FindingLocation
