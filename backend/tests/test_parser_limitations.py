@@ -9,7 +9,6 @@ This test suite validates that ALL known parser limitations are:
 Reference: docs/14_Parser_Capability_Matrix.md
 """
 
-
 import pytest
 from app.models.schemas import EntityType, Finding, FindingLocation, ReviewAction
 from app.parsers.docx_parser import DocxParser
@@ -286,6 +285,7 @@ def test_image_low_confidence_warning(tmp_path):
     pytest.importorskip("pytesseract", reason="pytesseract not installed")
     try:
         import pytesseract
+
         pytesseract.get_tesseract_version()
     except Exception:
         pytest.skip("Tesseract OCR not available in this environment")
@@ -342,6 +342,7 @@ def test_image_exif_stripped(tmp_path):
     pytest.importorskip("pytesseract", reason="pytesseract not installed")
     try:
         import pytesseract
+
         pytesseract.get_tesseract_version()
     except Exception:
         pytest.skip("Tesseract OCR not available in this environment")

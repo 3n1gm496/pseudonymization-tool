@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import axios from '../utils/axios'
 import { useToast } from '../hooks/useToast'
 
@@ -132,7 +132,7 @@ const FindingsTable = ({ batch, onApply, isLoading }) => {
                         Nessuna entità sensibile rilevata
                       </p>
                       <p className="text-sm text-slate-600 dark:text-slate-400">
-                        Il testo è sicuro per l'upload e la condivisione
+                        Il testo è sicuro per l&apos;upload e la condivisione
                       </p>
                     </div>
                   </td>
@@ -199,7 +199,7 @@ const FindingsTable = ({ batch, onApply, isLoading }) => {
                         <option value="modify">Modifica</option>
                       </select>
                       <span id={`action-help-${finding.finding_id}`} className="sr-only">
-                        Scegli l'azione di review: Accetta, Rifiuta, o Modifica con uno pseudonimo personalizzato
+                        Scegli l&apos;azione di review: Accetta, Rifiuta, o Modifica con uno pseudonimo personalizzato
                       </span>
                     </td>
                   </tr>
@@ -223,4 +223,5 @@ const FindingsTable = ({ batch, onApply, isLoading }) => {
   )
 }
 
-export default React.memo(FindingsTable)
+import { memo } from 'react'
+export default memo(FindingsTable)

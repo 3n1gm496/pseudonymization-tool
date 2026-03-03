@@ -171,8 +171,10 @@ class RateLimiter:
 
             # Step 3: Check limit
             remaining = limit - len(bucket["timestamps"])
-            reset_time = int(bucket["timestamps"][0] + window_seconds) if bucket["timestamps"] else int(now + window_seconds)
-            
+            reset_time = (
+                int(bucket["timestamps"][0] + window_seconds) if bucket["timestamps"] else int(now + window_seconds)
+            )
+
             if len(bucket["timestamps"]) >= limit:
                 logger.warning(
                     "Rate limit exceeded: scope=%s client=%s (%d/%d requests in %ds)",
@@ -190,7 +192,7 @@ class RateLimiter:
             # Step 4: Add current timestamp
             bucket["timestamps"].append(now)
             bucket["last_access"] = now
-            
+
             # ✅ FIX #20: Return rate limit info for response headers
             return {
                 "remaining": remaining - 1,  # -1 because we just added current request

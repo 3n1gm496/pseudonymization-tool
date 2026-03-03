@@ -37,12 +37,13 @@ def validate_writable_paths() -> None:
     """
     ✅ FIX #I-005: Validate that STATE_DIR is writable.
     Fails early if running in environment with read-only filesystem (e.g., misconfigured Docker).
-    
+
     Raises RuntimeError if paths are not writable.
     """
     import logging
+
     logger = logging.getLogger(__name__)
-    
+
     # Test STATE_DIR writability
     test_file = STATE_DIR / ".writable_test"
     try:

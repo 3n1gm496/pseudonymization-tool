@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import axios, { setCsrfToken } from './utils/axios'
 import Header from './components/Header'
 import Scanner from './components/Scanner'
@@ -8,20 +8,18 @@ import RevertPanel from './components/RevertPanel'
 import SettingsPanel from './components/SettingsPanel'
 import { useToast } from './hooks/useToast'
 import LoginForm from './components/LoginForm'
-
 // ✅ FIX #13: Memoize heavy components to prevent unnecessary re-renders
-const MemoizedScanner = React.memo(Scanner)
-const MemoizedFindingsTable = React.memo(FindingsTable)
-const MemoizedResults = React.memo(Results)
-const MemoizedRevertPanel = React.memo(RevertPanel)
-const MemoizedSettingsPanel = React.memo(SettingsPanel)
+const MemoizedScanner = memo(Scanner)
+const MemoizedFindingsTable = memo(FindingsTable)
+const MemoizedResults = memo(Results)
+const MemoizedRevertPanel = memo(RevertPanel)
+const MemoizedSettingsPanel = memo(SettingsPanel)
 
 const App = () => {
   const [currentStep, setCurrentStep] = useState('scanner') // scanner | findings | results
   const [toolMode, setToolMode] = useState('pseudonymize') // pseudonymize | revert
   const [batch, setBatch] = useState(null)
   const [pseudonymizedText, setPseudonymizedText] = useState(null)
-  const [passphrase, setPassphrase] = useState(null) // Passphrase dalla pseudonimizzazione completata
   const [isLoading, setIsLoading] = useState(false)
   const [authUser, setAuthUser] = useState(null)
   const [authLoading, setAuthLoading] = useState(true)

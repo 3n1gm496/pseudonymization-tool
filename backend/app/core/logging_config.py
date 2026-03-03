@@ -8,9 +8,8 @@ import sys
 from typing import Any
 
 import structlog
-from structlog.typing import EventDict, Processor
-
 from app import __version__
+from structlog.typing import EventDict, Processor
 
 
 def add_app_context(logger: logging.Logger, method_name: str, event_dict: EventDict) -> EventDict:

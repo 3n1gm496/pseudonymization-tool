@@ -7,7 +7,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
 from app.core.exceptions import BatchStateError
 from app.core.pipeline import (
     _cache_parse_result,
@@ -19,10 +18,7 @@ from app.core.pipeline import (
     run_apply_pipeline,
     run_scan_pipeline,
 )
-from app.models.schemas import (
-    EntityType,
-    PresetName,
-)
+from app.models.schemas import EntityType, PresetName
 from app.parsers.base import ParseResult
 
 
@@ -162,8 +158,6 @@ class TestFilterFindingsByPolicy:
         assert filtered == []
 
 
-
-
 class TestApplyReviewDecisionsSimple:
     """Test apply_review_decisions basic functionality."""
 
@@ -172,9 +166,6 @@ class TestApplyReviewDecisionsSimple:
         with patch("app.core.pipeline.get_batch", return_value=None):
             with pytest.raises(ValueError, match="Batch non trovato"):
                 apply_review_decisions("nonexistent_batch", [])
-
-
-
 
 
 class TestRunScanPipelineEdgeCases:
@@ -195,4 +186,3 @@ class TestRunApplyPipelineEdgeCases:
         with patch("app.core.pipeline.get_batch", return_value=None):
             with pytest.raises(BatchStateError):
                 run_apply_pipeline("nonexistent_batch", "2026-03-02T10:00:00Z")
-

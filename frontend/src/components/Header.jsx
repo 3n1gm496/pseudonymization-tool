@@ -1,4 +1,3 @@
-import React from 'react'
 import { useTheme } from '../context/ThemeContext'
 
 const Header = ({ user, onLogout, onSettingsClick }) => {

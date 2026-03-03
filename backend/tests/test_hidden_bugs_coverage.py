@@ -10,20 +10,20 @@ Tests cover:
 import threading
 import time
 
-from app.core.auth import create_session, validate_session, _sessions, _lock as auth_lock
+from app.core.auth import _lock as auth_lock
+from app.core.auth import _sessions, create_session, validate_session
 from app.core.batch_manager import (
-    set_batch_start_time,
-    get_batch_start_time,
-    clear_batch_start_time,
     _batch_start_times,
-    create_batch,
-    cleanup_batch,
     _batches,
     _global_lock,
     _last_activity,
+    cleanup_batch,
+    clear_batch_start_time,
+    create_batch,
+    get_batch_start_time,
+    set_batch_start_time,
 )
 from app.models.schemas import Batch, BatchConfig, BatchMode
-
 
 # ─── BUG #1: Session Memory Leak Tests ────────────────────────────────────────
 
@@ -94,10 +94,7 @@ class TestCleanupTOCTOUFix:
 
     def test_cleanup_removes_expired_batches(self, monkeypatch):
         """Test that cleanup properly removes expired batches."""
-        from app.core.batch_manager import (
-            cleanup_inactive_batches,
-            BATCH_INACTIVITY_TIMEOUT_SECONDS,
-        )
+        from app.core.batch_manager import BATCH_INACTIVITY_TIMEOUT_SECONDS, cleanup_inactive_batches
 
         with _global_lock:
             _batches.clear()
@@ -152,7 +149,6 @@ class TestCleanupTOCTOUFix:
         # This is more of a code inspection test
         # The actual double-check happens in the cleanup_inactive_batches function
         # where we check expiration twice: once to identify, once to delete
-
         # Just verify it doesn't crash
         count = cleanup_inactive_batches()
         assert isinstance(count, int)

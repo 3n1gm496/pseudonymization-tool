@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'
+import { memo, useState, useRef } from 'react'
 import axios from '../utils/axios'
 import { useToast } from '../hooks/useToast'
 
@@ -105,10 +105,10 @@ const Scanner = ({ onScan, isLoading }) => {
         headers: { 'Content-Type': 'multipart/form-data' },
         onUploadProgress: (progressEvent) => {
           // Could add progress bar here if needed
-          const percentComplete = Math.round(
+          // Progress tracking disponibile ma UI non ancora implementata
+          const _percentComplete = Math.round(
             (progressEvent.loaded * 100) / progressEvent.total
           )
-          // TODO: Update progress UI if implemented
         },
       })
       let batchPayload = { ...response.data }
@@ -244,4 +244,4 @@ const Scanner = ({ onScan, isLoading }) => {
   )
 }
 
-export default React.memo(Scanner)
+export default memo(Scanner)

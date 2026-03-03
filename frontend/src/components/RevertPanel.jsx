@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import DecipherAIResponse from './DecipherAIResponse'
 import RevertBatchZip from './RevertBatchZip'
 

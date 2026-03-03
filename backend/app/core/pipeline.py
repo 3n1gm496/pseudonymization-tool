@@ -10,27 +10,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from app.core.batch_manager import (
-    get_batch,
-    get_batch_dir,
-    get_or_create_engine,
-    get_passphrase,
-    update_batch,
-)
+from app.core.batch_manager import get_batch, get_batch_dir, get_or_create_engine, get_passphrase, update_batch
 from app.core.exceptions import BatchStateError, ParsingError, TransformError
 from app.core.policies import get_confidence_threshold, get_enabled_entity_types, get_policy_hash
 from app.core.safety import compute_safety_label
 from app.detectors.engine import build_extra_detectors, detect_in_parse_result
 from app.mapping.crypto import save_encrypted_mapping
-from app.models.schemas import (
-    Batch,
-    BatchStatus,
-    FileStatus,
-    Finding,
-    PresetName,
-    ReviewAction,
-    ReviewDecisionItem,
-)
+from app.models.schemas import Batch, BatchStatus, FileStatus, Finding, PresetName, ReviewAction, ReviewDecisionItem
 from app.parsers.base import ParseResult
 from app.parsers.factory import parse_file
 from app.pseudonymizer.transformer import transform_file
@@ -140,29 +126,37 @@ def run_scan_pipeline(batch_id: str) -> Batch:
 
     # Mantieni i finding di testo inline già presenti
     existing_text_findings = [f for f in batch.findings if f.is_text_input]
-    
+
     # ✅ CRITICAL FIX #2: Deduplication by finding_id + (entity_type, original_value) to prevent duplicates on rescans & multi-detector hits
     seen_ids = set()
     seen_values = set()  # Track (entity_type, original_value, file_id) to prevent multi-detector duplicates
     deduplicated_findings = []
-    
+
     # Add existing text findings first (preserve insertion order)
     for f in existing_text_findings:
         if f.finding_id not in seen_ids:
-            value_key = (f.entity_type.value if hasattr(f.entity_type, 'value') else str(f.entity_type), f.original_value, f.file_id)
+            value_key = (
+                f.entity_type.value if hasattr(f.entity_type, "value") else str(f.entity_type),
+                f.original_value,
+                f.file_id,
+            )
             if value_key not in seen_values:
                 deduplicated_findings.append(f)
                 seen_ids.add(f.finding_id)
                 seen_values.add(value_key)
-    
+
     # Add new findings, skipping duplicates (by finding_id or by value)
     for f in all_findings:
-        value_key = (f.entity_type.value if hasattr(f.entity_type, 'value') else str(f.entity_type), f.original_value, f.file_id)
+        value_key = (
+            f.entity_type.value if hasattr(f.entity_type, "value") else str(f.entity_type),
+            f.original_value,
+            f.file_id,
+        )
         if f.finding_id not in seen_ids and value_key not in seen_values:
             deduplicated_findings.append(f)
             seen_ids.add(f.finding_id)
             seen_values.add(value_key)
-    
+
     batch.findings = deduplicated_findings
     batch.status = BatchStatus.REVIEW
     update_batch(batch)

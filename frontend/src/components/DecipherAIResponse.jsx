@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import axios from '../utils/axios'
 import { copyToClipboard, downloadTextFile } from '../utils/text-export'
 

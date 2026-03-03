@@ -10,12 +10,7 @@ from app.core.batch_manager import get_batch, get_or_create_engine, update_batch
 from app.core.policies import get_confidence_threshold, get_enabled_entity_types
 from app.core.safety import compute_residual_warnings, compute_safety_label
 from app.detectors.engine import build_extra_detectors, detect_in_text, residual_scan
-from app.models.schemas import (
-    BatchStatus,
-    FileRecord,
-    FileStatus,
-    ReviewAction,
-)
+from app.models.schemas import BatchStatus, FileRecord, FileStatus, ReviewAction
 from app.pseudonymizer.transformer import apply_pseudonyms_to_text
 
 logger = logging.getLogger(__name__)
