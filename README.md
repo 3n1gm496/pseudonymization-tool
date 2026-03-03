@@ -1,10 +1,9 @@
-# Local Pseudonymization Tool v4.0.4
+# Local Pseudonymization Tool v5.0.0
 
-[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
-[![React 18](https://img.shields.io/badge/React-18.2-61dafb.svg)](https://react.dev)
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.3-38b2ac.svg)](https://tailwindcss.com)
+[![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
+[![React 18.2](https://img.shields.io/badge/React-18.2-61dafb.svg)](https://react.dev)
+[![FastAPI 0.110](https://img.shields.io/badge/FastAPI-0.110-009688.svg)](https://fastapi.tiangolo.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688.svg)](https://fastapi.tiangolo.com)
 [![Tests: 267 passing](https://img.shields.io/badge/Tests-267%20passing-brightgreen.svg)](backend/tests/)
 [![Coverage: 64%](https://img.shields.io/badge/Coverage-64%25-yellowgreen.svg)]()
 [![Async: Celery + Redis](https://img.shields.io/badge/Async-Celery%20%2B%20Redis-red.svg)](docs/02_Technical_Architecture.md)
@@ -17,8 +16,8 @@ Web application locale moderna per la pseudonimizzazione sicura di dati sensibil
 
 - **🔒 100% Offline** — Nessuna chiamata di rete esterna, tutti i dati rimangono sulla macchina locale
 - **📄 Multi-formato** — Supporto per TXT, CSV, MD, DOCX, XLSX, PDF (testuali), JPG, PNG
-- **🔐 Sicurezza Avanzata** — Mapping cifrato con passphrase AES-256, zero logging di dati sensibili
-- **⚡ Async Processing (Phase 4)** — Elaborazione asincrona con Celery + Redis, scalabile e resiliente
+- **🔐 Sicurezza Avanzata** — Mapping cifrato con passphrase AES-256-GCM, zero logging di dati sensibili
+- **⚡ Architettura Asincrona** — Elaborazione con Celery + Redis, scalabile e resiliente
 - **⚙️ Modalità Flessibili** — `light` (solo entità di rete) e `strict` (tutte le entità PII)
 - **🧭 Input Unificato** — testo inline e upload documenti disponibili nello stesso flusso
 - **🛡️ Preset Policy** — `SOC Logs`, `Policy Docs`, `Email Headers` con preview entità abilitate
@@ -35,7 +34,7 @@ Web application locale moderna per la pseudonimizzazione sicura di dati sensibil
 - [Quick Start](#-quick-start)
 - [Configurazione](#-configurazione)
 - [Utilizzo](#-utilizzo)
-- [Integrazione AI](#-integrazione-con-ai---prepara-per-ai)
+- [Integrazione AI](#-integrazione-con-ai)
 - [Sicurezza](#-sicurezza-e-limitazioni)
 - [Sviluppo](#-sviluppo)
 - [Contributing](#-contributing)
@@ -57,11 +56,11 @@ Web application locale moderna per la pseudonimizzazione sicura di dati sensibil
 │                      Backend (FastAPI)                          │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐           │
 │  │ Auth Module  │  │ API Routes   │  │ Batch Mgr    │           │
-│  │ (JWT + RBAC) │  │ (/api/*)     │  │ (Lifecycle)  │           │
+│  │ (JWT Auth)   │  │ (/api/*)     │  │ (Lifecycle)  │           │
 │  └──────────────┘  └──────────────┘  └──────┬───────┘           │
 │                                             │                   │
 │  ┌──────────────────────────────────────────▼─────────────────┐ │
-│  │            Celery Task Queue (Phase 4)                     │ │
+│  │                 Celery Task Queue                          │ │
 │  │  - Async scan execution (run_scan_pipeline)                │ │
 │  │  - Background processing                                   │ │
 │  │  - Task status tracking                                    │ │ 
@@ -69,8 +68,8 @@ Web application locale moderna per la pseudonimizzazione sicura di dati sensibil
 │                                             │                   │
 │  ┌──────────────┐  ┌──────────────┐   ┌─────▼──────┐            │
 │  │ Detectors    │  │ Parsers      │   │ Redis      │            │
-│  │ (Regex/Dict  │  │ (PDF/DOCX/   │   │ (Broker +  │            │
-│  │  /SOC/ML)    │  │  XLSX/IMG)   │   │  Results)  │            │
+│  │ (Regex/Dict/ │  │ (PDF/DOCX/   │   │ (Broker +  │            │
+│  │  SOC)        │  │  XLSX/IMG)   │   │  Results)  │            │
 │  └──────────────┘  └──────────────┘   └────────────┘            │
 │                                                                 │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐           │
@@ -88,7 +87,7 @@ Web application locale moderna per la pseudonimizzazione sicura di dati sensibil
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Phase 4: Async Architecture (Celery + Redis)
+### Architettura Asincrona (Celery + Redis)
 
 **🎯 Obiettivo:** Elaborazione asincrona per scan di lunga durata, evitando timeout HTTP.
 
@@ -102,7 +101,6 @@ Web application locale moderna per la pseudonimizzazione sicura di dati sensibil
 2. **Redis**: Message broker e result backend
    - Queue: `celery` (task dispatch)
    - Results: `celery-task-meta-*` (task status/results)
-   - Fallback: In-memory storage se Redis non disponibile
 
 3. **API Pattern (202 Accepted)**:
    ```
@@ -139,7 +137,7 @@ git clone https://github.com/3n1gm496/pseudonymization-tool.git
 cd pseudonymization-tool
 
 # 1. Crea il file .env a partire dall'esempio (OBBLIGATORIO)
-cp .env.example .env
+touch .env
 # Modifica .env e imposta almeno:
 #   AUTH_PASSWORD=<password-sicura>
 #   REDIS_PASSWORD=<password-redis-sicura>
@@ -151,7 +149,7 @@ make start
 Oppure manualmente:
 
 ```bash
-cp .env.example .env
+touch .env
 # Modifica .env con le tue credenziali
 docker compose up --build -d
 ```
@@ -181,10 +179,10 @@ Vedi [Makefile](Makefile) per tutti i comandi disponibili.
 **Per ambienti air-gapped o sistemi senza Docker**
 
 Vedi [scripts/legacy/README.md](scripts/legacy/README.md) per istruzioni dettagliate su:
-- Installazione con Python venv
-- Modalità offline (machine senza internet)
-- Preparazione pacchetto wheelhouse
-- Troubleshooting prerequisiti (Python, Tesseract)
+1. Installazione con Python venv
+2. Modalità offline (machine senza internet)
+3. Preparazione pacchetto wheelhouse
+4. Troubleshooting prerequisiti (Python, Tesseract)
 
 **Quick command:**
 ```bash
@@ -204,7 +202,7 @@ BACKEND_HOST=0.0.0.0                    # Bind address
 BACKEND_PORT=8000                       # HTTP port
 LOG_LEVEL=info                          # Logging: debug|info|warning|error
 
-# Async Processing (Phase 4)
+# Async Processing
 CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@redis:6379/0  # Message broker (con auth)
 REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0          # Result backend (con auth)
 CELERY_RESULT_BACKEND=${REDIS_URL}                         # Task results storage
@@ -213,9 +211,6 @@ CELERY_RESULT_BACKEND=${REDIS_URL}                         # Task results storag
 JWT_SECRET_KEY=your-secret-key-change-in-production  # JWT signing key
 JWT_ALGORITHM=HS256                     # JWT algorithm
 ACCESS_TOKEN_EXPIRE_MINUTES=30          # Token validity
-
-# Database
-# Nota: lo stato dei batch è gestito da Redis, non da un database SQL
 
 # Storage Paths
 UPLOAD_DIR=/app/uploads                 # Temp file uploads
@@ -265,7 +260,7 @@ Vedi [docs/04_Policies.md](docs/04_Policies.md) per dettagli sulle policy di sca
 
 ## 💡 Utilizzo
 
-1. **Upload**: Trascina i file da processare nell'area di upload.
+1. **Upload**: Trascina i file da processare nell'area di upload
 2. **Configura**: Seleziona la modalità (`light` o `strict`) e inserisci una **passphrase robusta** (essenziale per la sicurezza del mapping).
    - Seleziona il preset policy (`SOC Logs`, `Policy Docs`, `Email Headers`).
    - Verifica la preview delle entità abilitate prima della scansione.
@@ -342,10 +337,6 @@ Vuoi inviare i tuoi dati a un modello AI (ChatGPT, Claude, LLaMA) senza esporre 
 - **[docs/10_Backlog.md](docs/10_Backlog.md)** — Backlog item e priorità.
 - **[docs/RELEASES.md](docs/RELEASES.md)** — Changelog, release notes e versioni.
 
-### Code Review & Improvements
-- **[docs/18_CODE_REVIEW_FINDINGS.md](docs/18_CODE_REVIEW_FINDINGS.md)** — Deep code review completo con 23 issue identificati, 3 critical bugs risolti, e roadmap remediation. Include analisi dettagliata di severità, impatto e priorità.
-- **[docs/IMPROVEMENTS.md](docs/IMPROVEMENTS.md)** — Miglioramenti identificati e suggerimenti futuri.
-
 ---
 
 ## 🔐 Sicurezza e Limitazioni
@@ -364,7 +355,7 @@ Vuoi inviare i tuoi dati a un modello AI (ChatGPT, Claude, LLaMA) senza esporre 
 
 ```bash
 # Crea virtual environment
-python3.12 -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate  # Linux/macOS
 # oppure .venv\Scripts\activate  # Windows
 
@@ -372,7 +363,7 @@ source .venv/bin/activate  # Linux/macOS
 pip install -r backend/requirements.txt
 ```
 
-### Frontend React (v4.0+)
+### Frontend React (v5.0+)
 
 Il frontend è stato modernizzato con **React 18**, **Tailwind CSS** e **dark mode**.
 
@@ -504,16 +495,16 @@ pseudonymization-tool/
 │   ├── app/
 │   │   ├── api/               # API routes (/api/*)
 │   │   ├── core/              # Business logic
-│   │   ├── detectors/         # Entity detection (regex, dict, ML, SOC)
+│   │   ├── detectors/         # Entity detection (regex, dict, SOC)
 │   │   ├── parsers/           # Document parsers (PDF, DOCX, XLSX, IMG)
 │   │   ├── pseudonymizer/     # Transformation engine
 │   │   ├── mapping/           # Crypto (AES-256 encryption)
 │   │   ├── report/            # Report generation
 │   │   └── models/            # Pydantic schemas
 │   ├── config/                # Configuration files
-│   ├── tests/                 # Unit & integration tests (60+)
+│   ├── tests/                 # Unit & integration tests
 │   └── requirements.txt
-├── frontend/                  # React 18 + Tailwind CSS (v4.0+)
+├── frontend/                  # React 18 + Tailwind CSS
 │   ├── src/
 │   │   ├── components/        # React components
 │   │   │   ├── Header.jsx
