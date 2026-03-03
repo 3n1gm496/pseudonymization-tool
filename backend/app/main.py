@@ -301,6 +301,33 @@ async def csrf_middleware(request: Request, call_next):
     return await call_next(request)
 
 
+# ─── Global exception handler ────────────────────────────────────────────────
+# Catches any unhandled exception that escapes route handlers.
+# Logs the full traceback internally; returns a generic 500 to the client
+# so that internal error details (stack traces, file paths, library names)
+# are never exposed in API responses.
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """
+    Fallback handler for unhandled exceptions.
+
+    Security rationale: returning str(exc) in HTTP responses leaks internal
+    implementation details (file paths, library versions, SQL queries, etc.).
+    This handler ensures a generic message is always sent to the client while
+    the full traceback is preserved in server logs for debugging.
+    """
+    logger.exception(
+        "Unhandled exception on %s %s",
+        request.method,
+        request.url.path,
+        exc_info=exc,
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Errore interno del server. Contatta l'amministratore."},
+    )
+
+
 # Registra i router API
 app.include_router(auth_router)
 app.include_router(console_router)

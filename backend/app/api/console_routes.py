@@ -145,9 +145,9 @@ async def console_scan(req: dict, request: Request):
         cleanup_batch(batch.batch_id)
         raise HTTPException(status_code=504, detail="Timeout nella scansione del testo inline.")
     except Exception as e:
-        logger.error("Errore console/scan: %s", e)
+        logger.exception("Errore console/scan batch %s", batch.batch_id, exc_info=e)
         cleanup_batch(batch.batch_id)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Errore interno durante la scansione del testo.")
 
     findings_list = []
     for f in findings:
@@ -210,8 +210,8 @@ async def console_apply(req: dict, request: Request):
     except asyncio.TimeoutError:
         raise HTTPException(status_code=504, detail="Timeout durante l'applicazione sul testo.")
     except Exception as e:
-        logger.error("Errore console/apply batch %s: %s", batch_id, e)
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Errore console/apply batch %s", batch_id, exc_info=e)
+        raise HTTPException(status_code=500, detail="Errore interno durante l'applicazione della pseudonimizzazione.")
 
     # Step 4: Audit log
     audit_event(
