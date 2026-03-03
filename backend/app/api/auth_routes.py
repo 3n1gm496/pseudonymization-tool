@@ -25,6 +25,7 @@ from app.core.auth import (
 )
 from app.core.config import CONFIG_DIR
 from app.core.metrics import get_metrics_output
+from app.core.rate_limit import enforce_rate_limit
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import Response as FastAPIResponse
 
@@ -110,6 +111,10 @@ async def metrics_endpoint():
 
 @router.post("/auth/login")
 async def auth_login(req: dict, response: Response, request: Request):
+    # Protezione brute-force: max 10 tentativi/minuto per IP.
+    # Limite volutamente basso: un utente legittimo non ha mai bisogno
+    # di più di 1-2 tentativi; 10 è già generoso.
+    enforce_rate_limit(request, "auth_login", limit=10)
     username = (req.get("username") or "").strip()
     password = req.get("password") or ""
     if not verify_credentials(username, password):
