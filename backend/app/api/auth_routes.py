@@ -90,11 +90,7 @@ async def auth_logout(request: Request, response: Response):
     destroy_session(token)
     # ✅ FIX: Delete cookie with all parameters to ensure browser recognizes it
     response.delete_cookie(
-        key=SESSION_COOKIE_NAME,
-        path="/",
-        secure=SESSION_COOKIE_SECURE,
-        httponly=True,
-        samesite="strict"
+        key=SESSION_COOKIE_NAME, path="/", secure=SESSION_COOKIE_SECURE, httponly=True, samesite="strict"
     )
     audit_event(request, "auth_logout")
     return {"ok": True}

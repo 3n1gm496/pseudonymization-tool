@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import axios from '../utils/axios'
 import { copyToClipboard, downloadTextFile } from '../utils/text-export'
 
-const PrepareForAI = ({ batch, pseudonymizedText, isLoading, setIsLoading, showToast }) => {
+const PrepareForAI = ({ batch, pseudonymizedText, isLoading, setIsLoading: _setIsLoading, showToast }) => {
   const [passphrase, setPassphrase] = useState('')
   const [showPassphrase, setShowPassphrase] = useState(false)
   const [downloadingMapping, setDownloadingMapping] = useState(false)

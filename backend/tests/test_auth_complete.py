@@ -10,9 +10,6 @@ import time
 from unittest.mock import MagicMock, patch
 
 import pytest
-from fastapi import HTTPException, Request
-from fastapi.testclient import TestClient
-
 from app.core.auth import (
     ADMIN_USERNAME,
     SESSION_COOKIE_NAME,
@@ -35,6 +32,8 @@ from app.core.auth import (
     verify_credentials,
 )
 from app.main import app
+from fastapi import HTTPException, Request
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture
@@ -79,7 +78,7 @@ class TestAuthHelpers:
         original = "hello"
         encoded_with_padding = base64.urlsafe_b64encode(original.encode()).decode()
         encoded_no_padding = encoded_with_padding.rstrip("=")
-        
+
         # _b64_decode should handle both with and without padding
         decoded = _b64_decode(encoded_no_padding)
         assert decoded == original
@@ -154,11 +153,11 @@ class TestSessionManagement:
         # When _password_env is None (not configured), should return True
         with patch("app.core.auth._password_env", None):
             assert auth_uses_default_password() is True
-        
+
         # When _password_env is empty string (not configured), should return True
         with patch("app.core.auth._password_env", ""):
             assert auth_uses_default_password() is True
-        
+
         # When _password_env is set to any value, should return False
         with patch("app.core.auth._password_env", "configured_password"):
             assert auth_uses_default_password() is False
@@ -166,15 +165,15 @@ class TestSessionManagement:
     def test_create_session_returns_valid_format(self, clear_sessions):
         """Test that created session has correct format."""
         token, expires_at, csrf_token = create_session("testuser")
-        
+
         # Token should be base64.signature
         assert "." in token
         parts = token.split(".")
         assert len(parts) == 2
-        
+
         # Expires at should be in future
         assert expires_at > int(time.time())
-        
+
         # CSRF token should be a valid token
         assert csrf_token is not None
         assert len(csrf_token) > 0
@@ -185,7 +184,7 @@ class TestSessionManagement:
         payload_b64 = token.split(".")[0]
         payload = _b64_decode(payload_b64)
         sid = payload.split(":", 1)[0]
-        
+
         # Session should be stored
         with _lock:
             assert sid in _sessions
@@ -203,7 +202,7 @@ class TestSessionManagement:
         token, _, _ = create_session("testuser")
         payload_b64, sig = token.split(".")
         corrupted_token = payload_b64 + ".corrupted_signature"
-        
+
         username = validate_session(corrupted_token)
         assert username is None
 
@@ -213,21 +212,21 @@ class TestSessionManagement:
         payload_b64 = token.split(".")[0]
         payload = _b64_decode(payload_b64)
         sid = payload.split(":", 1)[0]
-        
+
         # Manually set session as expired
         expired_time = int(time.time()) - 1
         with _lock:
             _sessions[sid] = expired_time
-        
+
         # Re-create token with expired timestamp
         payload_parts = payload.split(":")
         old_payload = f"{payload_parts[0]}:{payload_parts[1]}:{expired_time}"
         sig = _sign(old_payload)
         expired_token = f"{_b64(old_payload)}.{sig}"
-        
+
         username = validate_session(expired_token)
         assert username is None
-        
+
         # Expired session should be cleaned up
         with _lock:
             assert sid not in _sessions
@@ -237,14 +236,14 @@ class TestSessionManagement:
         token, _, _ = create_session("testuser")
         payload_b64 = token.split(".")[0]
         payload = _b64_decode(payload_b64)
-        
+
         # Modify the session_id in payload
         parts = payload.split(":")
         modified_sid = secrets.token_urlsafe(32)  # Different SID
         modified_payload = f"{modified_sid}:{parts[1]}:{parts[2]}"
         modified_sig = _sign(modified_payload)
         modified_token = f"{_b64(modified_payload)}.{modified_sig}"
-        
+
         username = validate_session(modified_token)
         assert username is None
 
@@ -276,14 +275,14 @@ class TestSessionManagement:
         payload_b64 = token.split(".")[0]
         payload = _b64_decode(payload_b64)
         sid = payload.split(":", 1)[0]
-        
+
         # Verify session exists
         with _lock:
             assert sid in _sessions
-        
+
         # Destroy session
         destroy_session(token)
-        
+
         # Verify session is removed
         with _lock:
             assert sid not in _sessions
@@ -323,7 +322,7 @@ class TestCSRFTokenManagement:
         """Test that create_csrf_token stores token in memory."""
         session_id = "test_session"
         token = create_csrf_token(session_id)
-        
+
         # Token should be stored
         with _lock:
             assert session_id in _csrf_tokens
@@ -333,7 +332,7 @@ class TestCSRFTokenManagement:
         """Test validation of valid CSRF token."""
         session_id = "test_session"
         token = create_csrf_token(session_id)
-        
+
         result = validate_csrf_token(session_id, token)
         assert result is True
 
@@ -342,7 +341,7 @@ class TestCSRFTokenManagement:
         session_id = "test_session"
         token = create_csrf_token(session_id)
         wrong_token = generate_csrf_token()
-        
+
         result = validate_csrf_token(session_id, wrong_token)
         assert result is False
 
@@ -350,7 +349,7 @@ class TestCSRFTokenManagement:
         """Test validation fails when token is None."""
         session_id = "test_session"
         create_csrf_token(session_id)
-        
+
         result = validate_csrf_token(session_id, None)
         assert result is False
 
@@ -364,10 +363,10 @@ class TestCSRFTokenManagement:
         """Test that validate_csrf_token uses constant-time comparison."""
         session_id = "test_session"
         token = create_csrf_token(session_id)
-        
+
         # Valid token should pass
         assert validate_csrf_token(session_id, token) is True
-        
+
         # Token with one char different should fail
         modified_token = token[:-1] + ("X" if token[-1] != "X" else "Y")
         assert validate_csrf_token(session_id, modified_token) is False
@@ -376,14 +375,14 @@ class TestCSRFTokenManagement:
         """Test that cleanup_csrf_token removes token from storage."""
         session_id = "test_session"
         create_csrf_token(session_id)
-        
+
         # Verify token exists
         with _lock:
             assert session_id in _csrf_tokens
-        
+
         # Cleanup
         cleanup_csrf_token(session_id)
-        
+
         # Verify token is removed
         with _lock:
             assert session_id not in _csrf_tokens
@@ -402,7 +401,7 @@ class TestRequestTokenExtraction:
         mock_request = MagicMock(spec=Request)
         mock_request.cookies = {SESSION_COOKIE_NAME: "cookie_token"}
         mock_request.headers = {}
-        
+
         token = extract_token_from_request(mock_request)
         assert token == "cookie_token"
 
@@ -411,7 +410,7 @@ class TestRequestTokenExtraction:
         mock_request = MagicMock(spec=Request)
         mock_request.cookies = {}
         mock_request.headers = {"Authorization": "Bearer header_token"}
-        
+
         token = extract_token_from_request(mock_request)
         assert token == "header_token"
 
@@ -420,7 +419,7 @@ class TestRequestTokenExtraction:
         mock_request = MagicMock(spec=Request)
         mock_request.cookies = {SESSION_COOKIE_NAME: "cookie_token"}
         mock_request.headers = {"Authorization": "Bearer header_token"}
-        
+
         token = extract_token_from_request(mock_request)
         assert token == "cookie_token"
 
@@ -429,7 +428,7 @@ class TestRequestTokenExtraction:
         mock_request = MagicMock(spec=Request)
         mock_request.cookies = {}
         mock_request.headers = {"Authorization": "NoBearer token"}
-        
+
         token = extract_token_from_request(mock_request)
         assert token is None
 
@@ -438,7 +437,7 @@ class TestRequestTokenExtraction:
         mock_request = MagicMock(spec=Request)
         mock_request.cookies = {}
         mock_request.headers = {"Authorization": "bearer header_token"}
-        
+
         token = extract_token_from_request(mock_request)
         assert token == "header_token"
 
@@ -447,7 +446,7 @@ class TestRequestTokenExtraction:
         mock_request = MagicMock(spec=Request)
         mock_request.cookies = {}
         mock_request.headers = {"Authorization": "BeArEr header_token"}
-        
+
         token = extract_token_from_request(mock_request)
         assert token == "header_token"
 
@@ -456,7 +455,7 @@ class TestRequestTokenExtraction:
         mock_request = MagicMock(spec=Request)
         mock_request.cookies = {}
         mock_request.headers = {}
-        
+
         token = extract_token_from_request(mock_request)
         assert token is None
 
@@ -467,7 +466,7 @@ class TestCSRFDependency:
     def test_csrf_dependency_disabled_auth(self):
         """Test that CSRF dependency skips validation when AUTH_ENABLED is False."""
         mock_request = MagicMock(spec=Request)
-        
+
         with patch("app.core.auth.AUTH_ENABLED", False):
             # Should not raise
             validate_csrf_dependency(mock_request)
@@ -477,10 +476,10 @@ class TestCSRFDependency:
         """Test CSRF dependency raises 401 when no session cookie."""
         mock_request = MagicMock(spec=Request)
         mock_request.cookies = {}
-        
+
         with pytest.raises(HTTPException) as exc_info:
             validate_csrf_dependency(mock_request)
-        
+
         assert exc_info.value.status_code == 401
 
     @patch("app.core.auth.AUTH_ENABLED", True)
@@ -489,25 +488,25 @@ class TestCSRFDependency:
         mock_request = MagicMock(spec=Request)
         mock_request.cookies = {SESSION_COOKIE_NAME: "malformed_no_dot"}
         mock_request.headers = {}
-        
+
         with pytest.raises(HTTPException) as exc_info:
             validate_csrf_dependency(mock_request)
-        
+
         assert exc_info.value.status_code == 401
 
     @patch("app.core.auth.AUTH_ENABLED", True)
     def test_csrf_dependency_no_csrf_token(self, clear_sessions):
         """Test CSRF dependency raises 403 when CSRF token is missing."""
         token, _, _ = create_session("testuser")
-        
+
         mock_request = MagicMock(spec=Request)
         mock_request.cookies = {SESSION_COOKIE_NAME: token}
         mock_request.headers = {}
         mock_request.query_params = {}
-        
+
         with pytest.raises(HTTPException) as exc_info:
             validate_csrf_dependency(mock_request)
-        
+
         assert exc_info.value.status_code == 403
 
     @patch("app.core.auth.AUTH_ENABLED", True)
@@ -515,25 +514,25 @@ class TestCSRFDependency:
         """Test CSRF dependency raises 403 with invalid CSRF token."""
         token, _, _ = create_session("testuser")
         wrong_csrf = generate_csrf_token()
-        
+
         mock_request = MagicMock(spec=Request)
         mock_request.cookies = {SESSION_COOKIE_NAME: token}
         mock_request.headers = {"X-CSRF-Token": wrong_csrf}
-        
+
         with pytest.raises(HTTPException) as exc_info:
             validate_csrf_dependency(mock_request)
-        
+
         assert exc_info.value.status_code == 403
 
     @patch("app.core.auth.AUTH_ENABLED", True)
     def test_csrf_dependency_valid_csrf_header(self, clear_sessions):
         """Test CSRF dependency passes with valid CSRF token in header."""
         token, _, csrf_token = create_session("testuser")
-        
+
         mock_request = MagicMock(spec=Request)
         mock_request.cookies = {SESSION_COOKIE_NAME: token}
         mock_request.headers = {"X-CSRF-Token": csrf_token}
-        
+
         # Should not raise
         validate_csrf_dependency(mock_request)
 
@@ -541,12 +540,12 @@ class TestCSRFDependency:
     def test_csrf_dependency_valid_csrf_query_param(self, clear_sessions):
         """Test CSRF dependency passes with valid CSRF token in query param."""
         token, _, csrf_token = create_session("testuser")
-        
+
         mock_request = MagicMock(spec=Request)
         mock_request.cookies = {SESSION_COOKIE_NAME: token}
         mock_request.headers = {}
         mock_request.query_params = {"csrf_token": csrf_token}
-        
+
         # Should not raise
         validate_csrf_dependency(mock_request)
 
@@ -555,12 +554,12 @@ class TestCSRFDependency:
         """Test CSRF dependency prefers header token over query param."""
         token, _, csrf_token = create_session("testuser")
         other_token = generate_csrf_token()
-        
+
         mock_request = MagicMock(spec=Request)
         mock_request.cookies = {SESSION_COOKIE_NAME: token}
         mock_request.headers = {"X-CSRF-Token": csrf_token}
         mock_request.query_params = {"csrf_token": other_token}
-        
+
         # Should not raise (uses header token)
         validate_csrf_dependency(mock_request)
 
@@ -571,7 +570,7 @@ class TestIntegrationWithAuthEndpoints:
     def test_login_endpoint_disabled_auth(self):
         """Test login endpoint when AUTH_ENABLED is False."""
         client = TestClient(app)
-        
+
         with patch("app.core.auth.AUTH_ENABLED", False):
             # With auth disabled, login should still work but accept any password
             response = client.post("/api/auth/login", json={"username": "any", "password": "any"})
@@ -580,16 +579,14 @@ class TestIntegrationWithAuthEndpoints:
     def test_logout_endpoint_with_valid_session(self):
         """Test logout endpoint clears session."""
         client = TestClient(app)
-        
+
         # Create a session
         token, _, csrf_token = create_session("testuser")
-        
+
         # Logout
         response = client.post(
-            "/api/auth/logout",
-            headers={"X-CSRF-Token": csrf_token},
-            cookies={SESSION_COOKIE_NAME: token}
+            "/api/auth/logout", headers={"X-CSRF-Token": csrf_token}, cookies={SESSION_COOKIE_NAME: token}
         )
-        
+
         # Should succeed (or at least not error)
         assert response.status_code in [200, 401, 403]  # Depends on auth settings

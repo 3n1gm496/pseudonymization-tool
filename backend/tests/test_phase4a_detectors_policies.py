@@ -1,4 +1,3 @@
-
 from app.core import policies
 from app.detectors.dictionary_detector import DictionaryDetector
 from app.detectors.regex_detectors import (

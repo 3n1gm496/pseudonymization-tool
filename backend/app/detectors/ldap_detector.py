@@ -24,11 +24,7 @@ import time
 from typing import Dict, List, Optional, Set, Tuple
 
 from app.detectors.base import BaseDetector, RawFinding
-from app.detectors.ldap_client import (
-    LdapClient,
-    LdapDiagnostics,
-    LdapEntry,
-)
+from app.detectors.ldap_client import LdapClient, LdapDiagnostics, LdapEntry
 from app.models.schemas import EntityType, LdapConfig
 from app.parsers.base import TextChunk
 

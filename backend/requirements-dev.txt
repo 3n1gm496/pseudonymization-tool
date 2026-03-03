@@ -27,4 +27,6 @@ hypothesis==6.98.5
 pre-commit==3.6.0
 # Optional dependencies for enhanced features (have fallback handlers in code)
 ldap3>=2.9.1,<3.0.0  # LDAP detection (optional, lazy-loaded with fallback)
-reportlab>=3.6.0,<4.0.0  # PDF generation in tests and transformer module (optional, lazy-loaded with fallback)
+reportlab>=4.0.0  # PDF generation in tests and transformer module (optional, lazy-loaded with fallback)
+                 # reportlab 3.x non ha wheel precompilati per Python 3.12 (richiede ft2build.h a compile time);
+                 # reportlab 4.x ha wheel precompilati per Python 3.12+ senza compilazione

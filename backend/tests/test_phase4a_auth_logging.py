@@ -1,7 +1,7 @@
 import os
-import pytest
 from types import SimpleNamespace
 
+import pytest
 from app.core import auth, logging_config
 
 

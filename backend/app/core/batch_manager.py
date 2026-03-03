@@ -7,8 +7,8 @@ Mantiene lo stato di tutti i batch attivi durante la sessione del server.
 - Timeout/cleanup automatico per inattività
 """
 
-import logging
 import json
+import logging
 import os
 import shutil
 import tempfile
@@ -320,9 +320,7 @@ def generate_passphrase(length: int = 32) -> str:
 def set_batch_start_time(batch_id: str) -> None:
     """Record when a batch was created/started (thread-safe)."""
     with _global_lock:
-        started_at = datetime.fromisoformat(
-            datetime.now(timezone.utc).isoformat()
-        ).isoformat()
+        started_at = datetime.fromisoformat(datetime.now(timezone.utc).isoformat()).isoformat()
         _batch_start_times[batch_id] = started_at
         _save_start_time_to_disk(batch_id, started_at)
 
@@ -360,10 +358,10 @@ def clear_batch_start_time(batch_id: str) -> Optional[str]:
 def atomic_batch_operation(batch_id: str):
     """
     Context manager for atomic batch operations with automatic rollback on error.
-    
+
     Maintains a snapshot of batch state and rolls back all changes if an exception occurs.
     Prevents concurrent modifications of the same batch during the operation.
-    
+
     Usage:
         try:
             with atomic_batch_operation(batch_id) as snapshot:
@@ -375,10 +373,10 @@ def atomic_batch_operation(batch_id: str):
         except Exception:
             # Automatically rolled back to snapshot
             pass
-    
+
     Args:
         batch_id: ID of batch to operate on atomically
-        
+
     Yields:
         Tuple of snapshots: (batch, decisions, passphrases, engines)
     """
@@ -387,12 +385,12 @@ def atomic_batch_operation(batch_id: str):
         batch = _batches.get(batch_id)
         if not batch:
             raise ValueError(f"Batch {batch_id} not found")
-        
+
         batch_snapshot = deepcopy(batch)
         decisions_snapshot = deepcopy(_decisions.get(batch_id, {}))
         passphrase_snapshot = _passphrases.get(batch_id)
         engine_snapshot = _engines.get(batch_id)  # Engines not deep-copied (stateful objects)
-        
+
         try:
             # Yield control to caller while holding lock
             yield (batch_snapshot, decisions_snapshot, passphrase_snapshot, engine_snapshot)
@@ -416,14 +414,14 @@ def create_batch(batch: Batch) -> Batch:
     """Registra un nuovo batch e crea la sua directory temporanea."""
     batch_dir = TEMP_BASE_DIR / batch.batch_id
     batch_dir.mkdir(parents=True, exist_ok=True)
-    
+
     with _global_lock:
         _batches[batch.batch_id] = batch
         _decisions[batch.batch_id] = {}
         _last_activity[batch.batch_id] = time.time()
         _save_batch_to_disk(batch)
         _save_decisions_to_disk(batch.batch_id, {})
-    
+
     logger.info("Batch creato: id=%s", batch.batch_id)
     return batch
 
@@ -629,7 +627,8 @@ def cleanup_batch(batch_id: str) -> None:
         except Exception as e:
             logger.warning(
                 "Cleanup parziale: impossibile rimuovere i risultati di parsing per batch %s: %s",
-                batch_id, e,
+                batch_id,
+                e,
             )
         _engines.pop(batch_id, None)
         _decisions.pop(batch_id, None)
@@ -645,13 +644,12 @@ def cleanup_inactive_batches() -> int:
     ✅ FIX #1: Single atomic lock region - no TOCTOU window between check and delete
     """
     cleaned_count = 0
-    
+
     # Single lock acquisition - no race window
     with _global_lock:
         now = time.time()
-        expired_bids = [bid for bid, last in _last_activity.items() 
-                        if now - last > BATCH_INACTIVITY_TIMEOUT_SECONDS]
-        
+        expired_bids = [bid for bid, last in _last_activity.items() if now - last > BATCH_INACTIVITY_TIMEOUT_SECONDS]
+
         # Clean them up immediately (still holding lock)
         for bid in expired_bids:
             # Double-check still expired (activity could have updated during iteration)
@@ -674,7 +672,8 @@ def cleanup_inactive_batches() -> int:
                 except Exception as e:
                     logger.warning(
                         "Cleanup timeout: impossibile rimuovere i risultati di parsing per batch %s: %s",
-                        bid, e,
+                        bid,
+                        e,
                     )
                 _engines.pop(bid, None)
                 _decisions.pop(bid, None)
@@ -683,7 +682,7 @@ def cleanup_inactive_batches() -> int:
                 _batch_start_times.pop(bid, None)
                 _delete_batch_from_redis(bid)
                 cleaned_count += 1
-    
+
     return cleaned_count
 
 

@@ -12,27 +12,22 @@ from typing import List, Tuple
 from app.core.audit import audit_event
 from app.core.batch_manager import (
     cleanup_batch,
+    clear_batch_start_time,
     create_batch,
     generate_passphrase,
     get_batch,
     get_batch_dir,
+    get_batch_start_time,
     get_decisions,
     get_passphrase,
     list_batches,
     regenerate_passphrase,
+    set_batch_start_time,
     store_decisions,
     store_passphrase,
     update_batch,
-    set_batch_start_time,
-    get_batch_start_time,
-    clear_batch_start_time,
 )
-from app.core.config import (
-    CONFIG_DIR,
-    MAX_FILE_SIZE_BYTES,
-    MAX_UPLOAD_FILES_PER_BATCH,
-    SUPPORTED_EXTENSIONS,
-)
+from app.core.config import CONFIG_DIR, MAX_FILE_SIZE_BYTES, MAX_UPLOAD_FILES_PER_BATCH, SUPPORTED_EXTENSIONS
 from app.core.pipeline import apply_review_decisions
 from app.core.rate_limit import enforce_rate_limit
 from app.core.tasks import apply_batch_task, get_task_status, scan_batch_task
@@ -60,7 +55,7 @@ _STATE_FILE = CONFIG_DIR / "state.json"
 def _sanitize_filename(filename: str, max_length: int = 200) -> str:
     """
     Sanitizza filename per upload sicuro.
-    
+
     Security Fix #C2: Filename sanitization
     - Rimuove null bytes
     - Normalizza Unicode (NFC)
@@ -70,31 +65,31 @@ def _sanitize_filename(filename: str, max_length: int = 200) -> str:
     - Empty fallback to UUID
     """
     import re
-    import uuid
     import unicodedata
-    
+    import uuid
+
     # Remove null bytes
-    filename = filename.replace('\x00', '')
-    
+    filename = filename.replace("\x00", "")
+
     # Normalize Unicode (decompose + recompose to prevent attack via combining chars)
-    filename = unicodedata.normalize('NFC', filename)
-    
+    filename = unicodedata.normalize("NFC", filename)
+
     # Whitelist: allow only safe characters
     # Keep alphanumerics, dots, dash, underscore, space
-    safe = re.sub(r'[^a-zA-Z0-9._\-\s]', '_', filename)
-    
+    safe = re.sub(r"[^a-zA-Z0-9._\-\s]", "_", filename)
+
     # Remove leading dots (prevent hidden files)
-    safe = safe.lstrip('.')
-    
+    safe = safe.lstrip(".")
+
     # Ensure not empty
     if not safe or safe.isspace():
         safe = f"file_{uuid.uuid4().hex[:8]}"
-    
+
     # Limit length (filesystem max is 255, keep margin)
     if len(safe) > max_length:
         name_part, ext_part = Path(safe).stem, Path(safe).suffix
-        safe = name_part[:max_length - len(ext_part)] + ext_part
-    
+        safe = name_part[: max_length - len(ext_part)] + ext_part
+
     logger.debug("Filename sanitized: %r → %r", filename, safe)
     return safe
 
@@ -375,7 +370,7 @@ async def create_new_batch(
             "X-RateLimit-Limit": str(rate_info["limit"]),
             "X-RateLimit-Remaining": str(rate_info["remaining"]),
             "X-RateLimit-Reset": str(rate_info["reset"]),
-        }
+        },
     )
 
 
@@ -605,7 +600,7 @@ async def apply_batch(batch_id: str, request: Request):
             "X-RateLimit-Limit": str(rate_info["limit"]),
             "X-RateLimit-Remaining": str(rate_info["remaining"]),
             "X-RateLimit-Reset": str(rate_info["reset"]),
-        }
+        },
     )
 
 

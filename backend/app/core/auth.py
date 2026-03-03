@@ -7,7 +7,7 @@ import os
 import secrets
 import threading
 import time
-from typing import Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, Tuple
 
 if TYPE_CHECKING:
     from fastapi import Request
@@ -61,6 +61,7 @@ def _get_secret_file_path() -> str:
         return os.path.join(state_dir, ".auth_secret")
     # Fallback for local dev (no Docker volume configured)
     import tempfile
+
     return os.path.join(tempfile.gettempdir(), "pseudonymizer_batches", "state", ".auth_secret")
 
 
@@ -274,9 +275,7 @@ def verify_credentials(username: str, password: str) -> bool:
         return True
     if _password_env is None:
         return False  # Auth enabled but no password configured → deny access
-    return hmac.compare_digest(username or "", ADMIN_USERNAME) and hmac.compare_digest(
-        password or "", _password_env
-    )
+    return hmac.compare_digest(username or "", ADMIN_USERNAME) and hmac.compare_digest(password or "", _password_env)
 
 
 def create_session(username: str) -> Tuple[str, int, str]:

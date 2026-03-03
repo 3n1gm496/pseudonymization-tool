@@ -57,9 +57,7 @@ def test_email_detection():
     from app.detectors.regex_detectors import EMAIL_DETECTOR as detector
     from app.parsers.base import TextChunk
 
-    chunk = TextChunk(
-        text="Contatto: mario.rossi@ente.gov.it e luigi.ferrari@comune.it", source_ref="test.txt"
-    )
+    chunk = TextChunk(text="Contatto: mario.rossi@ente.gov.it e luigi.ferrari@comune.it", source_ref="test.txt")
     findings = detector.detect(chunk)
     values = [f.original_value for f in findings]
     assert "mario.rossi@ente.gov.it" in values, f"Email non trovata. Trovati: {values}"
@@ -99,9 +97,7 @@ def test_ipv6_detection():
     from app.detectors.regex_detectors import IPV6_DETECTOR as detector
     from app.parsers.base import TextChunk
 
-    chunk = TextChunk(
-        text="Indirizzo: 2001:0db8:85a3:0000:0000:8a2e:0370:7334", source_ref="test.txt"
-    )
+    chunk = TextChunk(text="Indirizzo: 2001:0db8:85a3:0000:0000:8a2e:0370:7334", source_ref="test.txt")
     findings = detector.detect(chunk)
     assert len(findings) == 1, f"Atteso 1, trovato {len(findings)}"
 
@@ -149,9 +145,7 @@ def test_hostname_detection():
     from app.detectors.regex_detectors import HOSTNAME_DETECTOR as detector
     from app.parsers.base import TextChunk
 
-    chunk = TextChunk(
-        text="Server: srv-dc-01.ente.local e srv-mail-01.ente.gov.it", source_ref="test.txt"
-    )
+    chunk = TextChunk(text="Server: srv-dc-01.ente.local e srv-mail-01.ente.gov.it", source_ref="test.txt")
     findings = detector.detect(chunk)
     assert len(findings) >= 1, f"Atteso almeno 1, trovato {len(findings)}"
 
@@ -167,9 +161,9 @@ def test_no_overlap_url_email():
     findings = detect_in_chunk(chunk)
     sorted_f = sorted(findings, key=lambda f: f.start_pos)
     for i in range(len(sorted_f) - 1):
-        assert sorted_f[i].end_pos <= sorted_f[i + 1].start_pos, (
-            f"Sovrapposizione tra '{sorted_f[i].original_value}' e '{sorted_f[i + 1].original_value}'"
-        )
+        assert (
+            sorted_f[i].end_pos <= sorted_f[i + 1].start_pos
+        ), f"Sovrapposizione tra '{sorted_f[i].original_value}' e '{sorted_f[i + 1].original_value}'"
 
 
 # ─── Test Parser ──────────────────────────────────────────────────────────────
@@ -234,8 +228,7 @@ def test_image_parser():
     parser = ImageParser()
     result = parser.parse(TEST_DATA_DIR / "test_screenshot.png")
     assert result.success, (
-        f"Parsing fallito: {result.error_message}. "
-        "Verificare che Tesseract sia installato correttamente."
+        f"Parsing fallito: {result.error_message}. " "Verificare che Tesseract sia installato correttamente."
     )
 
 
@@ -246,8 +239,7 @@ def test_jpg_exif_stripping():
     parser = ImageParser()
     result = parser.parse(TEST_DATA_DIR / "test_screenshot_exif.jpg")
     assert result.success, (
-        f"Parsing fallito: {result.error_message}. "
-        "Verificare che Tesseract sia installato correttamente."
+        f"Parsing fallito: {result.error_message}. " "Verificare che Tesseract sia installato correttamente."
     )
 
 
@@ -277,12 +269,8 @@ def test_safety_no_findings_no_warnings():
     from app.core.safety import compute_safety_label
     from app.models.schemas import SafetyLabel
 
-    safety = compute_safety_label(
-        findings=[], file_records=[], residual_warnings=[], global_warnings=[]
-    )
-    assert safety == SafetyLabel.SAFE_TO_UPLOAD, (
-        f"Nessun finding/warning deve essere SAFE_TO_UPLOAD, got {safety}"
-    )
+    safety = compute_safety_label(findings=[], file_records=[], residual_warnings=[], global_warnings=[])
+    assert safety == SafetyLabel.SAFE_TO_UPLOAD, f"Nessun finding/warning deve essere SAFE_TO_UPLOAD, got {safety}"
 
 
 def test_safety_global_warnings():
@@ -296,9 +284,7 @@ def test_safety_global_warnings():
         residual_warnings=[],
         global_warnings=["Dizionario LDAP non disponibile"],
     )
-    assert safety == SafetyLabel.SAFE_WITH_WARNINGS, (
-        f"Global warnings deve essere SAFE_WITH_WARNINGS, got {safety}"
-    )
+    assert safety == SafetyLabel.SAFE_WITH_WARNINGS, f"Global warnings deve essere SAFE_WITH_WARNINGS, got {safety}"
 
 
 def test_safety_residual_warnings():
@@ -312,9 +298,7 @@ def test_safety_residual_warnings():
         residual_warnings=["Residual scan: trovati 2 potenziali finding"],
         global_warnings=[],
     )
-    assert safety == SafetyLabel.SAFE_WITH_WARNINGS, (
-        f"Residual warnings deve essere SAFE_WITH_WARNINGS, got {safety}"
-    )
+    assert safety == SafetyLabel.SAFE_WITH_WARNINGS, f"Residual warnings deve essere SAFE_WITH_WARNINGS, got {safety}"
 
 
 def test_safety_file_failed():
@@ -326,12 +310,8 @@ def test_safety_file_failed():
     file_rec.status = FileStatus.FAILED
     file_rec.error_message = "Parsing error"
 
-    safety = compute_safety_label(
-        findings=[], file_records=[file_rec], residual_warnings=[], global_warnings=[]
-    )
-    assert safety == SafetyLabel.NOT_SAFE, (
-        f"File FAILED deve essere NOT_SAFE, got {safety}"
-    )
+    safety = compute_safety_label(findings=[], file_records=[file_rec], residual_warnings=[], global_warnings=[])
+    assert safety == SafetyLabel.NOT_SAFE, f"File FAILED deve essere NOT_SAFE, got {safety}"
 
 
 def test_safety_ocr_fail_warning():
@@ -343,12 +323,8 @@ def test_safety_ocr_fail_warning():
     file_rec.status = FileStatus.PROCESSED
     file_rec.warnings = ["ocr fail: impossibile leggere l'immagine"]
 
-    safety = compute_safety_label(
-        findings=[], file_records=[file_rec], residual_warnings=[], global_warnings=[]
-    )
-    assert safety == SafetyLabel.NOT_SAFE, (
-        f"OCR fail deve essere NOT_SAFE, got {safety}"
-    )
+    safety = compute_safety_label(findings=[], file_records=[file_rec], residual_warnings=[], global_warnings=[])
+    assert safety == SafetyLabel.NOT_SAFE, f"OCR fail deve essere NOT_SAFE, got {safety}"
 
 
 def test_safety_high_conf_rejected_above_threshold():
@@ -369,12 +345,8 @@ def test_safety_high_conf_rejected_above_threshold():
         for i in range(4)  # 4 > soglia 3
     ]
 
-    safety = compute_safety_label(
-        findings=findings, file_records=[], residual_warnings=[], global_warnings=[]
-    )
-    assert safety == SafetyLabel.NOT_SAFE, (
-        f"4 high-conf REJECT deve essere NOT_SAFE, got {safety}"
-    )
+    safety = compute_safety_label(findings=findings, file_records=[], residual_warnings=[], global_warnings=[])
+    assert safety == SafetyLabel.NOT_SAFE, f"4 high-conf REJECT deve essere NOT_SAFE, got {safety}"
 
 
 def test_safety_high_conf_rejected_at_threshold():
@@ -395,12 +367,8 @@ def test_safety_high_conf_rejected_at_threshold():
         for i in range(3)  # 3 == soglia, non supera
     ]
 
-    safety = compute_safety_label(
-        findings=findings, file_records=[], residual_warnings=[], global_warnings=[]
-    )
-    assert safety == SafetyLabel.SAFE_WITH_WARNINGS, (
-        f"3 high-conf REJECT deve essere SAFE_WITH_WARNINGS, got {safety}"
-    )
+    safety = compute_safety_label(findings=findings, file_records=[], residual_warnings=[], global_warnings=[])
+    assert safety == SafetyLabel.SAFE_WITH_WARNINGS, f"3 high-conf REJECT deve essere SAFE_WITH_WARNINGS, got {safety}"
 
 
 def test_safety_compute_residual_warnings_empty():
@@ -471,9 +439,9 @@ def test_transformer_action_accept():
 
     finding = _make_finding("mario.rossi@ente.gov.it", "EMAIL", "EMAIL_001@pseudo.local")
     finding.review_action = ReviewAction.ACCEPT
-    assert finding.final_pseudonym == "EMAIL_001@pseudo.local", (
-        f"ACCEPT deve usare proposed_pseudonym, got '{finding.final_pseudonym}'"
-    )
+    assert (
+        finding.final_pseudonym == "EMAIL_001@pseudo.local"
+    ), f"ACCEPT deve usare proposed_pseudonym, got '{finding.final_pseudonym}'"
 
 
 def test_transformer_action_modify():
@@ -483,9 +451,9 @@ def test_transformer_action_modify():
     finding = _make_finding("mario.rossi@ente.gov.it", "EMAIL", "EMAIL_001@pseudo.local")
     finding.review_action = ReviewAction.MODIFY
     finding.modified_pseudonym = "m.rossi@redacted.local"
-    assert finding.final_pseudonym == "m.rossi@redacted.local", (
-        f"MODIFY deve usare modified_pseudonym, got '{finding.final_pseudonym}'"
-    )
+    assert (
+        finding.final_pseudonym == "m.rossi@redacted.local"
+    ), f"MODIFY deve usare modified_pseudonym, got '{finding.final_pseudonym}'"
 
 
 def test_transformer_action_reject():
@@ -494,9 +462,9 @@ def test_transformer_action_reject():
 
     finding = _make_finding("mario.rossi@ente.gov.it", "EMAIL", "EMAIL_001@pseudo.local")
     finding.review_action = ReviewAction.REJECT
-    assert finding.final_pseudonym == "mario.rossi@ente.gov.it", (
-        f"REJECT deve restituire original_value, got '{finding.final_pseudonym}'"
-    )
+    assert (
+        finding.final_pseudonym == "mario.rossi@ente.gov.it"
+    ), f"REJECT deve restituire original_value, got '{finding.final_pseudonym}'"
 
 
 def test_transformer_action_modify_without_modified_pseudonym():
@@ -507,9 +475,9 @@ def test_transformer_action_modify_without_modified_pseudonym():
     finding.review_action = ReviewAction.MODIFY
     finding.modified_pseudonym = None
     # Senza modified_pseudonym, deve usare proposed_pseudonym come fallback
-    assert finding.final_pseudonym == "EMAIL_001@pseudo.local", (
-        f"MODIFY senza modified_pseudonym deve usare proposed_pseudonym, got '{finding.final_pseudonym}'"
-    )
+    assert (
+        finding.final_pseudonym == "EMAIL_001@pseudo.local"
+    ), f"MODIFY senza modified_pseudonym deve usare proposed_pseudonym, got '{finding.final_pseudonym}'"
 
 
 # ─── Test Pseudonimizzatore ────────────────────────────────────────────────────
@@ -690,9 +658,9 @@ def test_transformer_txt_no_originals():
     full_text = " ".join(c.text for c in result.chunks)
     transformed_text, n_applied = apply_pseudonyms_to_text(full_text, findings)
     assert n_applied > 0, "Nessuna sostituzione applicata"
-    assert "mario.rossi@ente.gov.it" not in transformed_text, (
-        "Il valore originale non deve essere nel testo trasformato"
-    )
+    assert (
+        "mario.rossi@ente.gov.it" not in transformed_text
+    ), "Il valore originale non deve essere nel testo trasformato"
 
 
 def test_report_json_structure():
@@ -709,9 +677,7 @@ def test_report_json_structure():
     findings = engine.process_findings(raw_findings, "file-001")
     config = BatchConfig(mode=BatchMode.LIGHT)
     batch = Batch(config=config)
-    file_rec = FileRecord(
-        original_name="test_log.txt", stored_path=str(TEST_DATA_DIR / "test_log.txt")
-    )
+    file_rec = FileRecord(original_name="test_log.txt", stored_path=str(TEST_DATA_DIR / "test_log.txt"))
     file_rec.status = FileStatus.PROCESSED
     file_rec.findings_count = len(findings)
     batch.files.append(file_rec)
@@ -726,9 +692,7 @@ def test_report_json_structure():
         assert "summary" in data, "Campo summary mancante nel report"
         assert "findings_by_type" in data, "Campo findings_by_type mancante nel report"
         report_str = report_path.read_text()
-        assert "mario.rossi@ente.gov.it" not in report_str, (
-            "I valori originali non devono essere nel report JSON"
-        )
+        assert "mario.rossi@ente.gov.it" not in report_str, "I valori originali non devono essere nel report JSON"
 
 
 # ─── Test Sicurezza ────────────────────────────────────────────────────────────
@@ -748,9 +712,7 @@ def test_security_no_originals_in_report():
     findings = engine.process_findings(raw_findings, "file-001")
     config = BatchConfig(mode=BatchMode.STRICT)
     batch = Batch(config=config)
-    file_rec = FileRecord(
-        original_name="test_users.csv", stored_path=str(TEST_DATA_DIR / "test_users.csv")
-    )
+    file_rec = FileRecord(original_name="test_users.csv", stored_path=str(TEST_DATA_DIR / "test_users.csv"))
     file_rec.status = FileStatus.PROCESSED
     batch.files.append(file_rec)
     report_data = build_report_data(batch, findings, "2024-03-15T09:00:00", "2024-03-15T09:01:00")
@@ -790,9 +752,7 @@ def test_security_no_sensitive_in_logs():
     handler = logging.StreamHandler(log_capture)
     logging.getLogger("app").addHandler(handler)
     try:
-        chunk = TextChunk(
-            text="Email: mario.rossi@ente.gov.it, CF: RSSMRA80A01H501A", source_ref="sec-test"
-        )
+        chunk = TextChunk(text="Email: mario.rossi@ente.gov.it, CF: RSSMRA80A01H501A", source_ref="sec-test")
         detect_in_chunk(chunk)
     finally:
         logging.getLogger("app").removeHandler(handler)

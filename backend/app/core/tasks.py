@@ -24,11 +24,10 @@ Usage in endpoints:
 import logging
 import os
 
-from celery import Celery, Task
-
 from app.core.batch_manager import get_batch, update_batch
 from app.core.pipeline import run_apply_pipeline, run_scan_pipeline
 from app.models.schemas import BatchStatus
+from celery import Celery, Task
 
 logger = logging.getLogger(__name__)
 
@@ -48,21 +47,16 @@ celery_app.conf.update(
     result_serializer="json",
     timezone="UTC",
     enable_utc=True,
-    
     # Task execution timeouts (more generous than HTTP timeouts)
-    task_soft_time_limit=1200,                # 20 minutes soft limit
-    task_time_limit=1500,                     # 25 minutes hard limit
-    
+    task_soft_time_limit=1200,  # 20 minutes soft limit
+    task_time_limit=1500,  # 25 minutes hard limit
     # Worker configuration for single VM
-    worker_prefetch_multiplier=1,             # Process one task at a time
-    worker_max_tasks_per_child=1000,          # Refresh worker process periodically
-    
+    worker_prefetch_multiplier=1,  # Process one task at a time
+    worker_max_tasks_per_child=1000,  # Refresh worker process periodically
     # Auto-scale disabled on single VM
     worker_concurrency=int(os.getenv("CELERY_WORKER_CONCURRENCY", "1")),
-    
     # Enable result cleanup after completion
-    result_expires=3600,                      # Keep results for 1 hour
-    
+    result_expires=3600,  # Keep results for 1 hour
     # Task routing (both tasks to same queue)
     task_routes={
         "app.core.tasks.scan_batch_task": {"queue": "pseudonymization"},
@@ -75,11 +69,13 @@ celery_app.conf.update(
 # Custom Task Class with Database Context Handling
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class DatabaseTask(Task):
     """
     Custom task class for proper error handling and state management.
     Ensures batch state is updated throughout task lifecycle.
     """
+
     autoretry_for = (Exception,)
     retry_kwargs = {"max_retries": 3}
     retry_backoff = True
@@ -90,14 +86,15 @@ class DatabaseTask(Task):
 # TASK 1: Async Scan Pipeline
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 @celery_app.task(base=DatabaseTask, bind=True, name="app.core.tasks.scan_batch_task")
 def scan_batch_task(self, batch_id: str) -> dict:
     """
     Async scan task: Parse files, detect entities, populate findings.
-    
+
     Args:
         batch_id: Unique batch identifier
-        
+
     Returns:
         dict with:
         - batch_id: The processed batch ID
@@ -105,37 +102,37 @@ def scan_batch_task(self, batch_id: str) -> dict:
         - files_count: Number of files processed
         - safety_label: Overall safety assessment
         - status: Final batch status
-        
+
     Raises:
         BatchStateError: If batch not found or in invalid state
         Exception: Various parsing/detection errors (auto-retry enabled)
     """
     try:
         logger.info("🔄 Scan task starting for batch: %s", batch_id)
-        
+
         # Verify batch exists
         batch = get_batch(batch_id)
         if not batch:
             raise ValueError(f"Batch not found: {batch_id}")
-        
+
         # Mark as scanning
         batch.status = BatchStatus.SCANNING
         update_batch(batch)
-        
+
         # Run scanning pipeline (blocking, CPU-intensive)
         batch = run_scan_pipeline(batch_id)
-        
+
         # Mark as ready for review
         batch.status = BatchStatus.REVIEW
         update_batch(batch)
-        
+
         logger.info(
             "✅ Scan task completed for batch %s: %d findings in %d files",
             batch_id,
             len(batch.findings),
             len(batch.files),
         )
-        
+
         return {
             "batch_id": batch_id,
             "findings_count": len(batch.findings),
@@ -143,17 +140,17 @@ def scan_batch_task(self, batch_id: str) -> dict:
             "safety_label": batch.safety_label.value if batch.safety_label else "SAFE_TO_UPLOAD",
             "status": batch.status.value,
         }
-        
+
     except Exception as exc:
         logger.error("❌ Scan task failed for batch %s: %s", batch_id, exc, exc_info=True)
-        
+
         # Mark batch as error
         batch = get_batch(batch_id)
         if batch:
             batch.status = BatchStatus.ERROR
             batch.error_message = str(exc)
             update_batch(batch)
-        
+
         # Re-raise to trigger retry or final failure
         raise
 
@@ -162,71 +159,72 @@ def scan_batch_task(self, batch_id: str) -> dict:
 # TASK 2: Async Apply Pipeline
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 @celery_app.task(base=DatabaseTask, bind=True, name="app.core.tasks.apply_batch_task")
 def apply_batch_task(self, batch_id: str, started_at: str) -> dict:
     """
     Async apply task: Transform files, generate mapping, create output ZIP.
-    
+
     Prerequisites:
     - Batch must be in REVIEW status
     - User decisions must be stored in batch state
     - Passphrase must be available
-    
+
     Args:
         batch_id: Unique batch identifier
         started_at: ISO timestamp of scan start (for audit)
-        
+
     Returns:
         dict with:
         - batch_id: The processed batch ID
         - zip_path: Path to output ZIP file
         - decisions_count: Number of review decisions applied
         - status: Final batch status
-        
+
     Raises:
         BatchStateError: If batch not in review state
         TransformError: File processing errors (auto-retry enabled)
     """
     try:
         logger.info("🔄 Apply task starting for batch: %s", batch_id)
-        
+
         # Verify batch exists
         batch = get_batch(batch_id)
         if not batch:
             raise ValueError(f"Batch not found: {batch_id}")
-        
+
         # Mark as applying
         batch.status = BatchStatus.APPLYING
         update_batch(batch)
-        
+
         # Run apply pipeline (blocking, file I/O intensive)
         zip_path = run_apply_pipeline(batch_id, started_at)
-        
+
         # Pipeline sets status to DONE or DONE_WITH_ERRORS
         batch = get_batch(batch_id)
-        
+
         logger.info(
             "✅ Apply task completed for batch %s: output at %s",
             batch_id,
             zip_path,
         )
-        
+
         return {
             "batch_id": batch_id,
             "zip_path": str(zip_path),
             "status": batch.status.value if batch else "UNKNOWN",
         }
-        
+
     except Exception as exc:
         logger.error("❌ Apply task failed for batch %s: %s", batch_id, exc, exc_info=True)
-        
+
         # Mark batch as error
         batch = get_batch(batch_id)
         if batch:
             batch.status = BatchStatus.ERROR
             batch.error_message = str(exc)
             update_batch(batch)
-        
+
         # Re-raise to trigger retry or final failure
         raise
 
@@ -235,13 +233,14 @@ def apply_batch_task(self, batch_id: str, started_at: str) -> dict:
 # Task Management Utilities
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def get_task_status(task_id: str) -> dict:
     """
     Get current status of a Celery task.
-    
+
     Args:
         task_id: Celery task ID
-        
+
     Returns:
         dict with:
         - status: Task state (PENDING, STARTED, SUCCESS, FAILURE, RETRY)
@@ -259,7 +258,7 @@ def get_task_status(task_id: str) -> dict:
 def revoke_task(task_id: str, terminate: bool = False) -> None:
     """
     Revoke (cancel) a pending or running task.
-    
+
     Args:
         task_id: Celery task ID
         terminate: If True, terminate running task immediately

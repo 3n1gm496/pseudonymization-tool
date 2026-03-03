@@ -4,7 +4,6 @@ import sys
 from pathlib import Path
 
 import pytest
-
 from app.core import batch_manager as bm
 from app.models.schemas import Batch, BatchConfig, BatchMode, PresetName
 

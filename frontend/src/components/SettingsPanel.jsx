@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import LDAPSettings from './LDAPSettings'
 
 const SettingsPanel = ({ isOpen, onClose, showToast }) => {
@@ -62,8 +62,8 @@ const SettingsPanel = ({ isOpen, onClose, showToast }) => {
                 <h4 className="font-semibold mb-2 text-sm">Flussi disponibili</h4>
                 <ul className="text-sm space-y-1 text-slate-700 dark:text-slate-300">
                   <li>📝 <b>Pseudonimizza:</b> Scansiona → Rivedi → Apply → Scarica testo + mapping</li>
-                  <li>📦 <b>Prepara per AI:</b> Esporta testo pseudonimizzato + mapping.enc per inviare all'AI</li>
-                  <li>🔓 <b>Decifra AI:</b> Decifra la risposta pseudonimizzata dell'AI con lo stesso mapping</li>
+                  <li>📦 <b>Prepara per AI:</b> Esporta testo pseudonimizzato + mapping.enc per inviare all&apos;AI</li>
+                  <li>🔓 <b>Decifra AI:</b> Decifra la risposta pseudonimizzata dell&apos;AI con lo stesso mapping</li>
                   <li>🔄 <b>Revert ZIP:</b> Reverta file ZIP completi del tool</li>
                 </ul>
               </div>

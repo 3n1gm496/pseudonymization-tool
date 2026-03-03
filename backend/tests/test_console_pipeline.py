@@ -4,9 +4,11 @@ Test suite per app/core/console_pipeline.py.
 Copre run_text_scan e run_text_apply con mock delle dipendenze esterne
 (batch_manager, engine, detectors) per isolare la logica del pipeline.
 """
-import pytest
+
 from unittest.mock import MagicMock, patch
-from app.core.console_pipeline import run_text_scan, run_text_apply
+
+import pytest
+from app.core.console_pipeline import run_text_apply, run_text_scan
 from app.models.schemas import (
     Batch,
     BatchConfig,
@@ -22,14 +24,18 @@ from app.models.schemas import (
     SafetyLabel,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def make_finding(file_id="file-001", entity_type=EntityType.PERSON,
-                 confidence=0.95, review_action=ReviewAction.ACCEPT,
-                 pseudonym="PERSON_001"):
+
+def make_finding(
+    file_id="file-001",
+    entity_type=EntityType.PERSON,
+    confidence=0.95,
+    review_action=ReviewAction.ACCEPT,
+    pseudonym="PERSON_001",
+):
     """Crea un Finding valido per i test."""
     return Finding(
         finding_id="f-001",
@@ -49,6 +55,7 @@ def make_finding(file_id="file-001", entity_type=EntityType.PERSON,
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def minimal_batch():
@@ -76,6 +83,7 @@ def batch_with_finding(minimal_batch):
 # run_text_scan — batch non trovato
 # ---------------------------------------------------------------------------
 
+
 class TestRunTextScanBatchNotFound:
     def test_raises_value_error_when_batch_missing(self):
         """run_text_scan deve sollevare ValueError se il batch non esiste."""
@@ -87,6 +95,7 @@ class TestRunTextScanBatchNotFound:
 # ---------------------------------------------------------------------------
 # run_text_scan — happy path
 # ---------------------------------------------------------------------------
+
 
 class TestRunTextScanHappyPath:
     def _mock_finding(self, entity_type_value="PERSON", confidence=0.95):
@@ -103,16 +112,17 @@ class TestRunTextScanHappyPath:
         mock_finding = self._mock_finding()
         mock_engine.process_findings.return_value = [mock_finding]
 
-        with patch("app.core.console_pipeline.get_batch", return_value=minimal_batch), \
-             patch("app.core.console_pipeline.get_or_create_engine", return_value=mock_engine), \
-             patch("app.core.console_pipeline.build_extra_detectors", return_value=[]), \
-             patch("app.core.console_pipeline.detect_in_text", return_value=[mock_finding]), \
-             patch("app.core.console_pipeline.get_enabled_entity_types", return_value=["PERSON"]), \
-             patch("app.core.console_pipeline.get_confidence_threshold", return_value=0.5), \
-             patch("app.core.console_pipeline.compute_safety_label",
-                   return_value=SafetyLabel.SAFE_TO_UPLOAD), \
-             patch("app.core.console_pipeline.update_batch") as mock_update, \
-             patch("app.core.policies.is_ldap_enabled_for_preset", return_value=False):
+        with (
+            patch("app.core.console_pipeline.get_batch", return_value=minimal_batch),
+            patch("app.core.console_pipeline.get_or_create_engine", return_value=mock_engine),
+            patch("app.core.console_pipeline.build_extra_detectors", return_value=[]),
+            patch("app.core.console_pipeline.detect_in_text", return_value=[mock_finding]),
+            patch("app.core.console_pipeline.get_enabled_entity_types", return_value=["PERSON"]),
+            patch("app.core.console_pipeline.get_confidence_threshold", return_value=0.5),
+            patch("app.core.console_pipeline.compute_safety_label", return_value=SafetyLabel.SAFE_TO_UPLOAD),
+            patch("app.core.console_pipeline.update_batch") as mock_update,
+            patch("app.core.policies.is_ldap_enabled_for_preset", return_value=False),
+        ):
 
             file_id, findings, safety = run_text_scan("test-batch-001", "Mario Rossi lavora qui")
 
@@ -128,16 +138,17 @@ class TestRunTextScanHappyPath:
         mock_engine = MagicMock()
         mock_engine.process_findings.return_value = []
 
-        with patch("app.core.console_pipeline.get_batch", return_value=minimal_batch), \
-             patch("app.core.console_pipeline.get_or_create_engine", return_value=mock_engine), \
-             patch("app.core.console_pipeline.build_extra_detectors", return_value=[]), \
-             patch("app.core.console_pipeline.detect_in_text", return_value=[]), \
-             patch("app.core.console_pipeline.get_enabled_entity_types", return_value=[]), \
-             patch("app.core.console_pipeline.get_confidence_threshold", return_value=0.5), \
-             patch("app.core.console_pipeline.compute_safety_label",
-                   return_value=SafetyLabel.SAFE_TO_UPLOAD), \
-             patch("app.core.console_pipeline.update_batch"), \
-             patch("app.core.policies.is_ldap_enabled_for_preset", return_value=False):
+        with (
+            patch("app.core.console_pipeline.get_batch", return_value=minimal_batch),
+            patch("app.core.console_pipeline.get_or_create_engine", return_value=mock_engine),
+            patch("app.core.console_pipeline.build_extra_detectors", return_value=[]),
+            patch("app.core.console_pipeline.detect_in_text", return_value=[]),
+            patch("app.core.console_pipeline.get_enabled_entity_types", return_value=[]),
+            patch("app.core.console_pipeline.get_confidence_threshold", return_value=0.5),
+            patch("app.core.console_pipeline.compute_safety_label", return_value=SafetyLabel.SAFE_TO_UPLOAD),
+            patch("app.core.console_pipeline.update_batch"),
+            patch("app.core.policies.is_ldap_enabled_for_preset", return_value=False),
+        ):
 
             run_text_scan("test-batch-001", "testo vuoto")
 
@@ -150,18 +161,17 @@ class TestRunTextScanHappyPath:
         mock_ip = self._mock_finding("IP_ADDRESS", 0.90)
         mock_engine.process_findings.return_value = [mock_person, mock_ip]
 
-        with patch("app.core.console_pipeline.get_batch", return_value=minimal_batch), \
-             patch("app.core.console_pipeline.get_or_create_engine", return_value=mock_engine), \
-             patch("app.core.console_pipeline.build_extra_detectors", return_value=[]), \
-             patch("app.core.console_pipeline.detect_in_text",
-                   return_value=[mock_person, mock_ip]), \
-             patch("app.core.console_pipeline.get_enabled_entity_types",
-                   return_value=["PERSON"]), \
-             patch("app.core.console_pipeline.get_confidence_threshold", return_value=0.5), \
-             patch("app.core.console_pipeline.compute_safety_label",
-                   return_value=SafetyLabel.SAFE_TO_UPLOAD), \
-             patch("app.core.console_pipeline.update_batch"), \
-             patch("app.core.policies.is_ldap_enabled_for_preset", return_value=False):
+        with (
+            patch("app.core.console_pipeline.get_batch", return_value=minimal_batch),
+            patch("app.core.console_pipeline.get_or_create_engine", return_value=mock_engine),
+            patch("app.core.console_pipeline.build_extra_detectors", return_value=[]),
+            patch("app.core.console_pipeline.detect_in_text", return_value=[mock_person, mock_ip]),
+            patch("app.core.console_pipeline.get_enabled_entity_types", return_value=["PERSON"]),
+            patch("app.core.console_pipeline.get_confidence_threshold", return_value=0.5),
+            patch("app.core.console_pipeline.compute_safety_label", return_value=SafetyLabel.SAFE_TO_UPLOAD),
+            patch("app.core.console_pipeline.update_batch"),
+            patch("app.core.policies.is_ldap_enabled_for_preset", return_value=False),
+        ):
 
             _, findings, _ = run_text_scan("test-batch-001", "Mario Rossi 192.168.1.1")
 
@@ -175,18 +185,17 @@ class TestRunTextScanHappyPath:
         mock_low = self._mock_finding("PERSON", 0.30)  # sotto soglia 0.5
         mock_engine.process_findings.return_value = [mock_high, mock_low]
 
-        with patch("app.core.console_pipeline.get_batch", return_value=minimal_batch), \
-             patch("app.core.console_pipeline.get_or_create_engine", return_value=mock_engine), \
-             patch("app.core.console_pipeline.build_extra_detectors", return_value=[]), \
-             patch("app.core.console_pipeline.detect_in_text",
-                   return_value=[mock_high, mock_low]), \
-             patch("app.core.console_pipeline.get_enabled_entity_types",
-                   return_value=["PERSON"]), \
-             patch("app.core.console_pipeline.get_confidence_threshold", return_value=0.5), \
-             patch("app.core.console_pipeline.compute_safety_label",
-                   return_value=SafetyLabel.SAFE_TO_UPLOAD), \
-             patch("app.core.console_pipeline.update_batch"), \
-             patch("app.core.policies.is_ldap_enabled_for_preset", return_value=False):
+        with (
+            patch("app.core.console_pipeline.get_batch", return_value=minimal_batch),
+            patch("app.core.console_pipeline.get_or_create_engine", return_value=mock_engine),
+            patch("app.core.console_pipeline.build_extra_detectors", return_value=[]),
+            patch("app.core.console_pipeline.detect_in_text", return_value=[mock_high, mock_low]),
+            patch("app.core.console_pipeline.get_enabled_entity_types", return_value=["PERSON"]),
+            patch("app.core.console_pipeline.get_confidence_threshold", return_value=0.5),
+            patch("app.core.console_pipeline.compute_safety_label", return_value=SafetyLabel.SAFE_TO_UPLOAD),
+            patch("app.core.console_pipeline.update_batch"),
+            patch("app.core.policies.is_ldap_enabled_for_preset", return_value=False),
+        ):
 
             _, findings, _ = run_text_scan("test-batch-001", "testo")
 
@@ -200,17 +209,17 @@ class TestRunTextScanHappyPath:
         mock_finding.is_text_input = False  # inizialmente False
         mock_engine.process_findings.return_value = [mock_finding]
 
-        with patch("app.core.console_pipeline.get_batch", return_value=minimal_batch), \
-             patch("app.core.console_pipeline.get_or_create_engine", return_value=mock_engine), \
-             patch("app.core.console_pipeline.build_extra_detectors", return_value=[]), \
-             patch("app.core.console_pipeline.detect_in_text", return_value=[mock_finding]), \
-             patch("app.core.console_pipeline.get_enabled_entity_types",
-                   return_value=["PERSON"]), \
-             patch("app.core.console_pipeline.get_confidence_threshold", return_value=0.5), \
-             patch("app.core.console_pipeline.compute_safety_label",
-                   return_value=SafetyLabel.SAFE_TO_UPLOAD), \
-             patch("app.core.console_pipeline.update_batch"), \
-             patch("app.core.policies.is_ldap_enabled_for_preset", return_value=False):
+        with (
+            patch("app.core.console_pipeline.get_batch", return_value=minimal_batch),
+            patch("app.core.console_pipeline.get_or_create_engine", return_value=mock_engine),
+            patch("app.core.console_pipeline.build_extra_detectors", return_value=[]),
+            patch("app.core.console_pipeline.detect_in_text", return_value=[mock_finding]),
+            patch("app.core.console_pipeline.get_enabled_entity_types", return_value=["PERSON"]),
+            patch("app.core.console_pipeline.get_confidence_threshold", return_value=0.5),
+            patch("app.core.console_pipeline.compute_safety_label", return_value=SafetyLabel.SAFE_TO_UPLOAD),
+            patch("app.core.console_pipeline.update_batch"),
+            patch("app.core.policies.is_ldap_enabled_for_preset", return_value=False),
+        ):
 
             _, findings, _ = run_text_scan("test-batch-001", "testo")
 
@@ -223,16 +232,17 @@ class TestRunTextScanHappyPath:
         mock_engine = MagicMock()
         mock_engine.process_findings.return_value = []
 
-        with patch("app.core.console_pipeline.get_batch", return_value=minimal_batch), \
-             patch("app.core.console_pipeline.get_or_create_engine", return_value=mock_engine), \
-             patch("app.core.console_pipeline.build_extra_detectors", return_value=[]), \
-             patch("app.core.console_pipeline.detect_in_text", return_value=[]), \
-             patch("app.core.console_pipeline.get_enabled_entity_types", return_value=[]), \
-             patch("app.core.console_pipeline.get_confidence_threshold", return_value=0.5), \
-             patch("app.core.console_pipeline.compute_safety_label",
-                   return_value=SafetyLabel.SAFE_TO_UPLOAD), \
-             patch("app.core.console_pipeline.update_batch"), \
-             patch("app.core.policies.is_ldap_enabled_for_preset", return_value=False):
+        with (
+            patch("app.core.console_pipeline.get_batch", return_value=minimal_batch),
+            patch("app.core.console_pipeline.get_or_create_engine", return_value=mock_engine),
+            patch("app.core.console_pipeline.build_extra_detectors", return_value=[]),
+            patch("app.core.console_pipeline.detect_in_text", return_value=[]),
+            patch("app.core.console_pipeline.get_enabled_entity_types", return_value=[]),
+            patch("app.core.console_pipeline.get_confidence_threshold", return_value=0.5),
+            patch("app.core.console_pipeline.compute_safety_label", return_value=SafetyLabel.SAFE_TO_UPLOAD),
+            patch("app.core.console_pipeline.update_batch"),
+            patch("app.core.policies.is_ldap_enabled_for_preset", return_value=False),
+        ):
 
             file_id, _, _ = run_text_scan("test-batch-001", "testo", label="mio_testo")
 
@@ -246,6 +256,7 @@ class TestRunTextScanHappyPath:
 # run_text_apply — batch non trovato
 # ---------------------------------------------------------------------------
 
+
 class TestRunTextApplyBatchNotFound:
     def test_raises_value_error_when_batch_missing(self):
         """run_text_apply deve sollevare ValueError se il batch non esiste."""
@@ -258,24 +269,23 @@ class TestRunTextApplyBatchNotFound:
 # run_text_apply — happy path
 # ---------------------------------------------------------------------------
 
+
 class TestRunTextApplyHappyPath:
     def test_returns_pseudonymized_text_and_metadata(self, minimal_batch):
         """run_text_apply deve restituire (text, safety, residual_warnings, applied_count)."""
-        with patch("app.core.console_pipeline.get_batch", return_value=minimal_batch), \
-             patch("app.core.console_pipeline.apply_pseudonyms_to_text",
-                   return_value=("testo anonimizzato", 2)), \
-             patch("app.core.console_pipeline.build_extra_detectors", return_value=[]), \
-             patch("app.core.console_pipeline.residual_scan", return_value=[]), \
-             patch("app.core.console_pipeline.get_enabled_entity_types", return_value=["PERSON"]), \
-             patch("app.core.console_pipeline.get_confidence_threshold", return_value=0.5), \
-             patch("app.core.console_pipeline.compute_residual_warnings", return_value=[]), \
-             patch("app.core.console_pipeline.compute_safety_label",
-                   return_value=SafetyLabel.SAFE_TO_UPLOAD), \
-             patch("app.core.console_pipeline.update_batch"):
+        with (
+            patch("app.core.console_pipeline.get_batch", return_value=minimal_batch),
+            patch("app.core.console_pipeline.apply_pseudonyms_to_text", return_value=("testo anonimizzato", 2)),
+            patch("app.core.console_pipeline.build_extra_detectors", return_value=[]),
+            patch("app.core.console_pipeline.residual_scan", return_value=[]),
+            patch("app.core.console_pipeline.get_enabled_entity_types", return_value=["PERSON"]),
+            patch("app.core.console_pipeline.get_confidence_threshold", return_value=0.5),
+            patch("app.core.console_pipeline.compute_residual_warnings", return_value=[]),
+            patch("app.core.console_pipeline.compute_safety_label", return_value=SafetyLabel.SAFE_TO_UPLOAD),
+            patch("app.core.console_pipeline.update_batch"),
+        ):
 
-            text, safety, residual, count = run_text_apply(
-                "test-batch-001", "file-001", "testo originale"
-            )
+            text, safety, residual, count = run_text_apply("test-batch-001", "file-001", "testo originale")
 
         assert text == "testo anonimizzato"
         assert safety == SafetyLabel.SAFE_TO_UPLOAD
@@ -293,17 +303,17 @@ class TestRunTextApplyHappyPath:
         )
         minimal_batch.files.append(file_rec)
 
-        with patch("app.core.console_pipeline.get_batch", return_value=minimal_batch), \
-             patch("app.core.console_pipeline.apply_pseudonyms_to_text",
-                   return_value=("output", 0)), \
-             patch("app.core.console_pipeline.build_extra_detectors", return_value=[]), \
-             patch("app.core.console_pipeline.residual_scan", return_value=[]), \
-             patch("app.core.console_pipeline.get_enabled_entity_types", return_value=[]), \
-             patch("app.core.console_pipeline.get_confidence_threshold", return_value=0.5), \
-             patch("app.core.console_pipeline.compute_residual_warnings", return_value=[]), \
-             patch("app.core.console_pipeline.compute_safety_label",
-                   return_value=SafetyLabel.SAFE_TO_UPLOAD), \
-             patch("app.core.console_pipeline.update_batch"):
+        with (
+            patch("app.core.console_pipeline.get_batch", return_value=minimal_batch),
+            patch("app.core.console_pipeline.apply_pseudonyms_to_text", return_value=("output", 0)),
+            patch("app.core.console_pipeline.build_extra_detectors", return_value=[]),
+            patch("app.core.console_pipeline.residual_scan", return_value=[]),
+            patch("app.core.console_pipeline.get_enabled_entity_types", return_value=[]),
+            patch("app.core.console_pipeline.get_confidence_threshold", return_value=0.5),
+            patch("app.core.console_pipeline.compute_residual_warnings", return_value=[]),
+            patch("app.core.console_pipeline.compute_safety_label", return_value=SafetyLabel.SAFE_TO_UPLOAD),
+            patch("app.core.console_pipeline.update_batch"),
+        ):
 
             run_text_apply("test-batch-001", "file-002", "testo")
 
@@ -313,19 +323,17 @@ class TestRunTextApplyHappyPath:
         """I residual_warnings devono essere aggiunti al batch."""
         assert minimal_batch.residual_warnings == []
 
-        with patch("app.core.console_pipeline.get_batch", return_value=minimal_batch), \
-             patch("app.core.console_pipeline.apply_pseudonyms_to_text",
-                   return_value=("output", 0)), \
-             patch("app.core.console_pipeline.build_extra_detectors", return_value=[]), \
-             patch("app.core.console_pipeline.residual_scan", return_value=[MagicMock()]), \
-             patch("app.core.console_pipeline.get_enabled_entity_types",
-                   return_value=["PERSON"]), \
-             patch("app.core.console_pipeline.get_confidence_threshold", return_value=0.5), \
-             patch("app.core.console_pipeline.compute_residual_warnings",
-                   return_value=["warning-1"]), \
-             patch("app.core.console_pipeline.compute_safety_label",
-                   return_value=SafetyLabel.SAFE_WITH_WARNINGS), \
-             patch("app.core.console_pipeline.update_batch"):
+        with (
+            patch("app.core.console_pipeline.get_batch", return_value=minimal_batch),
+            patch("app.core.console_pipeline.apply_pseudonyms_to_text", return_value=("output", 0)),
+            patch("app.core.console_pipeline.build_extra_detectors", return_value=[]),
+            patch("app.core.console_pipeline.residual_scan", return_value=[MagicMock()]),
+            patch("app.core.console_pipeline.get_enabled_entity_types", return_value=["PERSON"]),
+            patch("app.core.console_pipeline.get_confidence_threshold", return_value=0.5),
+            patch("app.core.console_pipeline.compute_residual_warnings", return_value=["warning-1"]),
+            patch("app.core.console_pipeline.compute_safety_label", return_value=SafetyLabel.SAFE_WITH_WARNINGS),
+            patch("app.core.console_pipeline.update_batch"),
+        ):
 
             _, _, residual, _ = run_text_apply("test-batch-001", "file-001", "testo")
 
@@ -344,18 +352,17 @@ class TestRunTextApplyHappyPath:
             captured_whitelist["value"] = synthetic_whitelist
             return []
 
-        with patch("app.core.console_pipeline.get_batch", return_value=batch), \
-             patch("app.core.console_pipeline.apply_pseudonyms_to_text",
-                   return_value=("output", 1)), \
-             patch("app.core.console_pipeline.build_extra_detectors", return_value=[]), \
-             patch("app.core.console_pipeline.residual_scan",
-                   side_effect=fake_residual_scan), \
-             patch("app.core.console_pipeline.get_enabled_entity_types", return_value=[]), \
-             patch("app.core.console_pipeline.get_confidence_threshold", return_value=0.5), \
-             patch("app.core.console_pipeline.compute_residual_warnings", return_value=[]), \
-             patch("app.core.console_pipeline.compute_safety_label",
-                   return_value=SafetyLabel.SAFE_TO_UPLOAD), \
-             patch("app.core.console_pipeline.update_batch"):
+        with (
+            patch("app.core.console_pipeline.get_batch", return_value=batch),
+            patch("app.core.console_pipeline.apply_pseudonyms_to_text", return_value=("output", 1)),
+            patch("app.core.console_pipeline.build_extra_detectors", return_value=[]),
+            patch("app.core.console_pipeline.residual_scan", side_effect=fake_residual_scan),
+            patch("app.core.console_pipeline.get_enabled_entity_types", return_value=[]),
+            patch("app.core.console_pipeline.get_confidence_threshold", return_value=0.5),
+            patch("app.core.console_pipeline.compute_residual_warnings", return_value=[]),
+            patch("app.core.console_pipeline.compute_safety_label", return_value=SafetyLabel.SAFE_TO_UPLOAD),
+            patch("app.core.console_pipeline.update_batch"),
+        ):
 
             run_text_apply("test-batch-001", "file-001", "Mario Rossi")
 
@@ -374,18 +381,17 @@ class TestRunTextApplyHappyPath:
             captured_whitelist["value"] = synthetic_whitelist
             return []
 
-        with patch("app.core.console_pipeline.get_batch", return_value=batch), \
-             patch("app.core.console_pipeline.apply_pseudonyms_to_text",
-                   return_value=("output", 1)), \
-             patch("app.core.console_pipeline.build_extra_detectors", return_value=[]), \
-             patch("app.core.console_pipeline.residual_scan",
-                   side_effect=fake_residual_scan), \
-             patch("app.core.console_pipeline.get_enabled_entity_types", return_value=[]), \
-             patch("app.core.console_pipeline.get_confidence_threshold", return_value=0.5), \
-             patch("app.core.console_pipeline.compute_residual_warnings", return_value=[]), \
-             patch("app.core.console_pipeline.compute_safety_label",
-                   return_value=SafetyLabel.SAFE_TO_UPLOAD), \
-             patch("app.core.console_pipeline.update_batch"):
+        with (
+            patch("app.core.console_pipeline.get_batch", return_value=batch),
+            patch("app.core.console_pipeline.apply_pseudonyms_to_text", return_value=("output", 1)),
+            patch("app.core.console_pipeline.build_extra_detectors", return_value=[]),
+            patch("app.core.console_pipeline.residual_scan", side_effect=fake_residual_scan),
+            patch("app.core.console_pipeline.get_enabled_entity_types", return_value=[]),
+            patch("app.core.console_pipeline.get_confidence_threshold", return_value=0.5),
+            patch("app.core.console_pipeline.compute_residual_warnings", return_value=[]),
+            patch("app.core.console_pipeline.compute_safety_label", return_value=SafetyLabel.SAFE_TO_UPLOAD),
+            patch("app.core.console_pipeline.update_batch"),
+        ):
 
             run_text_apply("test-batch-001", "file-001", "Mario Rossi")
 

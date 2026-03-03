@@ -60,6 +60,7 @@ def setup_test_credentials():
     AUTH_PASSWORD must be explicitly configured (no hardcoded default).
     """
     import os
+
     os.environ["AUTH_PASSWORD"] = "admin123!"
     os.environ["AUTH_SECRET"] = "test-secret-key-32-chars-min-1234567890ab"
     yield
@@ -73,7 +74,7 @@ def setup_celery_for_testing():
     for a running Redis broker or Celery worker.
     """
     from app.core.tasks import celery_app
-    
+
     # CRITICAL: Enable EAGER mode so tasks execute synchronously
     celery_app.conf.task_always_eager = True
     # Eagerly execute tasks with no delay (no retry delays)
@@ -104,13 +105,13 @@ def disable_auth_for_tests(monkeypatch):
     """
     from app import main
     from app.core import auth
-    
+
     # Use object.__setattr__ to bypass frozen dataclass constraint
-    object.__setattr__(main._profile_config, 'auth_enabled', False)
-    
+    object.__setattr__(main._profile_config, "auth_enabled", False)
+
     # Also patch the module-level AUTH_ENABLED constant used by validate_csrf_dependency
     monkeypatch.setattr(auth, "AUTH_ENABLED", False)
     yield
-    
+
     # Restore original value after test
-    object.__setattr__(main._profile_config, 'auth_enabled', True)
+    object.__setattr__(main._profile_config, "auth_enabled", True)

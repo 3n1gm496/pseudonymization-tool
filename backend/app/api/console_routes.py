@@ -15,8 +15,8 @@ from app.core.batch_manager import (
     get_batch_dir,
     get_decisions,
     get_passphrase,
-    store_passphrase,
     set_batch_start_time,
+    store_passphrase,
 )
 from app.core.config import API_HEAVY_TIMEOUT_SECONDS, MAX_CONSOLE_TEXT_CHARS
 from app.core.console_pipeline import run_text_apply, run_text_scan
