@@ -17,6 +17,7 @@ from app.core.auth import (
     SESSION_TTL_SECONDS,
     auth_uses_default_password,
     create_session,
+    destroy_all_sessions,
     destroy_session,
     extract_token_from_request,
     get_csrf_token_for_session,
@@ -153,6 +154,31 @@ async def auth_logout(request: Request, response: Response):
     )
     audit_event(request, "auth_logout")
     return {"ok": True}
+
+
+@router.post("/auth/logout-all")
+async def auth_logout_all(request: Request, response: Response):
+    """
+    Logout globale: invalida tutte le sessioni attive.
+
+    Richiede autenticazione valida. Utile per rispondere a un incidente
+    di sicurezza o per forzare il re-login di tutti i client attivi.
+    Restituisce il numero di sessioni invalidate.
+    """
+    token = extract_token_from_request(request)
+    if AUTH_ENABLED:
+        username = validate_session(token)
+        if not username:
+            raise HTTPException(status_code=401, detail="Non autenticato")
+
+    count = destroy_all_sessions()
+
+    # Cancella anche il cookie della sessione corrente
+    response.delete_cookie(
+        key=SESSION_COOKIE_NAME, path="/", secure=SESSION_COOKIE_SECURE, httponly=True, samesite="strict"
+    )
+    audit_event(request, "auth_logout_all", sessions_destroyed=count)
+    return {"ok": True, "sessions_destroyed": count}
 
 
 @router.get("/auth/me")

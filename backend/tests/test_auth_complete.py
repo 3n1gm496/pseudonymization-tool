@@ -23,6 +23,7 @@ from app.core.auth import (
     cleanup_csrf_token,
     create_csrf_token,
     create_session,
+    destroy_all_sessions,
     destroy_session,
     extract_token_from_request,
     generate_csrf_token,
@@ -667,3 +668,88 @@ class TestLoginRateLimit:
         assert result is not None  # nessuna eccezione = OK
 
         self._reset_buckets()
+
+
+class TestDestroyAllSessions:
+    """Test per la funzione destroy_all_sessions e l'endpoint /api/auth/logout-all."""
+
+    @patch("app.core.auth.AUTH_ENABLED", True)
+    def test_destroy_all_sessions_clears_in_memory(self):
+        """destroy_all_sessions svuota tutte le sessioni in-memory."""
+        # Crea alcune sessioni
+        t1, _, _ = create_session("admin")
+        t2, _, _ = create_session("admin")
+        # Con AUTH_ENABLED=True, validate_session controlla lo store
+        assert validate_session(t1) is not None
+        assert validate_session(t2) is not None
+
+        count = destroy_all_sessions()
+        assert count >= 2
+        # Dopo destroy_all_sessions, le sessioni non sono più valide
+        assert validate_session(t1) is None
+        assert validate_session(t2) is None
+
+    def test_destroy_all_sessions_returns_count(self):
+        """destroy_all_sessions restituisce il numero di sessioni distrutte."""
+        # Crea 3 sessioni
+        create_session("admin")
+        create_session("admin")
+        create_session("admin")
+        count = destroy_all_sessions()
+        assert count >= 3
+
+    def test_destroy_all_sessions_empty(self):
+        """destroy_all_sessions su store vuoto restituisce 0."""
+        destroy_all_sessions()  # Svuota prima
+        count = destroy_all_sessions()
+        assert count == 0
+
+    @patch("app.core.auth.AUTH_ENABLED", True)
+    @patch("app.api.auth_routes.AUTH_ENABLED", True)
+    def test_logout_all_endpoint_unauthenticated(self):
+        """POST /api/auth/logout-all senza sessione → 401 quando auth è abilitata."""
+        client = TestClient(app)
+        response = client.post("/api/auth/logout-all")
+        assert response.status_code == 401
+
+    def test_logout_all_endpoint_authenticated(self):
+        """POST /api/auth/logout-all con sessione valida → 200 con sessions_destroyed."""
+        import os
+        client = TestClient(app)
+        password = os.environ.get("AUTH_PASSWORD", "T3st-0nly-N0t-Pr0d!#2026")
+
+        # Login per ottenere sessione e CSRF token
+        login_resp = client.post("/api/auth/login", json={"username": "admin", "password": password})
+        assert login_resp.status_code == 200
+        csrf_token = login_resp.headers.get("X-CSRF-Token", "")
+
+        # Logout globale
+        response = client.post(
+            "/api/auth/logout-all",
+            headers={"X-CSRF-Token": csrf_token},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["ok"] is True
+        assert "sessions_destroyed" in data
+        assert data["sessions_destroyed"] >= 1
+
+    def test_logout_all_invalidates_current_session(self):
+        """Dopo logout-all, le sessioni in-memory sono svuotate."""
+        # Crea 2 sessioni direttamente nello store
+        create_session("admin")
+        create_session("admin")
+
+        # Verifica che ci siano sessioni
+        with _lock:
+            count_before = len(_sessions)
+        assert count_before >= 2
+
+        # Logout globale
+        count = destroy_all_sessions()
+        assert count >= 2
+
+        # Verifica che lo store sia vuoto
+        with _lock:
+            assert len(_sessions) == 0
+            assert len(_csrf_tokens) == 0

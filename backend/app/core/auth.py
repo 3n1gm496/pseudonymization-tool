@@ -348,6 +348,41 @@ def destroy_session(token: Optional[str]) -> None:
         return
 
 
+def destroy_all_sessions() -> int:
+    """
+    Invalida tutte le sessioni attive (logout globale).
+
+    Utile per:
+    - Risposta a un incidente di sicurezza
+    - Cambio password dell'admin
+    - Revoca forzata di tutti gli accessi
+
+    Restituisce il numero di sessioni invalidate.
+    """
+    redis_client = _get_redis_client()
+    if redis_client:
+        try:
+            session_keys = redis_client.keys("auth:session:*")
+            csrf_keys = redis_client.keys("auth:csrf:*")
+            count = len(session_keys)
+            if session_keys:
+                redis_client.delete(*session_keys)
+            if csrf_keys:
+                redis_client.delete(*csrf_keys)
+            logger.info("auth: destroyed all %d sessions (global logout)", count)
+            return count
+        except Exception as exc:
+            logger.warning("auth: error during global logout via Redis: %s", exc)
+            return 0
+
+    with _lock:
+        count = len(_sessions)
+        _sessions.clear()
+        _csrf_tokens.clear()
+    logger.info("auth: destroyed all %d sessions (global logout, in-memory)", count)
+    return count
+
+
 def extract_token_from_request(request) -> Optional[str]:
     cookie_token = request.cookies.get(SESSION_COOKIE_NAME)
     if cookie_token:
