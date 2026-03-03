@@ -4,6 +4,7 @@ Separato dal router monolitico per ridurre blast radius e accoppiamento.
 """
 
 import logging
+import time
 from datetime import datetime, timezone
 
 from app import __version__
@@ -28,31 +29,62 @@ from fastapi import APIRouter, HTTPException, Request, Response
 router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
 
+# Timestamp di avvio del server (usato per calcolare uptime)
+_SERVER_START_TIME: float = time.time()
+
 # Helper functions moved to app.core.audit module
 
 
 @router.get("/health")
 async def health_check():
+    """
+    Liveness probe: verifica che il processo sia in esecuzione.
+
+    Risponde sempre 200 OK se il server è avviato.
+    Usato da Docker HEALTHCHECK, Kubernetes liveness probe e load balancer.
+    """
+    uptime_seconds = int(time.time() - _SERVER_START_TIME)
     return {
         "status": "ok",
         "service": "Local Pseudonymization Tool",
         "version": __version__,
+        "uptime_seconds": uptime_seconds,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
 @router.get("/ready")
 async def ready_check():
+    """
+    Readiness probe: verifica che il servizio sia pronto ad accettare traffico.
+
+    Controlla:
+    - Presenza della directory di configurazione
+    - Presenza dei dizionari
+    - Accessibilità della directory temporanea
+
+    Risponde 200 se pronto, 503 se non pronto.
+    Usato da Kubernetes readiness probe e health check del load balancer.
+    """
+    from app.core.config import TEMP_BASE_DIR
+
     checks = {
         "config_dir": CONFIG_DIR.exists(),
         "dictionaries_dir": (CONFIG_DIR / "dictionaries").exists(),
+        "temp_dir": TEMP_BASE_DIR.exists() and TEMP_BASE_DIR.is_dir(),
     }
     ready = all(checks.values())
-    return {
-        "ready": ready,
-        "checks": checks,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    }
+    status_code = 200 if ready else 503
+    from fastapi.responses import JSONResponse
+
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "ready": ready,
+            "checks": checks,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        },
+    )
 
 
 @router.post("/auth/login")
