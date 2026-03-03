@@ -1,7 +1,7 @@
 # UX Flow e User Journey
 
 **Autore:** Team Engineering
-**Versione:** 4.1.0 (Phase 4)
+**Versione:** 5.0.0
 **Data:** 2026-03-02
 
 ---

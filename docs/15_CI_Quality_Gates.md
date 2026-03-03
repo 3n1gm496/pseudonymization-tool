@@ -1,38 +1,56 @@
 # CI Quality Gates Configuration
 
-**Version:** 1.0  
-**Date:** 2026-03-01  
+**Version:** 2.0  
+**Date:** 2026-03-03  
 **Purpose:** Enforceable quality gates to prevent regressions in critical modules
+
+> **Note:** This document reflects the actual CI configuration in `.github/workflows/ci.yml` as of v5.0.0.
+> The thresholds were updated in PR #6 to reflect real measured coverage values.
 
 ---
 
 ## Coverage Thresholds
 
 ### Global Coverage
-- **Minimum:** 50%
+- **Minimum:** **60%**
 - **Enforcement:** CI fail if total coverage drops below threshold
-- **Rationale:** Baseline quality standard for entire codebase
+- **Rationale:** Baseline quality standard for entire codebase (raised from 50% in v5.0.0)
 
 ### Critical Module Coverage
 
 These modules have higher standards due to security/reliability impact:
 
-| Module | Current Coverage | Minimum Threshold | Rationale |
-|--------|------------------|-------------------|-----------|
-| `app.core.exceptions` | 58% | **55%** | Exception taxonomy must be well-tested for proper error handling |
-| `app.core.pipeline` | 12% | **20%** | Pipeline orchestration is critical path, gradually increasing |
-| `app.core.safety` | 11% | **20%** | Safety label logic protects users from data leakage |
-| `app.pseudonymizer.transformer` | 31% | **35%** | Transformation correctness is core security guarantee |
-| `app.parsers.*` | ~40% avg | **40%** | Parser robustness prevents silent data loss |
-| `app.detectors.regex_detectors` | 52% | **50%** | Regex accuracy directly impacts PII detection |
+| Module | Minimum Threshold | Rationale |
+|--------|-------------------|-----------|
+| `app.core.safety` | **90%** | Safety label logic protects users from data leakage |
+| `app.mapping.crypto` | **90%** | AES-GCM encryption is core security guarantee |
+| `app.pseudonymizer.engine` | **90%** | Pseudonym generation correctness is critical |
+| `app.core.auth` | **75%** | Authentication must be well-tested |
+| `app.core.pipeline` | **65%** | Pipeline orchestration is critical path |
+| `app.pseudonymizer.transformer` | **50%** | Transformation correctness |
+| `app.core.exceptions` | **55%** | Exception taxonomy must be well-tested |
 
-### Future Targets (6-month roadmap)
+### CI Workflow (actual `.github/workflows/ci.yml`)
 
-| Module | Current | 3-month Target | 6-month Target |
-|--------|---------|----------------|----------------|
-| `app.core.pipeline` | 12% | 30% | 50% |
-| `app.core.safety` | 11% | 25% | 50% |
-| `app.pseudonymizer.transformer` | 31% | 50% | 70% |
+```yaml
+- name: Run tests (unit + functional, exclude integration)
+  run: |
+    pytest tests/ \
+      -m "not integration" \
+      --cov=app \
+      --cov-report=xml \
+      --cov-fail-under=60
+
+- name: Coverage regression check for critical modules
+  run: |
+    pytest tests/ -m "not integration" --cov=app.core.safety    --cov-fail-under=90 -q
+    pytest tests/ -m "not integration" --cov=app.mapping.crypto  --cov-fail-under=90 -q
+    pytest tests/ -m "not integration" --cov=app.core.auth       --cov-fail-under=75 -q
+    pytest tests/ -m "not integration" --cov=app.core.pipeline   --cov-fail-under=65 -q
+    pytest tests/ -m "not integration" --cov=app.pseudonymizer.engine --cov-fail-under=90 -q
+    pytest tests/ -m "not integration" --cov=app.pseudonymizer.transformer --cov-fail-under=50 -q
+    pytest tests/ -m "not integration" --cov=app.core.exceptions --cov-fail-under=55 -q
+```
 
 ---
 
@@ -74,7 +92,7 @@ except Exception as e:  # JUSTIFICATION: lib can throw arbitrary exceptions, we 
 
 - `app/core/pipeline.py`
 - `app/core/safety.py`
-- `app/pseudonyimzer/transformer.py`
+- `app/pseudonymizer/transformer.py`
 - `app/mapping/crypto.py`
 - `app/api/batches_routes.py` (apply/review endpoints)
 
@@ -100,31 +118,43 @@ grep -rn "except Exception" <critical_file.py> | grep -v "#" | grep -v "except E
 - **Rationale:** Prevent common security anti-patterns
 
 ### Dependency Vulnerabilities
-- **Tool:** Safety (PyPI vulnerability DB)
-- **Enforcement:** Warning (fail on CRITICAL in future)
-- **Rationale:** Known CVEs should not be deployed
+- **Tool:** **pip-audit** (PyPI vulnerability DB via OSV)
+- **Enforcement:** Fail on any vulnerability found
+- **Rationale:** Known CVEs must not be deployed (replaced `safety` in PR #6)
+
+### Unused Imports
+- **Tool:** flake8 `--select=F401`
+- **Enforcement:** Fail on any unused import in `app/` (not tests)
+- **Rationale:** Dead code increases maintenance burden
 
 ---
 
 ## CI Workflow Integration
 
-### GitHub Actions Steps
+### GitHub Actions Steps (v5.0.0)
 
 ```yaml
-- name: Run tests with pytest
-  run: pytest tests/ --cov=app --cov-fail-under=50
+- name: Run tests (unit + functional, exclude integration)
+  run: pytest tests/ -m "not integration" --cov=app --cov-fail-under=60
 
 - name: Coverage regression check for critical modules
   run: |
-    pytest tests/ --cov=app.core.pipeline --cov-fail-under=20
-    pytest tests/ --cov=app.core.safety --cov-fail-under=20
-    pytest tests/ --cov=app.pseudonymizer.transformer --cov-fail-under=35
-    pytest tests/ --cov=app.core.exceptions --cov-fail-under=55
+    pytest tests/ -m "not integration" --cov=app.core.safety    --cov-fail-under=90 -q
+    pytest tests/ -m "not integration" --cov=app.mapping.crypto  --cov-fail-under=90 -q
+    pytest tests/ -m "not integration" --cov=app.core.auth       --cov-fail-under=75 -q
+    pytest tests/ -m "not integration" --cov=app.core.pipeline   --cov-fail-under=65 -q
+    pytest tests/ -m "not integration" --cov=app.pseudonymizer.engine --cov-fail-under=90 -q
+    pytest tests/ -m "not integration" --cov=app.pseudonymizer.transformer --cov-fail-under=50 -q
+    pytest tests/ -m "not integration" --cov=app.core.exceptions --cov-fail-under=55 -q
 
-- name: Check for untyped broad exceptions
-  run: |
-    BROAD=$(grep -rn "except Exception" backend/app/core/pipeline.py | grep -v "#" | grep -v "except Exception as")
-    if [ -n "$BROAD" ]; then exit 1; fi
+- name: Security scan (Bandit)
+  run: bandit -r app/ -ll -q
+
+- name: Dependency vulnerability scan (pip-audit)
+  run: pip-audit --requirement requirements.txt
+
+- name: Unused imports check
+  run: flake8 app/ --select=F401
 ```
 
 ---
@@ -134,11 +164,12 @@ grep -rn "except Exception" <critical_file.py> | grep -v "#" | grep -v "except E
 ### Pull Request Requirements
 
 All PRs must pass:
-1. ✅ Global coverage >= 50%
+1. ✅ Global coverage >= **60%**
 2. ✅ Critical module coverage >= thresholds
 3. ✅ No untyped broad exceptions in critical paths
 4. ✅ Bandit security scan (no HIGH/MEDIUM issues)
-5. ✅ Black/isort/flake8 formatting/linting
+5. ✅ pip-audit (0 CVE)
+6. ✅ flake8 F401 (0 unused imports in app/)
 
 ### Exemption Process
 
@@ -179,10 +210,11 @@ Proposed metrics:
 
 ### Why These Thresholds?
 
-- **50% global:** Industry baseline for non-trivial projects
-- **55% exceptions:** New module, should maintain high bar
-- **20% pipeline/safety:** Legacy code, incremental improvement approach
-- **35% transformer:** Core logic, higher than avg but realistic given size
+- **60% global:** Raised from 50% in v5.0.0 — reflects actual measured coverage
+- **90% crypto/safety/engine:** Core security modules must be thoroughly tested
+- **75% auth:** Authentication is a critical security boundary
+- **65% pipeline:** Main orchestration path, gradually increasing
+- **55% exceptions:** Exception taxonomy must be exercised
 
 ### Why Not Higher?
 
@@ -190,11 +222,11 @@ Proposed metrics:
 - **Incremental:** Thresholds ratchet up over time (see roadmap)
 - **Focus:** Better to have quality tests in critical areas than 100% trivial tests
 
-### Why Enforce Exceptions?
+### Why pip-audit instead of Safety?
 
-- **Root cause visibility:** Catch-all exceptions hide bugs
-- **Operational clarity:** Typed exceptions enable better monitoring/alerting
-- **Recovery logic:** Specific exceptions allow targeted recovery strategies
+- `safety` was replaced in PR #6 because it had false negatives (missed known CVEs)
+- `pip-audit` uses the OSV database and is more reliable
+- `safety` free tier has limited coverage; `pip-audit` is fully open source
 
 ---
 
@@ -205,7 +237,7 @@ Proposed metrics:
 When actual coverage increases sustainably (3+ consecutive weeks):
 1. Update threshold in `.github/workflows/ci.yml`
 2. Update this document
-3. Announce in team chat/standup
+3. Announce in PR description
 
 ### Annual Review
 
@@ -218,7 +250,7 @@ Re-evaluate gates annually:
 
 ## References
 
-- [.github/workflows/ci.yml](../.github/workflows/ci.yml) - CI implementation
+- [.github/workflows/ci.yml](../.github/workflows/ci.yml) - CI implementation (source of truth)
 - [docs/13_Super_Critical_Analysis.md](13_Super_Critical_Analysis.md) - P2-2 requirement
 - [docs/07_Test_Plan_and_Metrics.md](07_Test_Plan_and_Metrics.md) - Overall test strategy
 - [pyproject.toml](../pyproject.toml) - Pytest/coverage configuration
@@ -227,10 +259,11 @@ Re-evaluate gates annually:
 
 ## Success Metrics
 
-P2-2 is successful when:
+Quality gates are successful when:
 - ✅ CI fails on coverage regression in critical modules
 - ✅ CI fails on untyped broad exceptions in critical paths
+- ✅ CI fails on any CVE (pip-audit)
 - ✅ Developer feedback: "Gates are helpful, not annoying"
 - ✅ Zero production incidents from untested critical paths (6-month window)
 
-**Status:** Implemented 2026-03-01
+**Status:** Updated 2026-03-03 (v5.0.0)

@@ -1,7 +1,7 @@
 # Rischi e Mitigazioni
 
 **Autore:** Manus AI
-**Versione:** 4.0.4
+**Versione:** 5.0.0
 **Data:** 2026-03-02
 
 ---

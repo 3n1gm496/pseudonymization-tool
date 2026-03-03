@@ -1,6 +1,6 @@
 # Local Pseudonymization Tool v5.0.0
 
-[![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![React 18.2](https://img.shields.io/badge/React-18.2-61dafb.svg)](https://react.dev)
 [![FastAPI 0.110](https://img.shields.io/badge/FastAPI-0.110-009688.svg)](https://fastapi.tiangolo.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -355,7 +355,7 @@ Vuoi inviare i tuoi dati a un modello AI (ChatGPT, Claude, LLaMA) senza esporre 
 
 ```bash
 # Crea virtual environment
-python3.11 -m venv .venv
+python3 -m venv .venv  # Python 3.11+ richiesto (3.12 usato in produzione)
 source .venv/bin/activate  # Linux/macOS
 # oppure .venv\Scripts\activate  # Windows
 

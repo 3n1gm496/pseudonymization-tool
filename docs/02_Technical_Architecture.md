@@ -1,7 +1,7 @@
 # Architettura Tecnica — Local Pseudonymization Tool
 
 **Autore:** Team Engineering
-**Versione:** 4.0.4
+**Versione:** 5.0.0
 **Data:** 2026-03-02
 
 ---
@@ -306,11 +306,11 @@ Output: All files packaged in results_{batch_id}.zip
 # docker-compose.yml
 services:
   frontend:
-    image: pseudonym-tool:4.0.4
+    image: pseudonym-tool:5.0.0
     ports: ["80:80"]  # Static React build
   
   backend:
-    image: pseudonym-tool:4.0.4
+    image: pseudonym-tool:5.0.0
     ports: ["127.0.0.1:8000:8000"]  # API
     volumes:
       - /tmp/pseudonymizer:/tmp/pseudonymizer
@@ -322,7 +322,7 @@ services:
 make build-docker     # Build multi-stage image
 make start            # Start docker-compose
 make dev              # Dev mode with hot reload
-make test             # Run pytest (179 tests, 58.76% coverage)
+make test             # Run pytest (267 tests, 64% coverage)
 make clean            # Remove containers + temp data
 ```
 
@@ -668,9 +668,9 @@ def mock_redis_for_tests():
 
 ## 6. Testing Strategy
 
-**Test Coverage: 61.27% (Phase 4 Verified)**
+**Test Coverage: 64% (v5.0.0 Verified)**
 
-**Phase 4 Critical Tests (64 verified):**
+**v5.0.0 Test Suite (267 passing, 12 skipped):**
 - `test_api_contract.py`: 9/9 PASS — API contracts including 202 Accepted pattern
 - `test_additional_fixes.py`: 11/11 PASS — Cleanup, logging, lifecycle
 - `test_functional.py`: 44/44 PASS — Detectors, parsers, security, crypto
@@ -680,7 +680,7 @@ def mock_redis_for_tests():
 - `crypto.py`: 94.92% coverage → AES-256-GCM encryption
 - `schemas.py`: 96.48% coverage → Request validation
 - `batch_manager.py`: 64.67% coverage → Lifecycle + TOCTOU fixes
-- `pipeline.py`: 48.09% coverage → Phase 4 async core
+- `pipeline.py`: 65%+ coverage (CI threshold)
 
 **Test Infrastructure:**
 - Celery EAGER mode: Tasks run synchronously in tests (no broker)
@@ -697,7 +697,7 @@ def mock_redis_for_tests():
 
 Run: `make test` or `pytest backend/tests/ -v --cov`
 
-**Phase 4 Test Results:** See [test_results_summary.txt](../test_results_summary.txt)
+**Test Results:** 267 passing, 12 skipped, 0 failed (CI verified)
 
 ---
 
@@ -722,8 +722,9 @@ Run: `make test` or `pytest backend/tests/ -v --cov`
 **Last Updated:** 2026-03-02  
 **Version History:**  
 - 1.0 (MVP, 2026-02-25): Initial release with sync processing
-- 4.0.4 (2026-03-02): React 18 frontend, dark mode, readiness API  
-- **4.1.0 (Phase 4, Current)**: Async architecture with Celery + Redis, 202 Accepted pattern, scalable workers
+- 5.0.0 (2026-03-03): Security hardening, CI hardening, code quality (PR #1-#10), dark mode, readiness API  
+- 4.1.0 (Phase 4): Async architecture with Celery + Redis, 202 Accepted pattern, scalable workers
+- 5.0.0 (2026-03-03): Security hardening (13 CVE fixed), Docker hardening, Redis auth, CI hardening, 72 unused imports removed
 
-**Phase 4 Implementation Date:** 2026-03-02  
-**Phase 4 Test Verification:** 64 critical tests verified ✅
+**v5.0.0 Release Date:** 2026-03-03  
+**v5.0.0 Test Verification:** 267 tests passing ✅

@@ -1,7 +1,7 @@
 # Modello Dati — Local Pseudonymization Tool
 
 **Autore:** Manus AI
-**Versione:** 4.1.0 (Phase 4)
+**Versione:** 5.0.0
 **Data:** 2026-03-02
 
 ---
@@ -299,5 +299,4 @@ CREATE INDEX idx_ttl ON batches(ttl_expires_at);
 
 ---
 
-**Last Updated:** 2026-03-02 (Phase 4)  
-**Version:** 4.1.0
+**Last Updated:** 2026-03-03 (v5.0.0)  

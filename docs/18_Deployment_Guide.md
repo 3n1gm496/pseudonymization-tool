@@ -1,7 +1,7 @@
 # Deployment Guide — Local Pseudonymization Tool (Phase 4)
 
 **Autore:** Team Engineering  
-**Versione:** 4.1.0 (Phase 4)  
+**Versione:** 5.0.0  
 **Data:** 2026-03-02
 
 ---
@@ -1133,5 +1133,5 @@ Workers = (20 × 2 minutes) / 4 = 10 workers minimum
 
 ---
 
-**Last Updated:** 2026-03-02 (Phase 4)  
-**Version:** 4.1.0
+**Last Updated:** 2026-03-03 (v5.0.0)  
+**Version:** 5.0.0

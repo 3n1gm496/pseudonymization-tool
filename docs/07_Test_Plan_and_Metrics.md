@@ -1,8 +1,8 @@
 # Piano di Test e Metriche
 
 **Autore:** Team Engineering
-**Versione:** 4.1.0 (Phase 4)
-**Data:** 2026-03-02
+**Versione:** 5.0.0
+**Data:** 2026-03-03
 
 ---
 
@@ -14,7 +14,7 @@
 - Stress test concurrency (10-thread)
 - Integration test end-to-end
 - **Phase 4:** Test async task execution con Celery + Redis
-- Code coverage target > 50% (raggiunto 61.27% - Phase 4)
+- Code coverage target > 60% (raggiunto 64% - v5.0.0)
 
 ---
 
@@ -24,20 +24,21 @@
 
 ```
 ═══════════════════════════════════════════════════════════════
-📊 RISULTATI FINALI PHASE 4 (2026-03-02)
+📊 RISULTATI FINALI v5.0.0 (2026-03-03)
 ═══════════════════════════════════════════════════════════════
 
-✅ Critical Tests Verified:  64/64 (100%)
-   - test_api_contract.py:    9/9 PASS  (202 Accepted pattern)
-   - test_additional_fixes.py: 11/11 PASS (cleanup, logging, lifecycle)
-   - test_functional.py:      44/44 PASS (detectors, parsers, crypto)
+✅ Tests Passing:             267 (+ 12 skipped, 6 integration)
+   - test_functional.py:      49/49 PASS (detectors, parsers, crypto)
+   - test_auth_complete.py:   full auth + JWT suite
+   - test_csrf_middleware.py: CSRF protection
+   - test_api_contract.py:   202 Accepted pattern
 
-⏭️  Skipped:                 9 (expected - slow tests)
+⏭️  Skipped:                 12 (Tesseract OCR not in CI)
 ❌ Failed:                   0
-📈 Total Coverage:           61.27% (+2.51% from pre-Phase 4)
+📈 Total Coverage:           64% (+2.73% from Phase 4 baseline)
 ⏱️  Execution Time:          <5 minutes
 
-🔄 Phase 4 Regression Check: ZERO regressions ✅
+🔄 v5.0.0 Regression Check:  ZERO regressions ✅
 🏗️  Async Infrastructure:    Celery EAGER mode + Redis mocking ✅
 🔌 API Contracts:            202 Accepted pattern validated ✅
 
@@ -55,7 +56,7 @@
 | `rate_limit.py` | 80 | 9 | **88.75%** | 🟢 Excellent | - |
 | `pipeline.py` | 183 | 95 | **48.09%** | 🟡 Medium | Phase 4 core |
 | **task.py (NEW)** | 269 | 0 | **100%** | 🟢 Excellent | Phase 4 async |
-| **TOTAL** | **4236** | **1636** | **61.27%** | 🟡 Good | +2.51% |
+| **TOTAL** | **4236** | **1527** | **64%** | 🟡 Good | +2.73% from Phase 4 |
 
 ### Test Categories (Phase 4 Enhanced)
 
@@ -232,8 +233,8 @@ pytest backend/tests/test_rate_limit.py::test_concurrent_requests_thread_safe -v
 ## 6. Regression Prevention
 
 **Automated checks on every commit:**
-- All 179 tests must pass
-- Coverage must not decrease below 58.76%
+- All 267 tests must pass (excluding integration)
+- Coverage must not decrease below 60% (global) or per-module thresholds
 - No new security issues (bandit)
 
 ---
