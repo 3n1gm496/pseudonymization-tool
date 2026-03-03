@@ -1,23 +1,34 @@
 """
-Rate Limiter v2 — Centralized, memory-bounded, auto-cleanup
+Rate Limiter v3 — Redis-backed with in-memory fallback
 
-Improvements over v1 (per-router in-memory buckets):
-  - Single global rate limiter (shared across all routers)
-  - Automatic cleanup thread with TTL (default 300s after last request)
-  - Memory bound: max 5000 clients tracked (LRU eviction)
-  - Thread-safe with Lock for concurrent requests
-  - No memory drift on long uptime (tested for 24h+ scenarios)
+Improvements over v2 (in-memory only):
+  - Redis-backed storage: rate limit state shared across multiple workers
+    (required when WEB_CONCURRENCY > 1)
+  - Graceful fallback: if Redis is unavailable, falls back to in-memory
+    automatically (same pattern used by auth.py session management)
+  - No code changes required in callers: enforce_rate_limit() API unchanged
+  - Sliding window algorithm preserved (Redis ZADD/ZREMRANGEBYSCORE)
+
+Redis key schema:
+  rate_limit:{scope}:{client_ip}  → sorted set of Unix timestamps (float)
+  TTL: window_seconds + 10s buffer (auto-expiry, no manual cleanup needed)
+
+In-memory fallback (v2 behaviour):
+  Used when REDIS_URL is not set or Redis is unreachable.
+  Background cleanup thread runs every 60s (TTL 300s, max 5000 clients).
 
 Configuration (via ENV):
+  - REDIS_URL: Redis connection URL (e.g. redis://redis:6379/0)
+    If not set, in-memory fallback is used automatically.
   - RATE_LIMIT_REQUESTS: max requests per window (default 120)
   - RATE_LIMIT_WINDOW_SECONDS: window duration (default 60s)
-  - RATE_LIMIT_MAX_CLIENTS: max clients tracked (default 5000)
+  - RATE_LIMIT_MAX_CLIENTS: max clients tracked in-memory (default 5000)
   - RATE_LIMIT_CLEANUP_TTL_SECONDS: bucket TTL after last request (default 300s)
   - RATE_LIMIT_CLEANUP_INTERVAL_SECONDS: cleanup thread interval (default 60s)
 
-Usage:
+Usage (unchanged from v2):
     from app.core.rate_limit import enforce_rate_limit
-    
+
     @router.post("/api/endpoint")
     async def my_endpoint(request: Request):
         enforce_rate_limit(request, scope="endpoint_name", limit=25)
@@ -29,21 +40,168 @@ import os
 import threading
 import time
 from collections import OrderedDict
-from typing import Dict
+from typing import Dict, Optional
 
 from fastapi import HTTPException, Request
 
 logger = logging.getLogger(__name__)
 
-# Configuration for rate limiter v2
+# Configuration for rate limiter v3
 RATE_LIMIT_MAX_CLIENTS = int(os.environ.get("RATE_LIMIT_MAX_CLIENTS", "5000"))
 RATE_LIMIT_CLEANUP_TTL_SECONDS = int(os.environ.get("RATE_LIMIT_CLEANUP_TTL_SECONDS", "300"))
 RATE_LIMIT_CLEANUP_INTERVAL_SECONDS = int(os.environ.get("RATE_LIMIT_CLEANUP_INTERVAL_SECONDS", "60"))
+
+# Redis connection retry interval (seconds): avoid hammering a down Redis
+_REDIS_RETRY_INTERVAL_SECONDS = 5.0
+
+
+# ─── Redis client (lazy, cached, with retry backoff) ──────────────────────────
+
+_redis_client_cached: Optional[object] = None
+_redis_last_check: float = 0.0
+_redis_lock = threading.Lock()
+
+
+def _get_redis_client():
+    """
+    Return a connected Redis client, or None if Redis is unavailable.
+
+    Uses a dedicated lock to prevent race conditions on the cached client.
+    Falls back gracefully to in-memory storage when Redis is not reachable.
+    Retries at most every _REDIS_RETRY_INTERVAL_SECONDS to avoid log spam.
+    """
+    global _redis_client_cached, _redis_last_check
+
+    with _redis_lock:
+        now = time.time()
+
+        # Return cached client if available
+        if _redis_client_cached is not None:
+            return _redis_client_cached
+
+        # Rate-limit retry attempts to avoid hammering a down Redis
+        if now - _redis_last_check < _REDIS_RETRY_INTERVAL_SECONDS:
+            return None
+
+        _redis_last_check = now
+        redis_url = os.environ.get("REDIS_URL")
+        if not redis_url:
+            # No REDIS_URL configured — use in-memory fallback silently
+            return None
+
+        try:
+            from redis import Redis
+
+            client = Redis.from_url(
+                redis_url,
+                decode_responses=True,
+                socket_timeout=0.3,
+                socket_connect_timeout=0.3,
+                retry_on_timeout=False,
+            )
+            client.ping()
+            _redis_client_cached = client
+            logger.info(
+                "rate_limit: Redis connection established (%s)",
+                redis_url.split("@")[-1],
+            )
+            return client
+        except Exception as exc:
+            _redis_client_cached = None
+            logger.debug("rate_limit: Redis unavailable, using in-memory fallback: %s", exc)
+            return None
+
+
+def _reset_redis_client() -> None:
+    """
+    Force reset of the cached Redis client (used after connection errors).
+    Thread-safe.
+    """
+    global _redis_client_cached, _redis_last_check
+    with _redis_lock:
+        _redis_client_cached = None
+        _redis_last_check = 0.0
+
+
+# ─── Redis-backed rate limit check ────────────────────────────────────────────
+
+
+def _check_limit_redis(
+    client: object,
+    bucket_key: str,
+    limit: int,
+    window_seconds: int,
+    now: float,
+) -> Dict:
+    """
+    Sliding window rate limit check using Redis sorted sets.
+
+    Algorithm:
+      1. Remove timestamps older than (now - window_seconds)
+      2. Count remaining timestamps
+      3. If count >= limit → raise 429
+      4. Add current timestamp with score=timestamp
+      5. Set TTL on the key (auto-cleanup)
+
+    Uses a Redis pipeline for atomicity and performance.
+
+    Returns:
+        Dict with remaining, reset, limit.
+
+    Raises:
+        HTTPException: 429 if limit exceeded.
+    """
+    cutoff = now - window_seconds
+    redis_key = f"rate_limit:{bucket_key}"
+
+    try:
+        pipe = client.pipeline()
+        # Remove expired timestamps
+        pipe.zremrangebyscore(redis_key, "-inf", cutoff)
+        # Count current timestamps in window
+        pipe.zcard(redis_key)
+        # Add current timestamp
+        pipe.zadd(redis_key, {str(now): now})
+        # Set TTL (window + buffer to avoid premature expiry)
+        pipe.expire(redis_key, window_seconds + 10)
+        results = pipe.execute()
+
+        current_count = results[1]  # zcard result (before adding current)
+
+        if current_count >= limit:
+            # Undo the zadd we just did (we won't count this request)
+            client.zrem(redis_key, str(now))
+            raise HTTPException(
+                status_code=429,
+                detail=f"Troppe richieste per '{bucket_key.split(':')[0]}'. Riprova tra pochi secondi.",
+            )
+
+        # Get oldest timestamp for reset calculation
+        oldest = client.zrange(redis_key, 0, 0, withscores=True)
+        reset_time = int(oldest[0][1] + window_seconds) if oldest else int(now + window_seconds)
+
+        return {
+            "remaining": limit - current_count - 1,
+            "reset": reset_time,
+            "limit": limit,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("rate_limit: Redis error during check, resetting client: %s", exc)
+        _reset_redis_client()
+        raise  # Will be caught by caller to trigger in-memory fallback
+
+
+# ─── In-memory rate limiter (v2, unchanged) ───────────────────────────────────
 
 
 class RateLimiter:
     """
     Thread-safe in-memory rate limiter with automatic cleanup and memory bounds.
+
+    Used as fallback when Redis is unavailable.
 
     Design goals:
       - No memory leak on long uptime (cleanup old buckets)
@@ -211,10 +369,13 @@ class RateLimiter:
             }
 
 
-# ─── Global Rate Limiter Instance ─────────────────────────────────────────────
+# ─── Global Rate Limiter Instance (in-memory fallback) ────────────────────────
 
 _rate_limiter = RateLimiter()
 _rate_limiter.start_cleanup_thread()
+
+
+# ─── Public API ───────────────────────────────────────────────────────────────
 
 
 def enforce_rate_limit(
@@ -224,7 +385,14 @@ def enforce_rate_limit(
     window_seconds: int = 60,
 ) -> Dict:
     """
-    Enforce rate limit for a request (convenience function).
+    Enforce rate limit for a request.
+
+    Uses Redis if REDIS_URL is configured and Redis is reachable.
+    Falls back to in-memory rate limiter automatically if Redis is unavailable.
+    The fallback is transparent to callers — the same 429 behaviour applies.
+
+    When Redis is available, rate limit state is shared across all uvicorn
+    workers (required when WEB_CONCURRENCY > 1).
 
     Args:
         request: FastAPI Request object
@@ -254,9 +422,28 @@ def enforce_rate_limit(
                 }
             )
     """
+    client_ip = request.client.host if request.client else "unknown"
+    bucket_key = f"{scope}:{client_ip}"
+    now = time.time()
+
+    # Try Redis first
+    redis_client = _get_redis_client()
+    if redis_client is not None:
+        try:
+            return _check_limit_redis(redis_client, bucket_key, limit, window_seconds, now)
+        except HTTPException:
+            raise  # 429 — propagate directly
+        except Exception:
+            # Redis error already logged in _check_limit_redis; fall through to in-memory
+            pass
+
+    # In-memory fallback
     return _rate_limiter.check_limit(request, scope, limit, window_seconds)
 
 
 def get_rate_limiter_stats() -> Dict:
     """Return rate limiter stats (for monitoring endpoint)."""
-    return _rate_limiter.get_stats()
+    redis_client = _get_redis_client()
+    stats = _rate_limiter.get_stats()
+    stats["backend"] = "redis" if redis_client is not None else "in-memory"
+    return stats
