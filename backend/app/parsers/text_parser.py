@@ -25,7 +25,7 @@ class TextParser(BaseParser):
             # Prova a leggere come UTF-8, poi fallback su latin-1
             try:
                 content = file_path.read_text(encoding="utf-8")
-            except UnicodeDecodeError as ue:
+            except UnicodeDecodeError as ue:  # noqa: F841 — usata come causa nella catena
                 try:
                     content = file_path.read_text(encoding="latin-1")
                     result.warnings.append(
@@ -33,7 +33,10 @@ class TextParser(BaseParser):
                         f"Potrebbero esserci caratteri non corretti."
                     )
                 except Exception as fallback_err:
-                    raise FileEncodingError(str(file_path), "UTF-8 + latin-1 fallback") from fallback_err
+                    # Catena esplicita: fallback_err causato da ue (UnicodeDecodeError originale)
+                    raise FileEncodingError(
+                        str(file_path), "UTF-8 + latin-1 fallback"
+                    ) from fallback_err.__cause__ or ue
 
             # Suddividi il testo riga per riga per avere informazioni di posizione
             for line_num, line in enumerate(content.splitlines(), start=1):
