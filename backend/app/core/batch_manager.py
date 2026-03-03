@@ -742,18 +742,33 @@ def cleanup_inactive_batches() -> int:
     return cleaned_count
 
 
+# Event per il graceful shutdown del cleanup scheduler
+_cleanup_stop_event = threading.Event()
+
+
 def start_cleanup_scheduler() -> None:
     """Avvia il thread di cleanup automatico (ogni 10 minuti)."""
+    _cleanup_stop_event.clear()
 
     def _loop():
-        while True:
-            time.sleep(600)
+        # Usa wait(timeout) invece di sleep: si sveglia immediatamente su stop_event.set()
+        while not _cleanup_stop_event.wait(timeout=600):
             try:
                 n = cleanup_inactive_batches()
                 if n > 0:
                     logger.info("Cleanup automatico: rimossi %d batch inattivi", n)
             except Exception as e:
                 logger.error("Errore nel cleanup automatico: %s", e)
+        logger.info("Cleanup scheduler terminato (graceful shutdown).")
 
     t = threading.Thread(target=_loop, daemon=True, name="batch-cleanup")
     t.start()
+
+
+def stop_cleanup_scheduler() -> None:
+    """Ferma il thread di cleanup automatico in modo pulito (graceful shutdown).
+
+    Segnala al thread di terminare senza attendere il prossimo ciclo di 10 minuti.
+    Il thread termina entro pochi millisecondi dopo la chiamata.
+    """
+    _cleanup_stop_event.set()

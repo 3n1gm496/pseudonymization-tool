@@ -93,8 +93,18 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("Autenticazione API: DISATTIVATA")
     yield
-    # Shutdown
-    logger.info("Server in arresto.")
+    # ─── Graceful Shutdown ───────────────────────────────────────────────────
+    logger.info("Server in arresto — avvio graceful shutdown...")
+    # 1. Fermare il cleanup scheduler (evita task in background durante lo shutdown)
+    try:
+        from app.core.batch_manager import stop_cleanup_scheduler
+
+        stop_cleanup_scheduler()
+        logger.info("Cleanup scheduler fermato.")
+    except Exception as e:
+        logger.warning("Errore nel fermare il cleanup scheduler: %s", e)
+    # 2. Log finale
+    logger.info("Graceful shutdown completato.")
 
 
 # ─── Applicazione FastAPI ─────────────────────────────────────────────────────
