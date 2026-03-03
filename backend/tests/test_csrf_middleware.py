@@ -30,7 +30,7 @@ def enable_auth_for_csrf_tests(monkeypatch):
     object.__setattr__(main._profile_config, "auth_enabled", True)
     monkeypatch.setattr(auth, "AUTH_ENABLED", True)
 
-    # ✅ FIX: Ensure _password_env is set from environment (reload from env)
+    # Ensure _password_env is set from environment (loaded at module import time)
     # This is needed because _password_env is loaded at module import time
     import os
 
@@ -55,9 +55,8 @@ def authenticated_client(enable_auth_for_csrf_tests):
     # Create session and get CSRF token
     session_token, expires_at, csrf_token = create_session("test_user")
 
-    # TestClient doesn't maintain cookies automatically
-    # We need to set cookies on each request manually
-    # Store tokens in client for test access
+    # Set cookie directly on the client instance to avoid per-request cookie deprecation warning
+    client.cookies.set(SESSION_COOKIE_NAME, session_token)
     client._test_session_token = session_token
     client._test_csrf_token = csrf_token
 
@@ -78,7 +77,6 @@ class TestCSRFMiddleware:
         response = client.post(
             "/api/console/scan",
             json={"text": "test", "mode": "light", "preset": "SOC Logs"},
-            cookies={SESSION_COOKIE_NAME: session_token},
         )
 
         assert response.status_code == 403
@@ -89,7 +87,7 @@ class TestCSRFMiddleware:
         client, session_token, csrf_token = authenticated_client
 
         # Try PUT without CSRF token (but with session cookie)
-        response = client.put("/api/batches/test-id", json={}, cookies={SESSION_COOKIE_NAME: session_token})
+        response = client.put("/api/batches/test-id", json={})
 
         # Should be blocked by CSRF before 404
         assert response.status_code == 403
@@ -100,7 +98,7 @@ class TestCSRFMiddleware:
         client, session_token, csrf_token = authenticated_client
 
         # Try DELETE without CSRF token (but with session cookie)
-        response = client.delete("/api/batches/test-id", cookies={SESSION_COOKIE_NAME: session_token})
+        response = client.delete("/api/batches/test-id")
 
         assert response.status_code == 403
         assert "CSRF" in response.json()["detail"]
@@ -123,7 +121,6 @@ class TestCSRFMiddleware:
             "/api/console/scan",
             json={"text": "test", "mode": "light", "preset": "SOC Logs"},
             headers={"X-CSRF-Token": csrf_token},
-            cookies={SESSION_COOKIE_NAME: session_token},
         )
 
         assert response.status_code == 200
@@ -145,7 +142,6 @@ class TestCSRFMiddleware:
         response = client.post(
             f"/api/console/scan?csrf_token={csrf_token}",
             json={"text": "test", "mode": "light", "preset": "SOC Logs"},
-            cookies={SESSION_COOKIE_NAME: session_token},
         )
 
         assert response.status_code == 200
@@ -155,7 +151,7 @@ class TestCSRFMiddleware:
         client, session_token, csrf_token = authenticated_client
 
         # GET without CSRF token should work (with session cookie)
-        response = client.get("/api/health", cookies={SESSION_COOKIE_NAME: session_token})
+        response = client.get("/api/health")
 
         assert response.status_code == 200
 
@@ -234,7 +230,6 @@ class TestCSRFMiddlewareOrder:
         response = client.post(
             "/api/console/scan",
             json={"text": "test", "mode": "light", "preset": "SOC Logs"},
-            cookies={SESSION_COOKIE_NAME: session_token},
         )
 
         # Should fail on CSRF (403), not auth (401)
@@ -291,13 +286,13 @@ class TestCSRFWithInvalidSession:
     def test_csrf_with_malformed_session_cookie(self, enable_auth_for_csrf_tests):
         """CSRF validation should fail gracefully with malformed session."""
         client = TestClient(app)
-
+        # Set malformed cookie directly on client to avoid per-request cookie deprecation warning
+        client.cookies.set(SESSION_COOKIE_NAME, "invalid-no-dot")
         # POST with malformed session cookie and CSRF token
         response = client.post(
             "/api/console/scan",
             json={"text": "test", "mode": "light", "preset": "SOC Logs"},
             headers={"X-CSRF-Token": "some-token"},
-            cookies={SESSION_COOKIE_NAME: "invalid-no-dot"},
         )
 
         # Should skip CSRF (malformed cookie) and fail on auth (401)
@@ -308,19 +303,17 @@ class TestCSRFWithInvalidSession:
     def test_csrf_with_expired_session(self, enable_auth_for_csrf_tests):
         """CSRF validation should handle expired sessions."""
         client = TestClient(app)
-
         # Create session and let it expire (or use invalid session_id)
         session_token, expires_at, csrf_token = create_session("test_user")
-
         # Destroy session to simulate expiration
         destroy_session(session_token)
-
+        # Set cookie directly on client to avoid per-request cookie deprecation warning
+        client.cookies.set(SESSION_COOKIE_NAME, session_token)
         # POST with CSRF token but expired session
         response = client.post(
             "/api/console/scan",
             json={"text": "test", "mode": "light", "preset": "SOC Logs"},
             headers={"X-CSRF-Token": csrf_token},
-            cookies={SESSION_COOKIE_NAME: session_token},
         )
 
         # Should fail with CSRF validation error (403) when session is invalid

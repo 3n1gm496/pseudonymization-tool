@@ -67,7 +67,7 @@ class TestIssue18LogSanitization:
         assert "api_key" not in cleaned
 
     def test_scrub_removes_file_paths(self):
-        """✅ FIX #18: Verify file paths are sanitized"""
+        """Verify file paths are sanitized in log output"""
         data = {
             "error": "File not found: /home/admin/sensitive/file.txt",
             "path": "/tmp/batch_123/uploads/secret.pdf",
@@ -79,7 +79,7 @@ class TestIssue18LogSanitization:
         assert "/tmp/***" in cleaned["path"]
 
     def test_scrub_truncates_uuids(self):
-        """✅ FIX #18: Verify UUIDs are partially redacted"""
+        """Verify UUIDs are partially redacted in log output"""
         data = {
             "batch_id": "353903d9-3182-4ee0-aa50-4e6f0acb692d",
             "finding_id": "a1b2c3d4-5678-90ab-cdef-1234567890ab",

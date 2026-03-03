@@ -149,7 +149,7 @@ class TestSessionManagement:
     """Test session creation, validation, and destruction."""
 
     def test_auth_uses_default_password(self):
-        """Test detection of unconfigured password (✅ FIX #I-006)."""
+        """Test detection of unconfigured password (returns True when password not configured)."""
         # When _password_env is None (not configured), should return True
         with patch("app.core.auth._password_env", None):
             assert auth_uses_default_password() is True
@@ -583,10 +583,11 @@ class TestIntegrationWithAuthEndpoints:
         # Create a session
         token, _, csrf_token = create_session("testuser")
 
+        # Set cookie directly on client to avoid per-request cookie deprecation warning
+        client.cookies.set(SESSION_COOKIE_NAME, token)
+
         # Logout
-        response = client.post(
-            "/api/auth/logout", headers={"X-CSRF-Token": csrf_token}, cookies={SESSION_COOKIE_NAME: token}
-        )
+        response = client.post("/api/auth/logout", headers={"X-CSRF-Token": csrf_token})
 
         # Should succeed (or at least not error)
         assert response.status_code in [200, 401, 403]  # Depends on auth settings
