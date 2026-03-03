@@ -150,11 +150,11 @@ def test_revert_apply_wrong_extension():
 
 
 def test_revert_apply_empty_passphrase():
-    """Apply con passphrase vuota restituisce 400."""
+    """Apply con passphrase blank (solo spazi) restituisce 400."""
     zip_bytes = _make_zip_bytes()
     response = client.post(
         "/api/revert/apply",
-        data={"passphrase": ""},
+        data={"passphrase": "   "},
         files={"archive": ("batch.zip", zip_bytes, "application/zip")},
     )
     assert response.status_code == 400
@@ -285,11 +285,11 @@ def test_revert_text_apply_success():
 
 
 def test_revert_text_apply_empty_passphrase():
-    """Apply testo con passphrase vuota restituisce 400."""
+    """Apply testo con passphrase blank (solo spazi) restituisce 400."""
     mapping_bytes = _make_mapping_bytes()
     response = client.post(
         "/api/revert/text/apply",
-        data={"passphrase": "", "text": "[PERSON_0001]"},
+        data={"passphrase": "   ", "text": "[PERSON_0001]"},
         files={"mapping_file": ("mapping.enc", mapping_bytes, "application/octet-stream")},
     )
     assert response.status_code == 400
