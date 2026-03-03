@@ -53,7 +53,7 @@ Pseudonymization transforms sensitive data into placeholder values (e.g., `mario
 #### Step 1: Complete Pseudonymization Flow
 
 In the main tool interface:
-1. **Scan** — Upload files or text, select policy
+1. **Scan** — Upload files or text (preset `SOC Logs` applied automatically)
 2. **Review** — View and approve/customize finding pseudonyms
 3. **Apply** — Generate pseudonymized output
 
@@ -330,7 +330,7 @@ Scenario: A company wants to analyze 500 support emails with ChatGPT for sentime
 1. **Upload 500 emails to the Tool**
    - Format: .txt, .csv, .eml
    - Select mode: `STRICT` (detect all PII entities)
-   - Select policy: `Email Headers`
+   - Preset: `SOC Logs` (fixed — no user selection required)
 
 2. **Scan**
    - Tool detects: 1,250 PII entities (names, emails, IPs, etc.)
