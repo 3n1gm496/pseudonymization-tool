@@ -18,6 +18,7 @@ from app.core.auth import (
     create_session,
     destroy_session,
     extract_token_from_request,
+    get_csrf_token_for_session,
     validate_session,
     verify_credentials,
 )
@@ -97,7 +98,13 @@ async def auth_logout(request: Request, response: Response):
 
 
 @router.get("/auth/me")
-async def auth_me(request: Request):
+async def auth_me(request: Request, response: Response):
+    """Return current authentication status.
+
+    Also includes the CSRF token in the X-CSRF-Token response header so that
+    clients with an existing valid session cookie (e.g. after a page reload)
+    can bootstrap their CSRF token without performing a full login.
+    """
     if not AUTH_ENABLED:
         return {
             "authenticated": True,
@@ -110,6 +117,13 @@ async def auth_me(request: Request):
     username = validate_session(token)
     if not username:
         raise HTTPException(status_code=401, detail="Non autenticato")
+
+    # ✅ CSRF bootstrap: include the CSRF token so the frontend can restore it
+    # after a page reload without requiring a new login.
+    csrf_token = get_csrf_token_for_session(token)
+    if csrf_token:
+        response.headers["X-CSRF-Token"] = csrf_token
+
     return {
         "authenticated": True,
         "username": username,

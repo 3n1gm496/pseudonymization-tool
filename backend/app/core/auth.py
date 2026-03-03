@@ -230,6 +230,29 @@ def _get_csrf_token(sid: str) -> Optional[str]:
         return _csrf_tokens.get(sid)
 
 
+def get_csrf_token_for_session(token: Optional[str]) -> Optional[str]:
+    """Retrieve the CSRF token associated with an existing session token.
+
+    Used by /auth/me to include the CSRF token in the bootstrap response,
+    so clients that already have a valid session cookie (e.g. after a page
+    reload) can obtain their CSRF token without logging in again.
+
+    Returns None if the token is invalid, expired, or has no CSRF entry.
+    """
+    if not AUTH_ENABLED:
+        # When auth is disabled, no CSRF token is needed
+        return None
+    if not token or "." not in token:
+        return None
+    try:
+        payload_b64 = token.split(".", 1)[0]
+        payload = _b64_decode(payload_b64)
+        sid = payload.split(":", 1)[0]
+        return _get_csrf_token(sid)
+    except Exception:
+        return None
+
+
 def _set_csrf_token(sid: str, token: str) -> None:
     redis_client = _get_redis_client()
     if redis_client:
