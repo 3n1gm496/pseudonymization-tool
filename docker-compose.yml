@@ -48,7 +48,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: pseudonymization-tool
-    image: pseudonymization-tool:latest
+    image: pseudonymization-tool:5.0.0
 
     ports:
       - "8000:8000"
