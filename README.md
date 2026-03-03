@@ -59,7 +59,7 @@ Web application locale moderna per la pseudonimizzazione sicura di dati sensibil
 │  │ Auth Module  │  │ API Routes   │  │ Batch Mgr    │           │
 │  │ (JWT + RBAC) │  │ (/api/*)     │  │ (Lifecycle)  │           │
 │  └──────────────┘  └──────────────┘  └──────┬───────┘           │
-│                                              │                  │
+│                                             │                   │
 │  ┌──────────────────────────────────────────▼─────────────────┐ │
 │  │            Celery Task Queue (Phase 4)                     │ │
 │  │  - Async scan execution (run_scan_pipeline)                │ │
@@ -67,11 +67,11 @@ Web application locale moderna per la pseudonimizzazione sicura di dati sensibil
 │  │  - Task status tracking                                    │ │ 
 │  └──────────────────────────────────────────┬─────────────────┘ │
 │                                             │                   │
-│  ┌──────────────┐  ┌──────────────┐  ┌─────▼──────┐             │
-│  │ Detectors    │  │ Parsers      │  │ Redis      │             │
-│  │ (Regex/Dict  │  │ (PDF/DOCX/   │  │ (Broker +  │             │
-│  │  /SOC/ML)    │  │  XLSX/IMG)   │  │  Results)  │             │
-│  └──────────────┘  └──────────────┘  └────────────┘             │
+│  ┌──────────────┐  ┌──────────────┐   ┌─────▼──────┐            │
+│  │ Detectors    │  │ Parsers      │   │ Redis      │            │
+│  │ (Regex/Dict  │  │ (PDF/DOCX/   │   │ (Broker +  │            │
+│  │  /SOC/ML)    │  │  XLSX/IMG)   │   │  Results)  │            │
+│  └──────────────┘  └──────────────┘   └────────────┘            │
 │                                                                 │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐           │
 │  │ Pseudonymizer│  │ Crypto (AES) │  │ Report Gen   │           │
