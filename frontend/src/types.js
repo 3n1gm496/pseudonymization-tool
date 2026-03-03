@@ -34,8 +34,10 @@
  */
 
 /**
- * @typedef {'SOC_LOGS'|'GENERAL'|'SOURCE_CODE'} PresetName
- * Detection preset configuration
+ * @typedef {'SOC Logs'|'Policy Docs'|'Email Headers'} PresetName
+ * Detection preset — applied automatically by the backend (default: 'SOC Logs').
+ * The frontend does not expose a preset selector; the value is fixed server-side.
+ * Available presets are listed by GET /api/settings/policies.
  */
 
 /**
@@ -44,14 +46,14 @@
  */
 
 /**
- * @typedef {'SAFE_TO_UPLOAD'|'NEEDS_REVIEW'|'HIGH_RISK'} SafetyLabel
+ * @typedef {'SAFE_TO_UPLOAD'|'SAFE_WITH_WARNINGS'|'NOT_SAFE'} SafetyLabel
  * Safety classification for batch content
  */
 
 /**
  * @typedef {Object} BatchConfig
  * @property {BatchMode} mode - Processing mode
- * @property {PresetName} preset - Detection preset
+ * @property {PresetName} preset - Detection preset (server-side default: 'SOC Logs')
  */
 
 /**
