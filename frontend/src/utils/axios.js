@@ -56,7 +56,7 @@ axiosInstance.interceptors.response.use(
 
 /**
  * Request interceptor to add CSRF token to POST/DELETE/PATCH/PUT requests
- * ✅ FIX #C3: CSRF Protection - Frontend implementation
+ * CSRF Protection - Frontend implementation
  */
 axiosInstance.interceptors.request.use(
   (config) => {

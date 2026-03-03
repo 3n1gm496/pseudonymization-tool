@@ -17,7 +17,7 @@ import { useToast } from '../hooks/useToast'
 const Scanner = ({ onScan, isLoading }) => {
   const [text, setText] = useState('')
   const [uploadedFile, setUploadedFile] = useState(null)
-  const [scanLoading, setScanLoading] = useState(false)  // ✅ FIX #6: Local loading state for scans
+  const [scanLoading, setScanLoading] = useState(false)  // Local loading state for scans
   const fileInputRef = useRef(null)
   const { showToast } = useToast()
 
@@ -51,11 +51,11 @@ const Scanner = ({ onScan, isLoading }) => {
       return
     }
 
-    // ✅ FIX #14: Add timeout handling for text scan
+    // Add timeout handling for text scan
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 30000)  // 30 second timeout
 
-    setScanLoading(true)  // ✅ Set local loading state
+    setScanLoading(true)  // Set local loading state
     try {
       const response = await axios.post(
         '/api/console/scan',
@@ -72,7 +72,7 @@ const Scanner = ({ onScan, isLoading }) => {
       }
     } finally {
       clearTimeout(timeoutId)
-      setScanLoading(false)  // ✅ Always reset loading state on error or success
+      setScanLoading(false)  // Always reset loading state on error or success
     }
   }
 
@@ -83,7 +83,7 @@ const Scanner = ({ onScan, isLoading }) => {
       return
     }
 
-    // ✅ FIX #11a: Check file size before uploading
+    // Check file size before uploading
     const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024  // 100MB
     if (uploadedFile.size > MAX_FILE_SIZE_BYTES) {
       const fileSizeMB = (uploadedFile.size / 1024 / 1024).toFixed(1)
@@ -95,12 +95,12 @@ const Scanner = ({ onScan, isLoading }) => {
       return
     }
 
-    setScanLoading(true)  // ✅ Set local loading state
+    setScanLoading(true)  // Set local loading state
     try {
       const formData = new FormData()
       formData.append('files', uploadedFile)
 
-      // ✅ FIX #11b: Add upload progress tracking
+      // Add upload progress tracking
       const response = await axios.post('/api/batches', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         onUploadProgress: (progressEvent) => {
@@ -128,7 +128,7 @@ const Scanner = ({ onScan, isLoading }) => {
     } catch (error) {
       showToast(error.response?.data?.detail || error.message || 'Errore durante lo scan', 'error')
     } finally {
-      setScanLoading(false)  // ✅ Always reset loading state on error or success
+      setScanLoading(false)  // Always reset loading state on error or success
     }
   }
 

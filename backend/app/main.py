@@ -62,7 +62,7 @@ async def lifespan(app: FastAPI):
     logger.info("Server in ascolto su: http://%s:%s", SERVER_HOST, SERVER_PORT)
     logger.info("SICUREZZA: Nessuna chiamata di rete esterna verra' effettuata.")
 
-    # ✅ FIX #I-005: Validate writable paths early
+    # Validate writable paths early
     validate_writable_paths()
 
     TEMP_BASE_DIR.mkdir(parents=True, exist_ok=True)
@@ -195,7 +195,7 @@ async def csrf_middleware(request: Request, call_next):
     if path in public_paths or not path.startswith("/api"):
         return await call_next(request)
 
-    # ✅ Prima verifica se c'è una sessione attiva
+    # Prima verifica se c'è una sessione attiva
     # Se non c'è session cookie, delega ad auth_middleware (che darà 401)
     # Questo garantisce l'ordine corretto: 401 (no auth) prima di 403 (CSRF)
     session_cookie = request.cookies.get(SESSION_COOKIE_NAME)

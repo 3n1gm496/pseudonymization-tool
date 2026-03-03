@@ -134,7 +134,7 @@ async def console_scan(req: dict, request: Request):
     create_batch(batch)
     pp = generate_passphrase()
     store_passphrase(batch.batch_id, pp)
-    set_batch_start_time(batch.batch_id)  # ✅ FIX #3: Thread-safe timing
+    set_batch_start_time(batch.batch_id)  # Thread-safe timing
 
     try:
         file_id, findings, safety = await asyncio.wait_for(

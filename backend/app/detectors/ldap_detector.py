@@ -1,5 +1,5 @@
 """
-LDAP Detector enterprise — v4.0.0
+LDAP Detector enterprise — v5.0.0
 
 Principi di sicurezza:
 - Cache solo in memoria, mai su disco.

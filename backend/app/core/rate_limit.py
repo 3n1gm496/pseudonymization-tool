@@ -193,7 +193,7 @@ class RateLimiter:
             bucket["timestamps"].append(now)
             bucket["last_access"] = now
 
-            # ✅ FIX #20: Return rate limit info for response headers
+            # Return rate limit info for response headers
             return {
                 "remaining": remaining - 1,  # -1 because we just added current request
                 "reset": reset_time,

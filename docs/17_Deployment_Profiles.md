@@ -231,7 +231,7 @@ pytest tests/  # Automatically uses DEV profile with auth disabled
 **Duplication removed**: Scattered env checks → 1 central system
 
 **Test results**:
-- ✅ **267 passed, 12 skipped** (no regressions)
+- ✅ **348 passed, 12 skipped** (no regressions)
 - ✅ Auth automatically disabled in tests
 - ✅ All profile configurations tested
 
@@ -553,7 +553,7 @@ class RegionConfig(ProfileConfig):
 
 - **Before**: 5+ modules with scattered env var logic
 - **After**: 1 centralized module (profiles.py)
-- **Test coverage**: 267/267 passing
+- **Test coverage**: 348/348 passing
 - **Code clarity**: Anti-patterns removed (inline pytest checks, hardcoded CORS, etc.)
 
 ### Maturity Assessment

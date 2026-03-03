@@ -322,7 +322,7 @@ services:
 make build-docker     # Build multi-stage image
 make start            # Start docker-compose
 make dev              # Dev mode with hot reload
-make test             # Run pytest (267 tests, 64% coverage)
+make test             # Run pytest (348 tests, 71% coverage)
 make clean            # Remove containers + temp data
 ```
 
@@ -668,9 +668,9 @@ def mock_redis_for_tests():
 
 ## 6. Testing Strategy
 
-**Test Coverage: 64% (v5.0.0 Verified)**
+**Test Coverage: 71% (v5.0.0 Verified)**
 
-**v5.0.0 Test Suite (267 passing, 12 skipped):**
+**v5.0.0 Test Suite (348 passing, 12 skipped):**
 - `test_api_contract.py`: 9/9 PASS — API contracts including 202 Accepted pattern
 - `test_additional_fixes.py`: 11/11 PASS — Cleanup, logging, lifecycle
 - `test_functional.py`: 44/44 PASS — Detectors, parsers, security, crypto
@@ -680,7 +680,7 @@ def mock_redis_for_tests():
 - `crypto.py`: 94.92% coverage → AES-256-GCM encryption
 - `schemas.py`: 96.48% coverage → Request validation
 - `batch_manager.py`: 64.67% coverage → Lifecycle + TOCTOU fixes
-- `pipeline.py`: 65%+ coverage (CI threshold)
+- `pipeline.py`: 70%+ coverage (CI threshold)
 
 **Test Infrastructure:**
 - Celery EAGER mode: Tasks run synchronously in tests (no broker)
@@ -697,7 +697,7 @@ def mock_redis_for_tests():
 
 Run: `make test` or `pytest backend/tests/ -v --cov`
 
-**Test Results:** 267 passing, 12 skipped, 0 failed (CI verified)
+**Test Results:** 348 passing, 12 skipped, 0 failed (CI verified)
 
 ---
 
@@ -727,4 +727,4 @@ Run: `make test` or `pytest backend/tests/ -v --cov`
 - 5.0.0 (2026-03-03): Security hardening (13 CVE fixed), Docker hardening, Redis auth, CI hardening, 72 unused imports removed
 
 **v5.0.0 Release Date:** 2026-03-03  
-**v5.0.0 Test Verification:** 267 tests passing ✅
+**v5.0.0 Test Verification:** 348 tests passing ✅

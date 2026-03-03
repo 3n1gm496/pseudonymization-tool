@@ -1,5 +1,5 @@
 """
-Gestore dei batch in memoria v4.0.
+Gestore dei batch in memoria v5.0.0.
 Mantiene lo stato di tutti i batch attivi durante la sessione del server.
 - PseudonymEngine persistente per batch
 - Passphrase generata automaticamente (persistita su storage condiviso per worker)
@@ -31,7 +31,7 @@ _passphrases: Dict[str, str] = {}  # batch_id -> passphrase (in memoria e Redis;
 _engines: Dict[str, object] = {}  # batch_id -> PseudonymEngine (persistente)
 _decisions: Dict[str, Dict[str, Any]] = {}  # batch_id -> {finding_id -> decision_dict}
 _last_activity: Dict[str, float] = {}  # batch_id -> timestamp ultima attività
-_batch_start_times: Dict[str, str] = {}  # ✅ FIX #3: Centralized, thread-safe storage
+_batch_start_times: Dict[str, str] = {}  # Centralized, thread-safe storage
 
 # Timeout di inattività (configurabile, default 5 minuti)
 BATCH_INACTIVITY_TIMEOUT_SECONDS = int(os.environ.get("BATCH_INACTIVITY_TIMEOUT_SECONDS", "300"))
@@ -370,7 +370,7 @@ def generate_passphrase(length: int = 32) -> str:
 
 
 # ─── Batch Timing Helpers (Thread-Safe) ───────────────────────────────────────
-# ✅ FIX #3: Centralized, lock-protected access to _batch_start_times
+# Centralized, lock-protected access to _batch_start_times
 
 
 def set_batch_start_time(batch_id: str) -> None:
@@ -407,7 +407,7 @@ def clear_batch_start_time(batch_id: str) -> Optional[str]:
 
 
 # ─── Atomic Operations Context Manager ─────────────────────────────────────────
-# ✅ FIX #H2: Atomic transactions with rollback support
+# Atomic transactions with rollback support
 
 
 @contextmanager
@@ -690,14 +690,14 @@ def cleanup_batch(batch_id: str) -> None:
         _decisions.pop(batch_id, None)
         _batches.pop(batch_id, None)
         _last_activity.pop(batch_id, None)
-        _batch_start_times.pop(batch_id, None)  # ✅ FIX #3: Also cleanup timing info
+        _batch_start_times.pop(batch_id, None)  # Also cleanup timing info
         _delete_batch_from_redis(batch_id)
 
 
 def cleanup_inactive_batches() -> int:
     """
     Rimuove i batch inattivi. Restituisce il numero di batch rimossi.
-    ✅ FIX #1: Single atomic lock region - no TOCTOU window between check and delete
+    Single atomic lock region - no TOCTOU window between check and delete
     """
     cleaned_count = 0
 
