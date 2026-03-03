@@ -40,10 +40,27 @@ No new user-facing features; all changes are infrastructure and correctness impr
 - **PR #13** — `test`: 61 unused imports removed, 98→0 DeprecationWarning (anyio/starlette filtered), `console_pipeline.py` coverage 19%→100% (+13 tests)
 - **PR #14** — `chore`: `.hypothesis/` added to `.gitignore` and removed from tracking, `PolicySelector.jsx` removed (dead component — preset fixed to `SOC Logs` by design), docs updated to reflect fixed preset
 
+### CI Fix (PR #15, #16)
+
+- **PR #15** — `fix(ci)`: CI verde — `.eslintrc.cjs` aggiunto (ESLint 8 richiede config esplicita), `reportlab>=4.0.0` per Python 3.12 (wheel precompilati), `black`/`isort` applicati a 22 file, `bandit` false positive B108 soppressi con `# nosec`, 4 errori `react/no-unescaped-entities` corretti, import `React` inutilizzati rimossi da 10 file, state `passphrase` inutilizzato rimosso da `App.jsx`
+- **PR #16** — `fix(deps)`: `httpx>=0.25.0` aggiunto a `requirements-dev.txt` — dipendenza esplicita richiesta da `starlette.testclient` (mancava nell'ambiente CI pulito)
+
+### Security (PR #17)
+
+- **PR #17** — `fix(security)`: passphrase cifrata su disco con AES-256-GCM (chiave derivata da `AUTH_SECRET`) invece di testo in chiaro; `admin123!` hardcoded in `conftest.py` sostituito con `os.environ.get("AUTH_PASSWORD", "T3st-0nly!")`; stessa correzione in `test_api_contract.py` e `test_csrf_middleware.py`
+
+### DevOps (PR #18)
+
+- **PR #18** — `chore(docker)`: Redis `6-alpine` → `7-alpine` (EOL fix), `LABEL version="5.0.0"` nel Dockerfile; CI threshold aggiornati ai valori reali misurati
+
+### Coverage Critica (PR #19)
+
+- **PR #19** — `test`: coverage critica portata al 100% su 4 moduli — `detectors/cache.py` (0%→100%, +17 test), `revert_routes.py` (23%→100%, +22 test), `tasks.py` (49%→100%, +15 test), `image_parser.py` (42%→96%, +14 test); bug `text_parser.py` corretto (variabile `ue` non propagata nella catena eccezioni)
+
 ### Testing
 
-- **280 tests passing, 12 skipped** (Tesseract OCR not available in CI)
-- **65% global coverage**
+- **348 tests passing, 12 skipped** (Tesseract OCR not available in CI)
+- **71% global coverage** (+6 punti)
 - **0 CVE** (pip-audit)
 - **0 Bandit HIGH/MEDIUM** findings
 - **0 pytest warnings** (DeprecationWarning from third-party libs suppressed with documented filters)
