@@ -1,12 +1,12 @@
 # Local Pseudonymization Tool v4.0.4
 
-[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![React 18](https://img.shields.io/badge/React-18.2-61dafb.svg)](https://react.dev)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.3-38b2ac.svg)](https://tailwindcss.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688.svg)](https://fastapi.tiangolo.com)
-[![Tests: 64 verified](https://img.shields.io/badge/Tests-64%20verified-brightgreen.svg)](backend/tests/)
-[![Coverage: 61.27%](https://img.shields.io/badge/Coverage-61.27%25-yellowgreen.svg)]()
+[![Tests: 267 passing](https://img.shields.io/badge/Tests-267%20passing-brightgreen.svg)](backend/tests/)
+[![Coverage: 64%](https://img.shields.io/badge/Coverage-64%25-yellowgreen.svg)]()
 [![Async: Celery + Redis](https://img.shields.io/badge/Async-Celery%20%2B%20Redis-red.svg)](docs/02_Technical_Architecture.md)
 
 Web application locale moderna per la pseudonimizzazione sicura di dati sensibili in documenti di testo, DOCX, XLSX, PDF e immagini. Interfaccia React con Tailwind CSS, darkmode supportato. Progettato per ambienti enterprise che richiedono massima sicurezza e capacità di operare completamente offline.
@@ -82,8 +82,8 @@ Web application locale moderna per la pseudonimizzazione sicura di dati sensibil
 ┌────────────────────────────▼────────────────────────────────────┐
 │                    Storage & Persistence                         │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐         │
-│  │ Batch DB     │  │ Outputs      │  │ Uploads      │         │
-│  │ (SQLite/PG)  │  │ (ZIP files)  │  │ (Temp files) │         │
+│  │ Redis State  │  │ Outputs      │  │ Uploads      │         │
+│  │ (Batch/Sess) │  │ (ZIP files)  │  │ (Temp files) │         │
 │  └──────────────┘  └──────────────┘  └──────────────┘         │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -138,19 +138,29 @@ Vedi [docs/02_Technical_Architecture.md](docs/02_Technical_Architecture.md) per 
 git clone https://github.com/3n1gm496/pseudonymization-tool.git
 cd pseudonymization-tool
 
-# Avvio con Docker (backend + Redis + Celery worker)
+# 1. Crea il file .env a partire dall'esempio (OBBLIGATORIO)
+cp .env.example .env
+# Modifica .env e imposta almeno:
+#   AUTH_PASSWORD=<password-sicura>
+#   REDIS_PASSWORD=<password-redis-sicura>
+
+# 2. Avvio con Docker
 make start
 ```
 
 Oppure manualmente:
 
 ```bash
+cp .env.example .env
+# Modifica .env con le tue credenziali
 docker compose up --build -d
 ```
 
+> **Nota:** Il file `.env` contiene credenziali sensibili e non deve mai essere committato. È già incluso nel `.gitignore`.
+
 **Servizi avviati:**
 - `backend`: FastAPI app (port 8000)
-- `redis`: Message broker (port 6379)
+- `redis`: Message broker (porta interna, non esposta sull'host)
 - `celery-worker`: Background task processor
 
 Accedi all'interfaccia: **http://localhost:8000**
@@ -195,9 +205,9 @@ BACKEND_PORT=8000                       # HTTP port
 LOG_LEVEL=info                          # Logging: debug|info|warning|error
 
 # Async Processing (Phase 4)
-CELERY_BROKER_URL=redis://redis:6379/0  # Message broker
-REDIS_URL=redis://redis:6379/0          # Result backend
-CELERY_RESULT_BACKEND=${REDIS_URL}      # Task results storage
+CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@redis:6379/0  # Message broker (con auth)
+REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0          # Result backend (con auth)
+CELERY_RESULT_BACKEND=${REDIS_URL}                         # Task results storage
 
 # Security
 JWT_SECRET_KEY=your-secret-key-change-in-production  # JWT signing key
@@ -205,12 +215,12 @@ JWT_ALGORITHM=HS256                     # JWT algorithm
 ACCESS_TOKEN_EXPIRE_MINUTES=30          # Token validity
 
 # Database
-DATABASE_URL=sqlite:///./data/batches.db  # SQLite or PostgreSQL
+# Nota: lo stato dei batch è gestito da Redis, non da un database SQL
 
 # Storage Paths
 UPLOAD_DIR=/app/uploads                 # Temp file uploads
 OUTPUT_DIR=/app/outputs                 # Generated reports (ZIP)
-PSEUDONYMIZER_STATE_DIR=/tmp/pseudonymizer_batches/state  # Runtime writable state (settings)
+PSEUDONYMIZER_STATE_DIR=/app/state  # Runtime writable state (montato come volume Docker)
 ```
 
 **Celery Worker Configuration:**
@@ -452,40 +462,39 @@ curl http://127.0.0.1:8000/api/settings/policies/SOC%20Logs
 ### Testing
 
 **Test Suite Status:**
-- ✅ **64 critical tests verified (Phase 4)** — All async architecture tests passing
-  - `test_api_contract.py`: 9/9 PASS (including 202 Accepted pattern)
-  - `test_additional_fixes.py`: 11/11 PASS (cleanup, logging, lifecycle)
-  - `test_functional.py`: 44/44 PASS (detectors, parsers, security, crypto)
-- 📊 **Coverage: 61.27%** — Focus on critical modules:
-  - `auth.py`: 95.10% (excellent)
-  - `crypto.py`: 94.92% (excellent)
-  - `schemas.py`: 96.48% (excellent)
-  - `batch_manager.py`: 64.67% (good)
-  - `pipeline.py`: 48.09% (Phase 4 async core)
+- ✅ **267 test passanti, 12 skippati** (Tesseract OCR non disponibile in CI)
+  - `test_functional.py`: 49 test (detectors, parsers, sicurezza, crypto)
+  - `test_auth_complete.py`: suite completa autenticazione e JWT
+  - `test_csrf_middleware.py`: protezione CSRF globale
+  - `test_api_contract.py`: contratti API (202 Accepted pattern)
+  - `test_parser_limitations.py`: edge case parser
+- 📊 **Coverage: 64%** — Moduli critici:
+  - `crypto.py`: 95% (eccellente)
+  - `schemas.py`: 98% (eccellente)
+  - `safety.py`: 92% (eccellente)
+  - `auth.py`: 79% (buono)
+  - `pipeline.py`: 71% (buono)
 
-**Test Infrastructure (Phase 4):**
-- Celery EAGER mode for synchronous test execution (no broker needed)
-- Redis mocking with fallback to in-memory storage
-- Async endpoint testing with 202 Accepted pattern validation
+**Test Infrastructure:**
+- Celery EAGER mode per esecuzione sincrona in test (no broker necessario)
+- Redis mocking con fallback in-memory
+- Test di integrazione multicontainer separati (`pytest -m integration`, richiede Docker)
 
 ```bash
-# Esegui tutti i test
-make test
+# Esegui tutti i test unitari (no Docker necessario)
+cd backend
+pytest tests/ -m "not integration" -v
 
 # Con coverage report
-make test-cov
+pytest tests/ -m "not integration" --cov=app --cov-report=html
 
-# Test specifici Phase 4
-cd backend
-pytest tests/test_api_contract.py -v         # API contracts (202 Accepted)
-pytest tests/test_additional_fixes.py -v     # Lifecycle & cleanup
-pytest tests/test_functional.py -v           # Core functionality
+# Test di integrazione (richiede Docker Compose attivo)
+pytest tests/ -m integration -v
 
-# Test async infrastructure
-pytest tests/conftest.py::test_celery_eager  # Verify EAGER mode
+# Tramite Makefile
+make test       # test unitari
+make test-cov   # con coverage report
 ```
-
-Vedi [test_results_summary.txt](test_results_summary.txt) per dettagli completi sui test verificati.
 
 ### Struttura Progetto
 
@@ -563,5 +572,5 @@ Questo progetto è distribuito sotto licenza MIT. Vedi il file `LICENSE` per mag
 
 - **Tesseract OCR** per il riconoscimento ottico dei caratteri
 - **FastAPI** per il framework web
-- **python-docx, openpyxl, PyPDF2** per il parsing dei documenti
+- **python-docx, openpyxl, pypdf** per il parsing dei documenti
 - Community open source per i contributi e il feedback
