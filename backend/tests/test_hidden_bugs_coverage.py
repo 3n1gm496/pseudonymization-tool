@@ -9,9 +9,7 @@ Tests cover:
 
 import threading
 import time
-from unittest.mock import Mock, patch
 
-import pytest
 from app.core.auth import create_session, validate_session, _sessions, _lock as auth_lock
 from app.core.batch_manager import (
     set_batch_start_time,
@@ -24,7 +22,7 @@ from app.core.batch_manager import (
     _global_lock,
     _last_activity,
 )
-from app.models.schemas import Batch, BatchConfig, BatchMode, PresetName
+from app.models.schemas import Batch, BatchConfig, BatchMode
 
 
 # ─── BUG #1: Session Memory Leak Tests ────────────────────────────────────────

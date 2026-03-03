@@ -1,7 +1,7 @@
 import io
 import zipfile
 
-from app.api import auth_routes, batches_routes, console_routes, revert_routes, routes
+from app.api import auth_routes, console_routes
 from app.core.batch_manager import create_batch, get_batch_dir
 from app.main import app
 from app.models.schemas import Batch, BatchConfig, BatchStatus, FileRecord, PresetName, SafetyLabel

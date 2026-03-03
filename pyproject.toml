@@ -41,6 +41,18 @@ addopts = [
     "-v",
     "--strict-markers",
 ]
+filterwarnings = [
+    # DeprecationWarning da starlette.testclient per cookies= per-request.
+    # Viene da starlette internamente, non dal nostro codice.
+    # Fix upstream: https://github.com/encode/starlette/issues/2549
+    # Rimuovere questo filtro quando starlette >= 0.37 sarà disponibile.
+    "ignore:Setting per-request cookies.*:DeprecationWarning:starlette",
+    # DeprecationWarning da anyio/asyncio per Future.cancel(msg=...) e Task.cancel(msg=...) in Python 3.11+.
+    # Viene da anyio e dalla stdlib asyncio internamente, non dal nostro codice.
+    # Fix upstream: aggiornare anyio quando supporta Python 3.11+ natively.
+    "ignore:Passing 'msg' argument to Future.cancel.*:DeprecationWarning",
+    "ignore:Passing 'msg' argument to Task.cancel.*:DeprecationWarning",
+]
 markers = [
     "unit: Unit tests",
     "integration: Integration tests",

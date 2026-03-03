@@ -9,10 +9,7 @@ Tests the full cycle:
 5. Verify original text recovery
 """
 
-import asyncio
-import json
 import os
-from pathlib import Path
 
 import pytest
 import requests

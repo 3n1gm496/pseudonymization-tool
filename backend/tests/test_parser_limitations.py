@@ -9,8 +9,6 @@ This test suite validates that ALL known parser limitations are:
 Reference: docs/14_Parser_Capability_Matrix.md
 """
 
-import io
-from pathlib import Path
 
 import pytest
 from app.models.schemas import EntityType, Finding, FindingLocation, ReviewAction
@@ -19,7 +17,7 @@ from app.parsers.image_parser import ImageParser
 from app.parsers.pdf_parser import PdfParser
 from app.parsers.xlsx_parser import XlsxParser
 from app.pseudonymizer.transformer import transform_docx_file, transform_pdf_file, transform_xlsx_file
-from PIL import ExifTags, Image
+from PIL import Image
 
 # ============================================================================
 # DOCX Limitations
@@ -207,7 +205,6 @@ def test_pdf_partial_pages_warning(tmp_path):
 
     from io import BytesIO
 
-    from pypdf import PdfReader, PdfWriter
     from reportlab.pdfgen import canvas
 
     # Create PDF with 2 pages: 1 with text, 1 blank
@@ -293,7 +290,7 @@ def test_image_low_confidence_warning(tmp_path):
     except Exception:
         pytest.skip("Tesseract OCR not available in this environment")
     # Create image with text
-    from PIL import Image, ImageDraw, ImageFont
+    from PIL import Image, ImageDraw
 
     img = Image.new("RGB", (400, 100), color="white")
     draw = ImageDraw.Draw(img)
@@ -354,7 +351,6 @@ def test_image_exif_stripped(tmp_path):
     img = Image.new("RGB", (100, 100), color="red")
 
     # Add fake EXIF
-    from PIL.ExifTags import TAGS
 
     exif_data = img.getexif()
     exif_data[0x0132] = "2024:01:01 12:00:00"  # DateTime tag

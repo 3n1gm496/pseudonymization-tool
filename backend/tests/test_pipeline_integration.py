@@ -3,23 +3,12 @@ Comprehensive test suite for core/pipeline.py module.
 Target coverage: >80% on pipeline processing, batch management, and result handling.
 """
 
-import json
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import List
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
-from app.core.batch_manager import (
-    create_batch,
-    get_batch,
-    get_batch_dir,
-    get_engine,
-    get_or_create_engine,
-    get_passphrase,
-)
-from app.core.exceptions import BatchStateError, ParsingError, ScanPipelineError
+from app.core.exceptions import BatchStateError
 from app.core.pipeline import (
     _cache_parse_result,
     _clear_parse_results,
@@ -31,17 +20,10 @@ from app.core.pipeline import (
     run_scan_pipeline,
 )
 from app.models.schemas import (
-    BatchMode,
-    BatchStatus,
     EntityType,
-    FileRecord,
-    FileStatus,
-    Finding,
     PresetName,
-    ReviewAction,
-    ReviewDecisionItem,
 )
-from app.parsers.base import ParseResult, TextChunk
+from app.parsers.base import ParseResult
 
 
 @pytest.fixture

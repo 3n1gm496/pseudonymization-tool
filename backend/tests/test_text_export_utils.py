@@ -4,7 +4,6 @@ Unit Tests: Text Export Utilities
 Tests the frontend utility functions for copying and downloading content.
 """
 
-import json
 from pathlib import Path
 
 import pytest
