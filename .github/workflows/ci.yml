@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.11']
+        python-version: ['3.11', '3.12']
 
     steps:
     - uses: actions/checkout@v4
@@ -25,8 +25,9 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('**/requirements*.txt') }}
         restore-keys: |
+          ${{ runner.os }}-pip-${{ matrix.python-version }}-
           ${{ runner.os }}-pip-
 
     - name: Install dependencies
@@ -50,34 +51,57 @@ jobs:
       run: |
         isort --check-only backend/app
 
-    - name: Security check with bandit
+    - name: Security check with bandit (SAST)
       run: |
+        # -ll = solo Medium e High (Low sono spesso falsi positivi)
+        # --exit-zero non usato: bandit deve fallire su Medium/High reali
         bandit -r backend/app -ll
 
-    - name: Check for known security vulnerabilities
+    - name: Check for known vulnerabilities with pip-audit
+      # pip-audit non richiede API key (a differenza di safety 3.x)
+      # Fallisce con exit code 1 se trova CVE con fix disponibile
       run: |
-        safety check --json || true
+        pip-audit -r backend/requirements.txt --progress-spinner off
 
-    - name: Run tests with pytest
+    - name: Run tests (unit + functional, exclude integration)
       run: |
         cd backend
-        pytest tests/ -v --cov=app --cov-report=xml --cov-report=html --cov-report=term-missing --cov-fail-under=50
+        # I test di integrazione (test_integration_multicontainer.py) richiedono
+        # docker-compose in esecuzione e vengono eseguiti separatamente.
+        # Il marker -m "not integration" esclude solo i test marcati con
+        # @pytest.mark.integration, non tutti i test di integrazione.
+        pytest tests/ -v \
+          -m "not integration" \
+          --cov=app \
+          --cov-report=xml \
+          --cov-report=html \
+          --cov-report=term-missing \
+          --cov-fail-under=60
 
     - name: Coverage regression check for critical modules
       run: |
         cd backend
-        # Check coverage for critical modules (fail if below thresholds)
-        pytest tests/ --cov=app.core.pipeline --cov-report=term --cov-fail-under=20 -q
-        pytest tests/ --cov=app.core.safety --cov-report=term --cov-fail-under=20 -q
-        pytest tests/ --cov=app.pseudonymizer.transformer --cov-report=term --cov-fail-under=35 -q
-        pytest tests/ --cov=app.core.exceptions --cov-report=term --cov-fail-under=55 -q
+        # Soglie basate sulla coverage reale misurata su main (2026-03-02)
+        # e arrotondate al 5% inferiore per tollerare piccole variazioni.
+        # Aggiornare queste soglie quando la coverage migliora.
+        pytest tests/ -m "not integration" --cov=app.core.safety    --cov-report=term --cov-fail-under=90 -q
+        pytest tests/ -m "not integration" --cov=app.mapping.crypto  --cov-report=term --cov-fail-under=90 -q
+        pytest tests/ -m "not integration" --cov=app.core.auth       --cov-report=term --cov-fail-under=75 -q
+        pytest tests/ -m "not integration" --cov=app.core.pipeline   --cov-report=term --cov-fail-under=65 -q
+        pytest tests/ -m "not integration" --cov=app.pseudonymizer.engine --cov-report=term --cov-fail-under=90 -q
+        pytest tests/ -m "not integration" --cov=app.pseudonymizer.transformer --cov-report=term --cov-fail-under=50 -q
+        pytest tests/ -m "not integration" --cov=app.core.exceptions --cov-report=term --cov-fail-under=55 -q
       continue-on-error: false
 
     - name: Check for untyped broad exceptions in critical paths
       run: |
         # Fail if "except Exception" found without comment justification in critical modules
         echo "Checking for broad exceptions in critical modules..."
-        BROAD_EXCEPTIONS=$(grep -rn "except Exception" backend/app/core/pipeline.py backend/app/pseudonymizer/transformer.py backend/app/core/safety.py | grep -v "#" | grep -v "except Exception as" || true)
+        BROAD_EXCEPTIONS=$(grep -rn "except Exception" \
+          backend/app/core/pipeline.py \
+          backend/app/pseudonymizer/transformer.py \
+          backend/app/core/safety.py \
+          | grep -v "#" | grep -v "except Exception as" || true)
         if [ -n "$BROAD_EXCEPTIONS" ]; then
           echo "❌ Found untyped broad exceptions in critical modules:"
           echo "$BROAD_EXCEPTIONS"
@@ -93,11 +117,26 @@ jobs:
         pytest tests/test_api_contract.py -v
 
     - name: Startup smoke test
+      env:
+        # Profilo DEV: auth disabilitata, swagger attivo, no Redis obbligatorio
+        PSEUDONYMIZER_PROFILE: dev
       run: |
         cd backend
         python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 &
         UVICORN_PID=$!
-        sleep 5
+        # Attendi avvio con retry invece di sleep fisso
+        for i in $(seq 1 10); do
+          sleep 1
+          if curl -sf http://127.0.0.1:8000/api/health > /dev/null 2>&1; then
+            echo "✅ Server avviato dopo ${i}s"
+            break
+          fi
+          if [ $i -eq 10 ]; then
+            echo "❌ Server non risponde dopo 10s"
+            kill $UVICORN_PID 2>/dev/null || true
+            exit 1
+          fi
+        done
         curl -f http://127.0.0.1:8000/api/health
         curl -f http://127.0.0.1:8000/api/ready
         kill $UVICORN_PID || true
@@ -121,16 +160,15 @@ jobs:
       with:
         node-version: '20'
         cache: 'npm'
-        cache-dependency-path: frontend/package.json
+        # package-lock.json è ora presente nel repository (PR #1)
+        cache-dependency-path: frontend/package-lock.json
 
     - name: Install frontend dependencies
       run: |
         cd frontend
-        if [ -f package-lock.json ]; then
-          npm ci
-        else
-          npm install
-        fi
+        # npm ci richiede package-lock.json (presente dal PR #1)
+        # Garantisce installazione deterministica e riproducibile
+        npm ci
 
     - name: Lint frontend
       run: |
@@ -155,10 +193,22 @@ jobs:
         test -f frontend/index.html
         test -f Makefile
         test -f docker-compose.yml
+        test -f .env.example
         test -f scripts/legacy/start.sh
         test -f README.md
 
     - name: Check for sensitive data
       run: |
-        # Ensure no sensitive files are committed
-        ! find . -name "*.env" -o -name "*.pem" -o -name "*.key" | grep -v ".venv" | grep -v "node_modules"
+        # Cerca file .env, .pem, .key nel repository (esclusi .venv e node_modules)
+        # NOTA: find con -o senza parentesi ha precedenza ambigua — uso parentesi esplicite
+        SENSITIVE=$(find . \( -name "*.env" -o -name "*.pem" -o -name "*.key" \) \
+          ! -path "*/.venv/*" \
+          ! -path "*/node_modules/*" \
+          ! -name ".env.example" \
+          2>/dev/null)
+        if [ -n "$SENSITIVE" ]; then
+          echo "❌ File sensibili trovati nel repository:"
+          echo "$SENSITIVE"
+          exit 1
+        fi
+        echo "✅ Nessun file sensibile trovato"
