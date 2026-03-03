@@ -1,0 +1,28 @@
+# Log di Sistema — Incidente di Sicurezza
+# Data: 2024-03-15 09:23:41
+
+[ALERT] Tentativo di accesso non autorizzato rilevato.
+Utente: mario.rossi@ente.gov.it
+IP Sorgente: 10.24.8.15
+IP Destinazione: 192.168.1.100
+Hostname: srv-dc-01.ente.local
+URL Accesso: https://intranet.ente.gov.it/admin/login
+
+[INFO] Analisi log firewall completata.
+Connessioni sospette da: 203.0.113.42
+Verso: vpn.ente.local (10.0.0.1)
+Utente coinvolto: luigi.ferrari@ente.gov.it
+Codice Fiscale: RSSMRA80A01H501A
+Telefono: +39 333 1234567
+
+[WARNING] Accesso multiplo fallito per l'account:
+Username: @m.rossi
+Email alternativa: m.rossi@comune.esempio.it
+Partita IVA fornitore: 12345678901
+
+[INFO] IPv6 rilevato nel traffico:
+Indirizzo: 2001:0db8:85a3:0000:0000:8a2e:0370:7334
+Hostname: server-prod-01.ente.local
+
+[RESOLVED] Incidente chiuso. Contatto: anna.bianchi@ente.gov.it
+Telefono ufficio: 06 1234 5678
