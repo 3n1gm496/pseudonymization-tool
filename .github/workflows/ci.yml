@@ -76,21 +76,23 @@ jobs:
           --cov-report=xml \
           --cov-report=html \
           --cov-report=term-missing \
-          --cov-fail-under=60
+          --cov-fail-under=65
 
     - name: Coverage regression check for critical modules
       run: |
         cd backend
-        # Soglie basate sulla coverage reale misurata su main (2026-03-02)
+        # Soglie aggiornate alla coverage reale misurata su main (2026-03-03)
         # e arrotondate al 5% inferiore per tollerare piccole variazioni.
-        # Aggiornare queste soglie quando la coverage migliora.
-        pytest tests/ -m "not integration" --cov=app.core.safety    --cov-report=term --cov-fail-under=90 -q
-        pytest tests/ -m "not integration" --cov=app.mapping.crypto  --cov-report=term --cov-fail-under=90 -q
-        pytest tests/ -m "not integration" --cov=app.core.auth       --cov-report=term --cov-fail-under=75 -q
-        pytest tests/ -m "not integration" --cov=app.core.pipeline   --cov-report=term --cov-fail-under=65 -q
-        pytest tests/ -m "not integration" --cov=app.pseudonymizer.engine --cov-report=term --cov-fail-under=90 -q
+        # Aggiornare queste soglie quando la coverage migliora significativamente.
+        pytest tests/ -m "not integration" --cov=app.core.safety           --cov-report=term --cov-fail-under=90 -q
+        pytest tests/ -m "not integration" --cov=app.mapping.crypto        --cov-report=term --cov-fail-under=90 -q
+        pytest tests/ -m "not integration" --cov=app.core.auth             --cov-report=term --cov-fail-under=75 -q
+        pytest tests/ -m "not integration" --cov=app.core.pipeline         --cov-report=term --cov-fail-under=70 -q
+        pytest tests/ -m "not integration" --cov=app.pseudonymizer.engine  --cov-report=term --cov-fail-under=90 -q
         pytest tests/ -m "not integration" --cov=app.pseudonymizer.transformer --cov-report=term --cov-fail-under=50 -q
-        pytest tests/ -m "not integration" --cov=app.core.exceptions --cov-report=term --cov-fail-under=55 -q
+        pytest tests/ -m "not integration" --cov=app.core.exceptions       --cov-report=term --cov-fail-under=55 -q
+        pytest tests/ -m "not integration" --cov=app.core.console_pipeline --cov-report=term --cov-fail-under=100 -q
+        pytest tests/ -m "not integration" --cov=app.core.audit            --cov-report=term --cov-fail-under=100 -q
       continue-on-error: false
 
     - name: Check for untyped broad exceptions in critical paths
@@ -160,7 +162,7 @@ jobs:
       with:
         node-version: '20'
         cache: 'npm'
-        # package-lock.json è ora presente nel repository (PR #1)
+        # package-lock.json è ora presente nel repository (PR #1 )
         cache-dependency-path: frontend/package-lock.json
 
     - name: Install frontend dependencies
