@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import axios, { setCsrfToken } from './utils/axios'
 import Header from './components/Header'
 import Scanner from './components/Scanner'
@@ -28,6 +28,11 @@ const App = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const { showToast, ToastContainer } = useToast()
 
+  // ✅ FIX: Ref per cancellare il polling in corso quando l'utente fa reset/logout
+  // Usando un ref (non state) per evitare re-render e per essere leggibile
+  // in modo sincrono all'interno del loop async senza closure stale.
+  const pollingCancelledRef = useRef(false)
+
   useEffect(() => {
     const bootstrapAuth = async () => {
       try {
@@ -42,10 +47,29 @@ const App = () => {
     bootstrapAuth()
   }, [])
 
+  /**
+   * Polling del batch fino a completamento (status 'done' o 'done_with_errors').
+   *
+   * Usa pollingCancelledRef per interrompere il loop quando l'utente fa reset
+   * o logout prima che il batch sia completato, evitando state update su
+   * componenti smontati e richieste HTTP inutili.
+   *
+   * @param {string} batchId - ID del batch da monitorare
+   * @param {number} timeoutMs - Timeout massimo in ms (default: 25 minuti)
+   * @param {number} intervalMs - Intervallo di polling in ms (default: 1.5s)
+   * @returns {Promise<object>} - Batch completo con tutti i dati
+   * @throws {Error} - Se il batch va in errore, viene cancellato o scade il timeout
+   */
   const pollBatchUntilApplied = async (batchId, timeoutMs = 25 * 60 * 1000, intervalMs = 1500) => {
     const startedAt = Date.now()
+    pollingCancelledRef.current = false
 
     while (Date.now() - startedAt < timeoutMs) {
+      // ✅ FIX: Controlla la cancellazione prima di ogni richiesta HTTP
+      if (pollingCancelledRef.current) {
+        throw new Error('Polling cancellato dall\'utente')
+      }
+
       const statusResponse = await axios.get(`/api/batches/${batchId}/status`)
       const currentBatch = statusResponse.data
       const status = String(currentBatch?.status || '').toLowerCase()
@@ -59,7 +83,20 @@ const App = () => {
         throw new Error(currentBatch?.error_message || 'Errore durante apply del batch')
       }
 
-      await new Promise((resolve) => setTimeout(resolve, intervalMs))
+      // ✅ FIX: Controlla la cancellazione anche durante l'attesa tra un poll e l'altro
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(resolve, intervalMs)
+        // Controlla ogni 100ms se il polling è stato cancellato
+        const cancelCheck = setInterval(() => {
+          if (pollingCancelledRef.current) {
+            clearTimeout(timer)
+            clearInterval(cancelCheck)
+            reject(new Error('Polling cancellato dall\'utente'))
+          }
+        }, 100)
+        // Pulizia del cancelCheck quando il timer scade normalmente
+        setTimeout(() => clearInterval(cancelCheck), intervalMs)
+      })
     }
 
     throw new Error('Timeout attesa completamento apply batch')
@@ -85,6 +122,8 @@ const App = () => {
   }
 
   const handleLogout = async () => {
+    // ✅ FIX: Cancella il polling in corso prima di fare logout
+    pollingCancelledRef.current = true
     try {
       await axios.post('/api/auth/logout')
     } catch {
@@ -130,6 +169,10 @@ const App = () => {
       setCurrentStep('results')
       showToast('Pseudonimizzazione completata', 'success')
     } catch (error) {
+      // ✅ FIX: Non mostrare errore se il polling è stato cancellato intenzionalmente
+      if (error.message === "Polling cancellato dall'utente") {
+        return
+      }
       showToast(error.response?.data?.detail || error.message || 'Errore durante l\'applicazione', 'error')
     } finally {
       setIsLoading(false)
@@ -137,6 +180,8 @@ const App = () => {
   }
 
   const handleReset = () => {
+    // ✅ FIX: Cancella il polling in corso prima di resettare lo stato
+    pollingCancelledRef.current = true
     setBatch(null)
     setPseudonymizedText(null)
     setCurrentStep('scanner')
