@@ -3,13 +3,9 @@ Comprehensive test suite for Code Review fixes (Issues #1-20)
 Tests all fixes beyond the initial critical bug fixes (#0A-0C)
 """
 
-import asyncio
-import re
 import time
 import threading
 import pytest
-from datetime import datetime, timezone
-from unittest.mock import Mock, patch, MagicMock
 
 from app.core.batch_manager import (
     cleanup_inactive_batches,
@@ -34,7 +30,7 @@ class TestIssue1CleanupSingleLock:
     def test_cleanup_holds_lock_during_entire_operation(self):
         """Verify cleanup uses single atomic lock region"""
         # Import the function to test lock behavior
-        from app.core.batch_manager import cleanup_inactive_batches, _global_lock
+        from app.core.batch_manager import cleanup_inactive_batches
         
         # Cleanup should complete without errors (lock held atomically)
         cleaned = cleanup_inactive_batches()

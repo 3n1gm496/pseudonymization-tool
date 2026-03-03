@@ -2,9 +2,8 @@
 Test per ML/NER detector.
 """
 
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
-import pytest
 from app.models.schemas import EntityType
 from app.parsers.base import TextChunk
 

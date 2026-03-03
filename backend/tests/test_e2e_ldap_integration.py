@@ -8,7 +8,6 @@ Tests the full LDAP configuration and usage flow:
 4. Verify config persistence
 """
 
-import json
 import os
 
 import pytest

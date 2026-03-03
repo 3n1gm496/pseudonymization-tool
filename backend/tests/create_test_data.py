@@ -3,7 +3,6 @@ Script per creare dataset di test sintetici realistici.
 Genera file di test per tutti i formati supportati.
 """
 
-import os
 import sys
 from pathlib import Path
 
@@ -250,9 +249,9 @@ startxref
 def create_image_test():
     """Immagine PNG con testo sensibile per test OCR."""
     try:
-        import struct
+        pass
 
-        from PIL import Image, ImageDraw, ImageFont
+        from PIL import Image, ImageDraw
 
         # Crea un'immagine bianca con testo
         img = Image.new("RGB", (800, 400), color="white")
@@ -303,7 +302,7 @@ def create_image_test():
 def create_pdf_non_textual():
     """PDF non testuale (basato su immagine) per testare il warning."""
     try:
-        import io
+        pass
 
         from PIL import Image
 

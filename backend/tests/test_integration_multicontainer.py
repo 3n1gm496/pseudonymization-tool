@@ -19,7 +19,6 @@ Note: This test is marked with @pytest.mark.integration and requires
 docker-compose to be installed. Run with: pytest -m integration
 """
 
-import json
 import subprocess
 import time
 from pathlib import Path

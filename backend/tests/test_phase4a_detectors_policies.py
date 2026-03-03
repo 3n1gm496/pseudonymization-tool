@@ -1,4 +1,3 @@
-from pathlib import Path
 
 from app.core import policies
 from app.detectors.dictionary_detector import DictionaryDetector

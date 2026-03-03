@@ -5,11 +5,8 @@ Tests: session management, token validation, CSRF protection, password verificat
 """
 
 import base64
-import hmac
-import os
 import secrets
 import time
-from typing import Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -19,7 +16,6 @@ from fastapi.testclient import TestClient
 from app.core.auth import (
     ADMIN_USERNAME,
     SESSION_COOKIE_NAME,
-    SESSION_TTL_SECONDS,
     _b64,
     _b64_decode,
     _csrf_tokens,

@@ -1,5 +1,5 @@
 import pytest
-from app.core.revert import _replace_all, _validate_mapping_file, apply_revert_text, preview_revert_text
+from app.core.revert import _validate_mapping_file, apply_revert_text, preview_revert_text
 from app.mapping.crypto import encrypt_mapping
 
 
@@ -149,4 +149,3 @@ def test_console_apply_response_includes_batch_id():
     """Verifica che /console/apply ritorni batch_id nella risposta"""
     # Questo test sarà validato tramite API test, non qui
     # Ma documentiamo che la response DEVE contenere batch_id
-    pass
