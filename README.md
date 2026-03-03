@@ -39,16 +39,16 @@ Il sistema è progettato per essere modulare, scalabile e sicuro, separando il f
 
 ```mermaid
 graph TD
-    subgraph "User Browser"
-        Frontend[💻 Frontend<br>(React, Tailwind CSS)]
+    subgraph Browser["User Browser"]
+        Frontend["Frontend\nReact + Tailwind CSS"]
     end
 
-    subgraph "Infrastruttura Server"
-        Nginx[🌐 nginx Reverse Proxy<br>TLS Termination, Rate Limiting, Security Headers]
-        Backend[🚀 Backend API<br>(FastAPI, Uvicorn)]
-        Worker[⚙️ Celery Worker<br>(Task asincroni)]
-        Redis[💾 Redis<br>(Broker, Cache, Rate Limiter)]
-        Prometheus[📊 Prometheus<br>(Scrape /api/metrics)]
+    subgraph Server["Infrastruttura Server"]
+        Nginx["nginx Reverse Proxy\nTLS, Rate Limiting, Security Headers"]
+        Backend["Backend API\nFastAPI + Uvicorn"]
+        Worker["Celery Worker\nTask asincroni"]
+        Redis["Redis\nBroker + Cache + Rate Limiter"]
+        Prometheus["Prometheus\nScrape /api/metrics"]
     end
 
     Frontend -- HTTPS --> Nginx
