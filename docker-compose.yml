@@ -22,7 +22,7 @@ services:
   # NOTA: nessuna porta esposta sull'host — accessibile solo internamente
   # ─────────────────────────────────────────────────────────────────────────
   redis:
-    image: redis:6-alpine
+    image: redis:7-alpine
     container_name: pseudonymization-redis
     # Abilita autenticazione Redis con password da .env
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
