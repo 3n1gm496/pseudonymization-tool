@@ -24,6 +24,7 @@ const App = () => {
   const [authUser, setAuthUser] = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [defaultPasswordWarning, setDefaultPasswordWarning] = useState(false)
   const { showToast, ToastContainer } = useToast()
 
   // Ref per cancellare il polling in corso quando l'utente fa reset/logout
@@ -36,6 +37,9 @@ const App = () => {
       try {
         const response = await axios.get('/api/auth/me')
         setAuthUser(response.data.username)
+        if (response.data.default_password) {
+          setDefaultPasswordWarning(true)
+        }
       } catch {
         setAuthUser(null)
       } finally {
@@ -105,6 +109,9 @@ const App = () => {
     try {
       const response = await axios.post('/api/auth/login', { username, password })
       setAuthUser(response.data.username)
+      if (response.data.default_password) {
+        setDefaultPasswordWarning(true)
+      }
       // Extract CSRF token from response header and cache it
       const csrfTokenFromResponse = response.headers['x-csrf-token']
       if (csrfTokenFromResponse) {
@@ -212,6 +219,38 @@ const App = () => {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       <Header user={authUser} onLogout={handleLogout} onSettingsClick={() => setIsSettingsOpen(true)} />
+
+      {/* Default password warning banner */}
+      {defaultPasswordWarning && (
+        <div
+          role="alert"
+          className="bg-amber-50 dark:bg-amber-900/30 border-b border-amber-300 dark:border-amber-700"
+        >
+          <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <span className="text-amber-600 dark:text-amber-400 text-xl" aria-hidden="true">&#9888;</span>
+              <p className="text-sm text-amber-800 dark:text-amber-200">
+                <strong>Attenzione:</strong> stai usando la password predefinita.
+                Cambiala subito nelle{' '}
+                <button
+                  onClick={() => { setIsSettingsOpen(true); setDefaultPasswordWarning(false) }}
+                  className="underline font-semibold hover:text-amber-900 dark:hover:text-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-500 rounded"
+                >
+                  Impostazioni
+                </button>
+                {' '}per proteggere il sistema.
+              </p>
+            </div>
+            <button
+              onClick={() => setDefaultPasswordWarning(false)}
+              aria-label="Chiudi avviso password predefinita"
+              className="text-amber-600 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-500 rounded p-1 flex-shrink-0"
+            >
+              &#x2715;
+            </button>
+          </div>
+        </div>
+      )}
 
       <main className="max-w-7xl mx-auto py-8 px-4 space-y-8">
         <div className="flex gap-3 justify-center">
