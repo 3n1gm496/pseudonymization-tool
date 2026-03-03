@@ -55,6 +55,8 @@ secrets/
 coverage.xml
 htmlcov/
 .pytest_cache/
+# Hypothesis cache (generato automaticamente da pytest-hypothesis, non versionare)
+.hypothesis/
 
 # Data directories
 data/temp/

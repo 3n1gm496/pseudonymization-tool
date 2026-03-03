@@ -2,7 +2,7 @@
 
 ## v5.0.0 - Security Hardening, CI Hardening & Code Quality (2026-03-03)
 
-This release consolidates 10 pull requests focused on security, CI reliability, and code quality.
+This release consolidates 14 pull requests focused on security, CI reliability, code quality, and documentation accuracy.
 No new user-facing features; all changes are infrastructure and correctness improvements.
 
 ### Security (PR #1, #2, #3, #4)
@@ -25,17 +25,28 @@ No new user-facing features; all changes are infrastructure and correctness impr
 - **PR #7** — `fix(batch_manager)`: replaced 7 silent `except Exception: pass` with explicit logging — errors now visible in structured logs
 - **PR #8** — `chore(imports)`: removed 72 unused imports across 17 backend files — cleaner codebase, faster linting
 
-### Documentation (PR #9, #10)
+### Documentation (PR #9, #10, #11)
 
 - **PR #9** — `docs`: documentation reorder — archived obsolete files, fixed broken cross-references, updated version headers
 - **PR #10** — `docs`: README v5.0.0 — accurate architecture diagram, all links verified (22 broken → 0), removed all "Phase N" references, added Celery+Redis architecture section
+- **PR #11** — `docs`: version alignment — `__version__` bump to 5.0.0, Python badge 3.11+, CI quality gates corrected (threshold 50%→60%, Safety→pip-audit), test metrics updated (157→285), RELEASES.md populated
+
+### Frontend (PR #12)
+
+- **PR #12** — `fix(frontend)`: polling cancellation with `useRef` — prevents state update on unmounted component, stops background HTTP requests after reset
+
+### Test Quality (PR #13, #14)
+
+- **PR #13** — `test`: 61 unused imports removed, 98→0 DeprecationWarning (anyio/starlette filtered), `console_pipeline.py` coverage 19%→100% (+13 tests)
+- **PR #14** — `chore`: `.hypothesis/` added to `.gitignore` and removed from tracking, `PolicySelector.jsx` removed (dead component — preset fixed to `SOC Logs` by design), docs updated to reflect fixed preset
 
 ### Testing
 
-- **267 tests passing, 12 skipped** (Tesseract OCR not available in CI)
-- **64% global coverage**
+- **280 tests passing, 12 skipped** (Tesseract OCR not available in CI)
+- **65% global coverage**
 - **0 CVE** (pip-audit)
 - **0 Bandit HIGH/MEDIUM** findings
+- **0 pytest warnings** (DeprecationWarning from third-party libs suppressed with documented filters)
 - Python 3.11 and 3.12 both tested in CI matrix
 
 ### Migration Notes

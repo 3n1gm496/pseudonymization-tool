@@ -4,8 +4,8 @@
 [![React 18.2](https://img.shields.io/badge/React-18.2-61dafb.svg)](https://react.dev)
 [![FastAPI 0.110](https://img.shields.io/badge/FastAPI-0.110-009688.svg)](https://fastapi.tiangolo.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests: 267 passing](https://img.shields.io/badge/Tests-267%20passing-brightgreen.svg)](backend/tests/)
-[![Coverage: 64%](https://img.shields.io/badge/Coverage-64%25-yellowgreen.svg)]()
+[![Tests: 280 passing](https://img.shields.io/badge/Tests-280%20passing-brightgreen.svg)](backend/tests/)
+[![Coverage: 65%](https://img.shields.io/badge/Coverage-65%25-yellowgreen.svg)]()
 [![Async: Celery + Redis](https://img.shields.io/badge/Async-Celery%20%2B%20Redis-red.svg)](docs/02_Technical_Architecture.md)
 
 Web application locale moderna per la pseudonimizzazione sicura di dati sensibili in documenti di testo, DOCX, XLSX, PDF e immagini. Interfaccia React con Tailwind CSS, darkmode supportato. Progettato per ambienti enterprise che richiedono massima sicurezza e capacità di operare completamente offline.
@@ -453,13 +453,13 @@ curl http://127.0.0.1:8000/api/settings/policies/SOC%20Logs
 ### Testing
 
 **Test Suite Status:**
-- ✅ **267 test passanti, 12 skippati** (Tesseract OCR non disponibile in CI)
+- ✅ **280 test passanti, 12 skippati** (Tesseract OCR non disponibile in CI)
   - `test_functional.py`: 49 test (detectors, parsers, sicurezza, crypto)
   - `test_auth_complete.py`: suite completa autenticazione e JWT
   - `test_csrf_middleware.py`: protezione CSRF globale
   - `test_api_contract.py`: contratti API (202 Accepted pattern)
   - `test_parser_limitations.py`: edge case parser
-- 📊 **Coverage: 64%** — Moduli critici:
+- 📊 **Coverage: 65%** — Moduli critici:
   - `crypto.py`: 95% (eccellente)
   - `schemas.py`: 98% (eccellente)
   - `safety.py`: 92% (eccellente)
@@ -509,7 +509,6 @@ pseudonymization-tool/
 │   │   ├── components/        # React components
 │   │   │   ├── Header.jsx
 │   │   │   ├── Scanner.jsx
-│   │   │   ├── PolicySelector.jsx
 │   │   │   ├── FindingsTable.jsx
 │   │   │   └── Results.jsx
 │   │   ├── context/           # Context API (dark mode)

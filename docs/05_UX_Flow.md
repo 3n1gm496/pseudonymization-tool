@@ -12,7 +12,7 @@ L'esperienza utente è progettata come un **workflow lineare a 3 fasi** con una 
 
 ### Fasi Principali
 
-1. **Scan Phase** — Upload file/testo, selezione policy, avvio scansione
+1. **Scan Phase** — Upload file/testo, avvio scansione (preset `SOC Logs` applicato automaticamente)
 2. **Review Phase** — Revisione dei finding, personalizzazione pseudonimi
 3. **Results Phase** — Download dei file, accesso a passphrase e mapping
 4. **Revert Panel (Opzionale)** — Decifrare risposte AI o reversi batch precedenti
@@ -193,10 +193,9 @@ async function pollBatchStatus(batchId) {
 
 **Flusso:**
 1. User seleziona modalità (text/file)
-2. User sceglie policy (o default SOC Logs)
-3. User inserisce passphrase
-4. User carica testo/file
-5. User clicca "Scan" → va a Review tab automaticamente
+2. User inserisce passphrase (preset `SOC Logs` fisso — nessuna selezione richiesta)
+3. User carica testo/file
+4. User clicca "Scan" → va a Review tab automaticamente
 
 ---
 
@@ -343,7 +342,7 @@ async function pollBatchStatus(batchId) {
 ## State Management
 
 **Scanner → Review → Results flussi:**
-- Scanner: Colleziona file + policy + passphrase → /api/batches POST
+- Scanner: Colleziona file + passphrase → /api/batches POST (preset `SOC Logs` come default fisso)
 - Review: Mostra findings da batch → /api/findings GET
 - Results: Mostra output + mapping + passphrase (in frontend state)
 
