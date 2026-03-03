@@ -5,16 +5,13 @@ Separato dal router monolitico per ridurre blast radius e accoppiamento.
 
 import json
 import logging
-import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
 
-from app.core.audit import audit_event, scrub_sensitive
+from app.core.audit import audit_event
 from app.core.config import MAX_CONSOLE_TEXT_CHARS, MAX_FILE_SIZE_BYTES
 from app.core.rate_limit import enforce_rate_limit
-from app.core.auth import validate_csrf_dependency
 from app.core.revert import apply_revert, apply_revert_text, preview_revert, preview_revert_text
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, Response, UploadFile
 
 router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)

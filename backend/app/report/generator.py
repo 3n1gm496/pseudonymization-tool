@@ -6,11 +6,10 @@ Il report NON include i valori originali dei dati sensibili.
 import json
 import logging
 from collections import Counter
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
-from app.models.schemas import Batch, FileRecord, FileStatus, Finding, ReviewAction
+from app.models.schemas import Batch, FileStatus, Finding, ReviewAction
 
 logger = logging.getLogger(__name__)
 

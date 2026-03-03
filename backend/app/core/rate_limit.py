@@ -29,9 +29,8 @@ import os
 import threading
 import time
 from collections import OrderedDict
-from typing import Dict, List
+from typing import Dict
 
-from app.core.config import RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SECONDS
 from fastapi import HTTPException, Request
 
 logger = logging.getLogger(__name__)

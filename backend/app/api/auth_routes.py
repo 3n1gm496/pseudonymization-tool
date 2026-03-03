@@ -5,10 +5,9 @@ Separato dal router monolitico per ridurre blast radius e accoppiamento.
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
 
 from app import __version__
-from app.core.audit import audit_event, scrub_sensitive
+from app.core.audit import audit_event
 from app.core.auth import (
     ADMIN_USERNAME,
     AUTH_ENABLED,

@@ -5,23 +5,16 @@ Gestisce scan e apply su testo puro senza file fisici.
 
 import logging
 import uuid
-from datetime import datetime
-from typing import List, Optional
 
-from app.core.batch_manager import get_batch, get_engine, get_or_create_engine, update_batch
+from app.core.batch_manager import get_batch, get_or_create_engine, update_batch
 from app.core.policies import get_confidence_threshold, get_enabled_entity_types
 from app.core.safety import compute_residual_warnings, compute_safety_label
 from app.detectors.engine import build_extra_detectors, detect_in_text, residual_scan
 from app.models.schemas import (
-    Batch,
     BatchStatus,
-    EntityType,
     FileRecord,
     FileStatus,
-    Finding,
-    PresetName,
     ReviewAction,
-    SafetyLabel,
 )
 from app.pseudonymizer.transformer import apply_pseudonyms_to_text
 

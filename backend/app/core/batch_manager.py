@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from app.core.config import TEMP_BASE_DIR
-from app.models.schemas import Batch, BatchMode, BatchStatus
+from app.models.schemas import Batch, BatchMode
 
 logger = logging.getLogger(__name__)
 

@@ -15,16 +15,12 @@ Flussi:
 
 import json
 import logging
-import time
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
 
-from app.core.audit import audit_event, scrub_sensitive
+from app.core.audit import scrub_sensitive
 from app.core.config import STATE_FILE
 from app.core.policies import get_enabled_entity_types, get_policy
-from app.core.rate_limit import enforce_rate_limit
 from app.models.schemas import EntityType, LdapConfig, PresetName
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException
 
 router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)

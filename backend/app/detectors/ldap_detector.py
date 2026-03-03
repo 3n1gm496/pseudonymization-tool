@@ -28,9 +28,6 @@ from app.detectors.ldap_client import (
     LdapClient,
     LdapDiagnostics,
     LdapEntry,
-    _parse_cn_from_dn,
-    canonicalize_account,
-    canonicalize_person_name,
 )
 from app.models.schemas import EntityType, LdapConfig
 from app.parsers.base import TextChunk
