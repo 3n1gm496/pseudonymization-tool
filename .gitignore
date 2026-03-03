@@ -50,6 +50,13 @@ Thumbs.db
 .env.*.local
 secrets/
 
+# TLS certificates (self-signed dev certs and production certs — never commit)
+nginx/certs/*.pem
+nginx/certs/*.key
+nginx/certs/*.crt
+nginx/certs/*.p12
+nginx/certs/*.pfx
+
 # Test coverage
 .coverage
 coverage.xml

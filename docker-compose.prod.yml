@@ -1,0 +1,63 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# docker-compose.prod.yml — Override per deployment in produzione
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# Aggiunge nginx come reverse proxy con TLS termination.
+# Usare SEMPRE in combinazione con docker-compose.yml base:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# PREREQUISITI:
+#   1. Certificati TLS in ./nginx/certs/fullchain.pem e privkey.pem
+#      - Let's Encrypt: sudo certbot certonly --standalone -d example.com
+#      - Self-signed (dev/staging): bash scripts/generate-dev-certs.sh
+#   2. File .env configurato con tutti i valori obbligatori (vedi .env.example)
+#   3. DEPLOYMENT_PROFILE=prod nel file .env
+#
+# PORTE ESPOSTE:
+#   - 80/tcp  → redirect HTTP → HTTPS
+#   - 443/tcp → HTTPS (TLS termination)
+#   Il backend (8000) NON è più esposto direttamente sull'host.
+#
+# ═══════════════════════════════════════════════════════════════════════════════
+
+services:
+  # ─────────────────────────────────────────────────────────────────────────
+  # nginx: reverse proxy + TLS termination
+  # ─────────────────────────────────────────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: pseudonymization-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Configurazione nginx (read-only)
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # Certificati TLS (read-only)
+      # Generare con: bash scripts/generate-dev-certs.sh
+      # Per produzione: montare i certificati Let's Encrypt o aziendali
+      - ./nginx/certs:/etc/nginx/certs:ro
+      # Log nginx (opzionale: rimuovere se si usa logging driver Docker)
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      pseudonymization-tool:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Override del servizio principale: rimuove la porta 8000 dall'host
+  # (il traffico passa ora esclusivamente attraverso nginx)
+  # ─────────────────────────────────────────────────────────────────────────
+  pseudonymization-tool:
+    ports: []  # Rimuove l'esposizione diretta della porta 8000 sull'host
+
+# Volume per i log nginx
+volumes:
+  nginx_logs:
+    driver: local

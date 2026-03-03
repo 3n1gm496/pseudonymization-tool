@@ -87,9 +87,12 @@ USER appuser
 
 EXPOSE 8000
 
-# Health check
+# Health check: /api/ready verifica anche le dipendenze (config dir, dizionari, temp dir)
+# mentre /api/health verifica solo che il processo sia in esecuzione.
+# Usare /api/ready per il HEALTHCHECK Docker in modo che il container venga
+# marcato unhealthy se le dipendenze non sono disponibili.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD curl -fsS http://127.0.0.1:8000/api/health > /dev/null || exit 1
+  CMD curl -fsS http://127.0.0.1:8000/api/ready > /dev/null || exit 1
 
 # WEB_CONCURRENCY controls the number of uvicorn worker processes.
 # Default: 1 (safe for in-memory rate limiter and single-node deployments).
