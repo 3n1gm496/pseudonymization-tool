@@ -348,8 +348,6 @@ def validate_production_secrets() -> list[str]:
     if profile == Profile.PROD:
         frontend_url = os.environ.get("PROD_FRONTEND_URL", "").strip()
         if not frontend_url:
-            errors.append(
-                "PROD_FRONTEND_URL non configurata (obbligatoria in PROD per CORS strict)"
-            )
+            errors.append("PROD_FRONTEND_URL non configurata (obbligatoria in PROD per CORS strict)")
 
     return errors
