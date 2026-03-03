@@ -68,7 +68,8 @@ def _get_redis_client():
         client.ping()
         _redis_client_cached = client
         return client
-    except Exception:
+    except Exception as e:
+        logger.debug("Redis non disponibile (fallback in-memory attivo): %s", e)
         _redis_client_cached = None
         return None
 
@@ -208,8 +209,8 @@ def _atomic_write_text(path: Path, content: str) -> None:
         if tmp_path and tmp_path.exists():
             try:
                 tmp_path.unlink()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Impossibile rimuovere il file temporaneo %s: %s", tmp_path, e)
 
 
 def _save_batch_to_disk(batch: Batch) -> None:
@@ -260,8 +261,9 @@ def _save_passphrase_to_disk(batch_id: str, passphrase: str) -> None:
     _save_passphrase_to_redis(batch_id, passphrase)
     try:
         passphrase_path.chmod(0o600)
-    except Exception:
-        pass
+    except Exception as e:
+        # Su alcuni filesystem (es. FAT32, Windows dev) chmod non è supportato
+        logger.warning("Impossibile impostare permessi 0o600 su %s: %s", passphrase_path, e)
 
 
 def _load_passphrase_from_disk(batch_id: str) -> Optional[str]:
@@ -345,8 +347,8 @@ def clear_batch_start_time(batch_id: str) -> Optional[str]:
         if start_path.exists():
             try:
                 start_path.unlink()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Impossibile rimuovere il file start_time %s: %s", start_path, e)
         return value
 
 
@@ -624,8 +626,11 @@ def cleanup_batch(batch_id: str) -> None:
             from app.core.pipeline import _clear_parse_results
 
             _clear_parse_results(batch_id)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(
+                "Cleanup parziale: impossibile rimuovere i risultati di parsing per batch %s: %s",
+                batch_id, e,
+            )
         _engines.pop(batch_id, None)
         _decisions.pop(batch_id, None)
         _batches.pop(batch_id, None)
@@ -666,8 +671,11 @@ def cleanup_inactive_batches() -> int:
                     from app.core.pipeline import _clear_parse_results
 
                     _clear_parse_results(bid)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(
+                        "Cleanup timeout: impossibile rimuovere i risultati di parsing per batch %s: %s",
+                        bid, e,
+                    )
                 _engines.pop(bid, None)
                 _decisions.pop(bid, None)
                 _batches.pop(bid, None)
