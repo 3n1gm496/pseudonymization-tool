@@ -78,7 +78,7 @@ def test_complete_e2e_flow():
     pseudonymized_text = apply_data["pseudonymized_text"]
     applied_count = apply_data.get("applied_count", 0)
 
-    print(f"  ✓ Pseudonymization applied")
+    print("  ✓ Pseudonymization applied")
     print(f"  ✓ Entities replaced: {applied_count}")
     print(f"  ✓ Original: {test_text[:80]}...")
     print(f"  ✓ Result:   {pseudonymized_text[:80]}...")
@@ -95,7 +95,7 @@ def test_complete_e2e_flow():
     assert map_resp.headers.get("content-type") == "application/octet-stream"
     mapping_bytes = map_resp.content
 
-    print(f"  ✓ Mapping.enc downloaded")
+    print("  ✓ Mapping.enc downloaded")
     print(f"  ✓ File size: {len(mapping_bytes)} bytes")
     print(f"  ✓ Magic bytes: {mapping_bytes[:4].hex()}")
 
@@ -110,7 +110,7 @@ def test_complete_e2e_flow():
     assert isinstance(mapping_dict["mapping"], dict), f"Mapping should be dict, got {type(mapping_dict['mapping'])}"
 
     mapping = mapping_dict["mapping"]
-    print(f"  ✓ Mapping decrypted successfully")
+    print("  ✓ Mapping decrypted successfully")
     print(f"  ✓ Mapping entries: {len(mapping)}")
     for i, (pseudo, original) in enumerate(list(mapping.items())[:3]):
         print(f"    - {pseudo} → {original}")
@@ -122,7 +122,7 @@ def test_complete_e2e_flow():
     # In reality, AI receives pseudo text and returns modified version
     # For this test, we'll pass the same pseudonymized text
     ai_response = pseudonymized_text
-    print(f"  ✓ Simulated AI processing")
+    print("  ✓ Simulated AI processing")
     print(f"  ✓ Response text: {ai_response[:80]}...")
 
     # ──── Step 6: Preview text revert ──────────────────────────
@@ -137,7 +137,7 @@ def test_complete_e2e_flow():
     preview_data = preview_resp.json()
 
     total_matches = preview_data.get("total_matches", 0)
-    print(f"  ✓ Preview succeeded")
+    print("  ✓ Preview succeeded")
     print(f"  ✓ Mapping entries: {preview_data.get('mapping_entries')}")
     print(f"  ✓ Input chars: {preview_data.get('input_chars')}")
     print(f"  ✓ Total matches: {total_matches}")
@@ -160,7 +160,7 @@ def test_complete_e2e_flow():
     revert_data = revert_resp.json()
 
     reverted_text = revert_data["reverted_text"]
-    print(f"  ✓ Text revert applied")
+    print("  ✓ Text revert applied")
     print(f"  ✓ Reverted text: {reverted_text[:80]}...")
 
     # ──── Step 8: Verify original recovery ───────────────────
@@ -209,7 +209,7 @@ async def test_e2e_flow_with_wrong_passphrase():
         f"{BASE_URL}/console/apply", json={"batch_id": batch_id, "file_id": file_id, "text": "John Smith from NYC"}
     )
     assert apply_resp.status_code == 200
-    correct_passphrase = apply_resp.json()["passphrase"]
+    apply_resp.json()["passphrase"]
 
     # Download mapping
     map_resp = session.get(f"{BASE_URL}/console/{batch_id}/mapping.enc")
@@ -232,7 +232,7 @@ async def test_e2e_flow_with_wrong_passphrase():
         "Passphrase" in error_msg or "passphrase" in error_msg.lower() or "non è corretta" in error_msg.lower()
     ), f"Error message should mention passphrase, got: {error_msg}"
 
-    print(f"\n✓ Wrong passphrase correctly rejected")
+    print("\n✓ Wrong passphrase correctly rejected")
     print(f"  Error: {error_msg}")
 
 
@@ -264,5 +264,5 @@ async def test_e2e_invalid_mapping_file():
         "magic" in error_msg.lower() or "invalid" in error_msg.lower()
     ), f"Error should mention invalid format, got: {error_msg}"
 
-    print(f"\n✓ Invalid mapping file correctly rejected")
+    print("\n✓ Invalid mapping file correctly rejected")
     print(f"  Error: {error_msg}")

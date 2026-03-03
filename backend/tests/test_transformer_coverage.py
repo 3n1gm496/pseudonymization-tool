@@ -6,11 +6,7 @@ transform_text_file (incluso fallback latin-1 ed errori), transform_docx_file
 transform_pdf_file (PDF cifrato, PDF vuoto, PDF testuale), transform_image_file,
 transform_file (dispatcher), apply_pseudonyms_to_text.
 """
-import shutil
-from pathlib import Path
-from unittest.mock import MagicMock, patch
 
-import pytest
 from app.models.schemas import EntityType, Finding, FindingLocation, ReviewAction
 from app.pseudonymizer.transformer import (
     _apply_substitutions_to_text,

@@ -62,14 +62,14 @@ def test_ldap_configure_and_persist():
     if response.status_code == 400:
         error = response.json().get("detail", "")
         if "ldap3" in error.lower() or "not install" in error.lower():
-            print(f"  ⚠ LDAP library not available (expected in test environment)")
-            print(f"  API endpoint exists and validates correctly")
+            print("  ⚠ LDAP library not available (expected in test environment)")
+            print("  API endpoint exists and validates correctly")
             return
 
     assert response.status_code == 200, f"Config failed: {response.text}"
     data = response.json()
 
-    print(f"  ✓ Configuration saved")
+    print("  ✓ Configuration saved")
     print(f"  Response: {data}")
 
     # Retrieve config to verify persistence
@@ -79,7 +79,7 @@ def test_ldap_configure_and_persist():
     retrieved = get_response.json()
 
     assert retrieved["configured"] == True or retrieved["host"] is not None
-    print(f"  ✓ Config retrieved")
+    print("  ✓ Config retrieved")
     print(f"  Configured: {retrieved.get('configured')}")
     print(f"  Host: {retrieved.get('host')}")
 
@@ -98,16 +98,16 @@ def test_ldap_test_connection():
     data = response.json()
 
     if response.status_code == 200:
-        print(f"  ✓ Connection test succeeded")
+        print("  ✓ Connection test succeeded")
         print(f"  Result: {data.get('ok')}")
         print(f"  User count: {data.get('user_count')}")
     elif response.status_code == 400:
         error = data.get("detail", "")
         if "ldap3" in error.lower() or "not installed" in error.lower():
-            print(f"  ⚠ LDAP not configured (expected)")
-            print(f"  API endpoint works correctly")
+            print("  ⚠ LDAP not configured (expected)")
+            print("  API endpoint works correctly")
         else:
-            print(f"  ⚠ Connection test failed (may be expected in test env)")
+            print("  ⚠ Connection test failed (may be expected in test env)")
             print(f"  Error: {error}")
     else:
         print(f"  Response: {data}")
@@ -127,16 +127,16 @@ def test_ldap_refresh_cache():
     data = response.json()
 
     if response.status_code == 200:
-        print(f"  ✓ Refresh succeeded")
+        print("  ✓ Refresh succeeded")
         print(f"  Result: {data.get('ok')}")
         print(f"  Message: {data.get('message')}")
     elif response.status_code == 400:
         error = data.get("detail", "") or data.get("message", "")
         if "ldap3" in error.lower() or "not configured" in error.lower():
-            print(f"  ⚠ LDAP not configured (expected)")
-            print(f"  API endpoint works correctly")
+            print("  ⚠ LDAP not configured (expected)")
+            print("  API endpoint works correctly")
         else:
-            print(f"  ⚠ Refresh may have failed (check config)")
+            print("  ⚠ Refresh may have failed (check config)")
             print(f"  Error: {error}")
     else:
         print(f"  Response: {data}")
@@ -156,7 +156,7 @@ def test_ldap_status_endpoint():
     assert response.status_code == 200, f"Status endpoint failed: {response.text}"
     data = response.json()
 
-    print(f"  ✓ Status retrieved")
+    print("  ✓ Status retrieved")
     print(f"  Configured: {data.get('configured')}")
     print(f"  Cache size: {data.get('cache_size', 0)}")
     print(f"  Cache valid: {data.get('cache_valid', False)}")

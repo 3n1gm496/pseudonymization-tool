@@ -138,7 +138,7 @@ def test_xlsx_transform_preserves_formulas(tmp_path):
     ]
 
     output_path = tmp_path / "output.xlsx"
-    warnings = transform_xlsx_file(xlsx_path, output_path, findings)
+    transform_xlsx_file(xlsx_path, output_path, findings)
 
     # Verify formula still exists in output
     wb_out = openpyxl.load_workbook(str(output_path), data_only=False)
@@ -229,7 +229,6 @@ def test_pdf_partial_pages_warning(tmp_path):
 
     # Should succeed but with warning
     assert result.success
-    partial_warning = any("pagine contengono testo estraibile" in w for w in result.warnings)
     # Note: This test may be fragile depending on how reportlab generates pages
     # If it fails, it means both pages were detected as having text, which is OK
 
@@ -360,8 +359,6 @@ def test_image_exif_stripped(tmp_path):
     img.save(str(jpg_path), exif=exif_data)
 
     # Verify EXIF exists in original
-    img_original = Image.open(jpg_path)
-    exif_original = img_original.getexif()
     # Original may or may not have EXIF depending on PIL version
 
     parser = ImageParser()

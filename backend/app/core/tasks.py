@@ -11,12 +11,19 @@ Configuration:
 - Backend: Redis (via CELERY_RESULT_BACKEND)
 - Worker: Single concurrency on single VM (scale horizontally if needed)
 
+Retry policy:
+- Only transient errors are retried (RecoverableError subclasses, IOError, OSError,
+  MemoryError, TimeoutError).
+- Non-transient errors (CriticalError subclasses, ValueError, TypeError, etc.) are
+  NOT retried: they indicate a programming error or an invalid state that will not
+  resolve itself on retry.
+
 Usage in endpoints:
   from app.core.tasks import scan_batch_task, apply_batch_task
-  
+
   # Enqueue scan task (non-blocking)
   task = scan_batch_task.delay(batch_id)
-  
+
   # Poll task status
   task.status  # 'PENDING' | 'STARTED' | 'SUCCESS' | 'FAILURE'
 """
@@ -25,6 +32,7 @@ import logging
 import os
 
 from app.core.batch_manager import get_batch, update_batch
+from app.core.exceptions import CriticalError, RecoverableError
 from app.core.pipeline import run_apply_pipeline, run_scan_pipeline
 from app.models.schemas import BatchStatus
 from celery import Celery, Task
@@ -66,6 +74,23 @@ celery_app.conf.update(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Non-transient exception types — never retried
+# ─────────────────────────────────────────────────────────────────────────────
+
+#: Tuple of exception types that are considered non-transient and must NOT be
+#: retried by Celery.  These represent programming errors, invalid state, or
+#: configuration problems that will not resolve themselves on a subsequent
+#: attempt.  Retrying them would waste resources and potentially corrupt state.
+NON_RETRYABLE_EXCEPTIONS = (
+    CriticalError,   # BatchStateError, CryptoError, PipelineError, BatchError, ConfigError …
+    ValueError,      # Raised explicitly for "Batch not found" guard clauses
+    TypeError,       # Programming errors
+    KeyError,        # Missing required keys — programming error
+    AttributeError,  # Programming errors
+)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Custom Task Class with Database Context Handling
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -74,9 +99,20 @@ class DatabaseTask(Task):
     """
     Custom task class for proper error handling and state management.
     Ensures batch state is updated throughout task lifecycle.
+
+    Retry policy:
+    - Transient errors (RecoverableError, IOError, OSError, MemoryError,
+      TimeoutError) are retried up to 3 times with exponential backoff.
+    - Non-transient errors (NON_RETRYABLE_EXCEPTIONS) are NOT retried.
+      They fail immediately and mark the batch as ERROR.
     """
 
-    autoretry_for = (Exception,)
+    # Only retry on transient/recoverable errors.
+    # RecoverableError covers: ParsingError, DetectionError, TransformError,
+    # PolicyError, SafetyCheckError and all their subclasses.
+    autoretry_for = (RecoverableError, IOError, OSError, MemoryError, TimeoutError)
+    # Explicitly exclude non-transient errors from retry.
+    dont_autoretry_for = NON_RETRYABLE_EXCEPTIONS
     retry_kwargs = {"max_retries": 3}
     retry_backoff = True
     retry_backoff_max = 60
@@ -104,13 +140,14 @@ def scan_batch_task(self, batch_id: str) -> dict:
         - status: Final batch status
 
     Raises:
-        BatchStateError: If batch not found or in invalid state
-        Exception: Various parsing/detection errors (auto-retry enabled)
+        ValueError: If batch not found (non-transient, not retried)
+        CriticalError: If batch is in an invalid state (non-transient, not retried)
+        RecoverableError: Transient parsing/detection errors (auto-retried up to 3x)
     """
     try:
-        logger.info("🔄 Scan task starting for batch: %s", batch_id)
+        logger.info("Scan task starting for batch: %s", batch_id)
 
-        # Verify batch exists
+        # Verify batch exists — ValueError is non-transient, will not be retried
         batch = get_batch(batch_id)
         if not batch:
             raise ValueError(f"Batch not found: {batch_id}")
@@ -127,7 +164,7 @@ def scan_batch_task(self, batch_id: str) -> dict:
         update_batch(batch)
 
         logger.info(
-            "✅ Scan task completed for batch %s: %d findings in %d files",
+            "Scan task completed for batch %s: %d findings in %d files",
             batch_id,
             len(batch.findings),
             len(batch.files),
@@ -142,16 +179,16 @@ def scan_batch_task(self, batch_id: str) -> dict:
         }
 
     except Exception as exc:
-        logger.error("❌ Scan task failed for batch %s: %s", batch_id, exc, exc_info=True)
+        logger.error("Scan task failed for batch %s: %s", batch_id, exc, exc_info=True)
 
-        # Mark batch as error
+        # Mark batch as error (best-effort — do not raise if batch is gone)
         batch = get_batch(batch_id)
         if batch:
             batch.status = BatchStatus.ERROR
             batch.error_message = str(exc)
             update_batch(batch)
 
-        # Re-raise to trigger retry or final failure
+        # Re-raise to trigger retry (for transient errors) or final failure
         raise
 
 
@@ -182,13 +219,14 @@ def apply_batch_task(self, batch_id: str, started_at: str) -> dict:
         - status: Final batch status
 
     Raises:
-        BatchStateError: If batch not in review state
-        TransformError: File processing errors (auto-retry enabled)
+        ValueError: If batch not found (non-transient, not retried)
+        CriticalError: If batch is in an invalid state (non-transient, not retried)
+        TransformError: Transient file processing errors (auto-retried up to 3x)
     """
     try:
-        logger.info("🔄 Apply task starting for batch: %s", batch_id)
+        logger.info("Apply task starting for batch: %s", batch_id)
 
-        # Verify batch exists
+        # Verify batch exists — ValueError is non-transient, will not be retried
         batch = get_batch(batch_id)
         if not batch:
             raise ValueError(f"Batch not found: {batch_id}")
@@ -204,7 +242,7 @@ def apply_batch_task(self, batch_id: str, started_at: str) -> dict:
         batch = get_batch(batch_id)
 
         logger.info(
-            "✅ Apply task completed for batch %s: output at %s",
+            "Apply task completed for batch %s: output at %s",
             batch_id,
             zip_path,
         )
@@ -216,16 +254,16 @@ def apply_batch_task(self, batch_id: str, started_at: str) -> dict:
         }
 
     except Exception as exc:
-        logger.error("❌ Apply task failed for batch %s: %s", batch_id, exc, exc_info=True)
+        logger.error("Apply task failed for batch %s: %s", batch_id, exc, exc_info=True)
 
-        # Mark batch as error
+        # Mark batch as error (best-effort — do not raise if batch is gone)
         batch = get_batch(batch_id)
         if batch:
             batch.status = BatchStatus.ERROR
             batch.error_message = str(exc)
             update_batch(batch)
 
-        # Re-raise to trigger retry or final failure
+        # Re-raise to trigger retry (for transient errors) or final failure
         raise
 
 

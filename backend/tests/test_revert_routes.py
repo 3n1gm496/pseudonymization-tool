@@ -7,7 +7,6 @@ import io
 import zipfile
 from unittest.mock import patch
 
-import pytest
 from app.main import app
 from app.mapping.crypto import encrypt_mapping
 from fastapi.testclient import TestClient
@@ -104,7 +103,7 @@ def test_revert_preview_wrong_passphrase():
 
 def test_revert_preview_file_too_large():
     """Preview con archivio troppo grande restituisce 400."""
-    from unittest.mock import AsyncMock, patch
+    from unittest.mock import patch
 
     zip_bytes = _make_zip_bytes()
     with patch("app.api.revert_routes.MAX_FILE_SIZE_BYTES", 10):  # Limite artificialmente basso

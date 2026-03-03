@@ -8,9 +8,8 @@ get_diagnostics, refresh_now, test_connection, stop), LdapPersonDetector.detect,
 configure_ldap, get_ldap_cache, get_ldap_config.
 """
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-import pytest
 from app.detectors.ldap_client import (
     LdapClient,
     LdapDiagnostics,

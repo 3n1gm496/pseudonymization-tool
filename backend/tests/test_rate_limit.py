@@ -25,6 +25,9 @@ from app.core.rate_limit import (
 )
 from fastapi import HTTPException, Request
 
+# Module-level timestamp used by Redis rate limit tests
+now = time.time()
+
 # ─── Fixtures ─────────────────────────────────────────────────────────────────
 
 
@@ -295,7 +298,6 @@ def _make_mock_redis(existing_count: int = 0, oldest_ts: float = None):
 
 def test_redis_rate_limit_allows_within_limit():
     """Redis backend: requests within limit are allowed."""
-    now = time.time()
     mock_redis = _make_mock_redis(existing_count=2, oldest_ts=now - 30)
 
     result = _check_limit_redis(mock_redis, "test_scope:127.0.0.1", limit=5, window_seconds=60, now=now)
@@ -307,7 +309,6 @@ def test_redis_rate_limit_allows_within_limit():
 
 def test_redis_rate_limit_blocks_over_limit():
     """Redis backend: requests at limit return 429."""
-    now = time.time()
     mock_redis = _make_mock_redis(existing_count=5)
 
     with pytest.raises(HTTPException) as exc_info:
@@ -338,7 +339,6 @@ def test_enforce_rate_limit_uses_redis_when_available(mock_request):
     import app.core.rate_limit as rl_module
 
     request = mock_request("192.168.1.50")
-    now = time.time()
     mock_redis = _make_mock_redis(existing_count=1, oldest_ts=now - 10)
 
     with patch.object(rl_module, "_get_redis_client", return_value=mock_redis):
@@ -386,7 +386,6 @@ def test_enforce_rate_limit_429_propagated_from_redis(mock_request):
     import app.core.rate_limit as rl_module
 
     request = mock_request("192.168.1.80")
-    now = time.time()
     mock_redis = _make_mock_redis(existing_count=5)  # at limit
 
     with patch.object(rl_module, "_get_redis_client", return_value=mock_redis):
