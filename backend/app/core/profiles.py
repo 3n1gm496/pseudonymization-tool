@@ -299,3 +299,57 @@ _cached_config = get_config()
 def get_cached_config() -> ProfileConfig:
     """Get cached config (for performance, avoids repeated env lookups)."""
     return _cached_config
+
+
+def validate_production_secrets() -> list[str]:
+    """
+    Valida che tutti i secrets obbligatori siano configurati per il profilo PROD/STAGING.
+
+    Restituisce una lista di errori. Lista vuota = tutto OK.
+
+    Chiamare all'avvio del server prima di accettare traffico.
+
+    Returns:
+        list[str]: Lista di messaggi di errore. Vuota se tutto è configurato correttamente.
+
+    Example:
+        >>> errors = validate_production_secrets()
+        >>> if errors:
+        ...     for e in errors: logger.error(e)
+        ...     sys.exit(1)
+    """
+    errors: list[str] = []
+    profile = get_profile()
+
+    # Solo PROD e STAGING richiedono secrets espliciti
+    if profile == Profile.DEV:
+        return errors
+
+    # AUTH_PASSWORD obbligatoria
+    auth_password = os.environ.get("AUTH_PASSWORD", "").strip()
+    if not auth_password:
+        errors.append("AUTH_PASSWORD non configurata (obbligatoria in PROD/STAGING)")
+    elif len(auth_password) < 12:
+        errors.append("AUTH_PASSWORD troppo corta: minimo 12 caratteri")
+
+    # AUTH_SECRET obbligatorio (no generazione casuale in prod)
+    auth_secret = os.environ.get("AUTH_SECRET", "").strip()
+    if not auth_secret:
+        errors.append("AUTH_SECRET non configurato (obbligatorio in PROD/STAGING)")
+    elif len(auth_secret) < 32:
+        errors.append("AUTH_SECRET troppo corto: minimo 32 caratteri")
+
+    # REDIS_PASSWORD obbligatoria
+    redis_password = os.environ.get("REDIS_PASSWORD", "").strip()
+    if not redis_password:
+        errors.append("REDIS_PASSWORD non configurata (obbligatoria in PROD/STAGING)")
+
+    # PROD_FRONTEND_URL obbligatoria in PROD
+    if profile == Profile.PROD:
+        frontend_url = os.environ.get("PROD_FRONTEND_URL", "").strip()
+        if not frontend_url:
+            errors.append(
+                "PROD_FRONTEND_URL non configurata (obbligatoria in PROD per CORS strict)"
+            )
+
+    return errors

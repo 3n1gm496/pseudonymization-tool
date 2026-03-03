@@ -26,7 +26,7 @@ from app.core.auth import (
 )
 from app.core.batch_manager import start_cleanup_scheduler
 from app.core.config import SERVER_HOST, SERVER_PORT, TEMP_BASE_DIR, validate_writable_paths
-from app.core.profiles import Profile, get_config, print_profile_info
+from app.core.profiles import Profile, get_config, print_profile_info, validate_production_secrets
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -81,15 +81,20 @@ async def lifespan(app: FastAPI):
         logger.warning("Errore nel caricamento dei dizionari: %s", e)
     start_cleanup_scheduler()
     logger.info("Cleanup scheduler avviato.")
+    # Validazione secrets obbligatori (PROD/STAGING)
+    secret_errors = validate_production_secrets()
+    if secret_errors:
+        for err in secret_errors:
+            logger.error("❌ Configurazione mancante: %s", err)
+        raise RuntimeError(
+            f"Avvio bloccato: {len(secret_errors)} secret/i obbligatori non configurati. "
+            "Controlla i log per i dettagli."
+        )
+
     if _profile_config.auth_enabled:
         logger.info("Autenticazione API: ATTIVA")
         if auth_uses_default_password():
             logger.warning("⚠️  AUTH_PASSWORD non impostata (nessun default disponibile).")
-        if _profile_config.profile == Profile.PROD:
-            if auth_uses_default_password():
-                raise RuntimeError("❌ AUTH_PASSWORD obbligatorio in produzione (nessun default disponibile)")
-            if auth_uses_ephemeral_secret():
-                raise RuntimeError("❌ AUTH_SECRET deve essere configurato in produzione (no random generation)")
     else:
         logger.warning("Autenticazione API: DISATTIVATA")
     yield
@@ -119,6 +124,65 @@ app.add_middleware(
     allow_methods=_profile_config.cors_allow_methods,
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    """
+    Aggiunge security headers HTTP a tutte le risposte.
+
+    Headers applicati:
+    - X-Content-Type-Options: impedisce MIME-type sniffing
+    - X-Frame-Options: impedisce clickjacking (embedding in iframe)
+    - X-XSS-Protection: abilita filtro XSS nei browser legacy
+    - Referrer-Policy: limita le informazioni nel Referer header
+    - Permissions-Policy: disabilita API browser non necessarie
+    - Strict-Transport-Security: forza HTTPS (solo in PROD/STAGING)
+    - Content-Security-Policy: limita le sorgenti di contenuto
+    """
+    response = await call_next(request)
+
+    # Headers universali (tutti i profili)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = (
+        "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+    )
+
+    # HSTS: solo in PROD e STAGING (richiede HTTPS)
+    if _profile_config.cookie_secure:
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=31536000; includeSubDomains"
+        )
+
+    # CSP: policy restrittiva per SPA locale
+    # 'self' per script/style/img; no eval, no inline script
+    # Swagger UI richiede 'unsafe-inline' per i suoi stili
+    if _profile_config.swagger_ui_enabled:
+        csp = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; "
+            "font-src 'self' data:; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none'"
+        )
+    else:
+        csp = (
+            "default-src 'self'; "
+            "script-src 'self'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; "
+            "font-src 'self' data:; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none'"
+        )
+    response.headers["Content-Security-Policy"] = csp
+
+    return response
 
 
 @app.middleware("http")
