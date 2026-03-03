@@ -475,5 +475,5 @@ Then continue to "Prepare for AI" (customized pseudonyms go into mapping.enc).
 ---
 
 **Last updated:** March 2026  
-**Tool version:** v4.3  
+**Tool version:** v5.0.0  
 **Contact:** Team for document improvements

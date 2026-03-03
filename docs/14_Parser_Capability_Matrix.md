@@ -1,6 +1,6 @@
 # Parser Capability Matrix
 
-**Version:** 1.0  
+**Version:** 1.0 (updated for v5.0.0)  
 **Date:** 2026-03-01  
 **Purpose:** Explicit documentation of parser capabilities and known limitations for MVP baseline.
 

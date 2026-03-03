@@ -1,5 +1,52 @@
 # Release Notes
 
+## v5.0.0 - Security Hardening, CI Hardening & Code Quality (2026-03-03)
+
+This release consolidates 10 pull requests focused on security, CI reliability, and code quality.
+No new user-facing features; all changes are infrastructure and correctness improvements.
+
+### Security (PR #1, #2, #3, #4)
+
+- **PR #1** — `fix(deps)`: upgrade pypdf 3.x → 6.7.4 (resolves 13 CVE), pin vite to 5.4.21 (CVE-2025-31125), add `package-lock.json` for reproducible builds
+- **PR #2** — `fix(docker)`: Dockerfile hardening — `npm ci` instead of `npm install`, non-root user `appuser` (UID 1000), `exec` form CMD, `SERVER_HOST` configurable via env
+- **PR #3** — `fix(compose)`: docker-compose hardening — Redis isolated on internal network, Redis password from `.env`, Flower protected with HTTP basic auth
+- **PR #4** — `fix(auth)`: auth.py hardening — JWT secret stored in `STATE_DIR` (not memory), race condition fix in session creation, structured logging for auth events
+
+### Testing (PR #5)
+
+- **PR #5** — `test`: fix `test_functional.py` — removed obsolete `@test` decorator, fixed 17 false positives (tests that passed vacuously), added proper assertions
+
+### CI (PR #6)
+
+- **PR #6** — `ci`: CI hardening — replaced `safety` with `pip-audit` (OSV database, no false negatives), added Python 3.11+3.12 matrix, raised global coverage threshold to 60%, added per-module thresholds (safety/crypto/engine: 90%, auth: 75%, pipeline: 65%), fixed smoke test and sensitive data check
+
+### Code Quality (PR #7, #8)
+
+- **PR #7** — `fix(batch_manager)`: replaced 7 silent `except Exception: pass` with explicit logging — errors now visible in structured logs
+- **PR #8** — `chore(imports)`: removed 72 unused imports across 17 backend files — cleaner codebase, faster linting
+
+### Documentation (PR #9, #10)
+
+- **PR #9** — `docs`: documentation reorder — archived obsolete files, fixed broken cross-references, updated version headers
+- **PR #10** — `docs`: README v5.0.0 — accurate architecture diagram, all links verified (22 broken → 0), removed all "Phase N" references, added Celery+Redis architecture section
+
+### Testing
+
+- **267 tests passing, 12 skipped** (Tesseract OCR not available in CI)
+- **64% global coverage**
+- **0 CVE** (pip-audit)
+- **0 Bandit HIGH/MEDIUM** findings
+- Python 3.11 and 3.12 both tested in CI matrix
+
+### Migration Notes
+
+No breaking changes. All API contracts unchanged. Docker Compose users should:
+1. Add `REDIS_PASSWORD=<strong-password>` to `.env`
+2. Add `FLOWER_BASIC_AUTH=admin:<password>` to `.env` (if using Flower)
+3. Rebuild images: `docker compose up --build -d`
+
+---
+
 ## v4.0.5 - Workflow Refactoring & Documentation Clarity (2026-03-02)
 
 ### Changed
@@ -34,9 +81,9 @@
 ## v4.0.4 - Critical Memory & Concurrency Fixes (2026-03-01)
 
 ### Fixed
-- **Session Memory Leak** (Issue #0A): Expired sessions now properly removed from in-memory `_sessions` dictionary during validation. Prevents unbounded memory growth over time. Impact: ~99.93% memory reduction for expired sessions. See [docs/18_CODE_REVIEW_FINDINGS.md § Session Memory Leak](18_CODE_REVIEW_FINDINGS.md).
-- **TOCTOU Race Condition** (Issue #0B): `cleanup_inactive_batches()` now uses single-lock atomic region to eliminate Time-Of-Check-Time-Of-Use vulnerability. Prevents accidental deletion of recently-accessed batches. See [docs/18_CODE_REVIEW_FINDINGS.md § TOCTOU Race Condition](18_CODE_REVIEW_FINDINGS.md).
-- **Missing Thread-Safety** (Issue #0C): Batch timing helpers (`set_batch_start_time`, `get_batch_start_time`, `clear_batch_start_time`) now properly synchronized with `_global_lock`. Prevents dictionary corruption under concurrent access. See [docs/18_CODE_REVIEW_FINDINGS.md § Thread-Safety](18_CODE_REVIEW_FINDINGS.md).
+- **Session Memory Leak** (Issue #0A): Expired sessions now properly removed from in-memory `_sessions` dictionary during validation. Prevents unbounded memory growth over time. Impact: ~99.93% memory reduction for expired sessions.
+- **TOCTOU Race Condition** (Issue #0B): `cleanup_inactive_batches()` now uses single-lock atomic region to eliminate Time-Of-Check-Time-Of-Use vulnerability. Prevents accidental deletion of recently-accessed batches.
+- **Missing Thread-Safety** (Issue #0C): Batch timing helpers (`set_batch_start_time`, `get_batch_start_time`, `clear_batch_start_time`) now properly synchronized with `_global_lock`. Prevents dictionary corruption under concurrent access.
 
 ### Testing
 - New comprehensive test suite: `backend/tests/test_hidden_bugs_coverage.py` with 18 tests covering all 3 critical bug fixes.
@@ -47,7 +94,6 @@
 ### Code Review
 - Full static analysis completed: 23 issues identified (3 critical fixed + 20 remaining).
 - Priority roadmap established for Phase 1-3 fixes.
-- See [docs/18_CODE_REVIEW_FINDINGS.md](18_CODE_REVIEW_FINDINGS.md) for complete analysis, remaining issues, and remediation roadmap.
 
 ### Commits Included
 - `abc1234` fix: remove expired sessions from _sessions dict (memory leak)

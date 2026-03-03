@@ -2,7 +2,7 @@
 
 Local anonymization tool for secure data processing before AI analysis.
 
-**Version:** 4.0.4 | **Last Updated:** 2026-03-02
+**Version:** 5.0.0 | **Last Updated:** 2026-03-03
 
 ---
 
