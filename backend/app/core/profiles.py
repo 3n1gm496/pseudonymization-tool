@@ -59,6 +59,7 @@ class ProfileConfig:
     cors_origins: List[str]
     cors_allow_credentials: bool
     cors_allow_methods: List[str]
+    cors_allow_headers: List[str]
 
     # Security
     cookie_secure: bool
@@ -110,6 +111,7 @@ class DevConfig(ProfileConfig):
             ],
             cors_allow_credentials=True,
             cors_allow_methods=["GET", "POST", "DELETE", "PUT", "PATCH"],
+            cors_allow_headers=["*"],  # Permissive in dev
             # Security: relaxed for local development
             cookie_secure=False,  # Allow HTTP cookies (dev on localhost)
             auth_enabled=auth_enabled_for_dev,  # Disable auth in tests
@@ -140,6 +142,13 @@ class StagingConfig(ProfileConfig):
             ],
             cors_allow_credentials=True,
             cors_allow_methods=["GET", "POST", "DELETE"],
+            cors_allow_headers=[
+                "Content-Type",
+                "Authorization",
+                "X-CSRF-Token",
+                "Accept",
+                "X-Requested-With",
+            ],
             # Security: production-like
             cookie_secure=True,  # HTTPS required
             auth_enabled=True,
@@ -174,6 +183,13 @@ class ProdConfig(ProfileConfig):
             cors_origins=[frontend_url],
             cors_allow_credentials=True,
             cors_allow_methods=["GET", "POST", "DELETE"],
+            cors_allow_headers=[
+                "Content-Type",
+                "Authorization",
+                "X-CSRF-Token",
+                "Accept",
+                "X-Requested-With",
+            ],
             # Security: maximum strictness
             cookie_secure=True,  # HTTPS required (enforce Secure flag)
             auth_enabled=True,  # Always require authentication
@@ -284,6 +300,7 @@ def print_profile_info() -> None:
     print(f"  Swagger UI:        {config.swagger_ui_enabled}")
     print(f"  Debug Endpoints:   {config.debug_endpoints}")
     print(f"  Workers:           {config.workers}")
+    print(f"  CORS Headers:      {', '.join(config.cors_allow_headers)}")
     print("=" * 80)
 
 

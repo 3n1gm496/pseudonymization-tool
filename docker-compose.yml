@@ -61,10 +61,22 @@ services:
       MAX_UPLOAD_FILES_PER_BATCH: "20"
       MAX_CONSOLE_TEXT_CHARS: "200000"
       PYTHONUNBUFFERED: "1"
+      # Profilo di deployment: dev | staging | prod
+      # Controlla CORS, auth, log level, Swagger UI e CSRF protection.
+      DEPLOYMENT_PROFILE: "${DEPLOYMENT_PROFILE:-prod}"
       AUTH_ENABLED: "true"
       AUTH_USERNAME: "${AUTH_USERNAME}"
       # AUTH_PASSWORD letta da .env — nessun default hardcoded
       AUTH_PASSWORD: "${AUTH_PASSWORD}"
+      # Chiave HMAC per la firma dei token di sessione.
+      # OBBLIGATORIA in PROD/STAGING: generare con: openssl rand -base64 48
+      AUTH_SECRET: "${AUTH_SECRET}"
+      # URL pubblico del frontend (allowed origin CORS in PROD).
+      # OBBLIGATORIO in PROD: es. https://pseudonymizer.example.com
+      PROD_FRONTEND_URL: "${PROD_FRONTEND_URL:-}"
+      # Numero di worker uvicorn. Default 1 (sicuro con rate limiter in-memory).
+      # Aumentare a 4 solo dopo aver abilitato il rate limiter Redis-backed (PR #36).
+      WEB_CONCURRENCY: "${WEB_CONCURRENCY:-1}"
       # Redis con autenticazione
       REDIS_URL: "redis://:${REDIS_PASSWORD}@redis:6379/0"
       CELERY_BROKER_URL: "redis://:${REDIS_PASSWORD}@redis:6379/1"
@@ -103,6 +115,8 @@ services:
     environment:
       PYTHONUNBUFFERED: "1"
       PSEUDONYMIZER_STATE_DIR: "/app/state"
+      DEPLOYMENT_PROFILE: "${DEPLOYMENT_PROFILE:-prod}"
+      AUTH_SECRET: "${AUTH_SECRET}"
       REDIS_URL: "redis://:${REDIS_PASSWORD}@redis:6379/0"
       CELERY_BROKER_URL: "redis://:${REDIS_PASSWORD}@redis:6379/1"
       CELERY_RESULT_BACKEND: "redis://:${REDIS_PASSWORD}@redis:6379/2"

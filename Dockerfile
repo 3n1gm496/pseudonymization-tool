@@ -91,7 +91,8 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD curl -fsS http://127.0.0.1:8000/api/health > /dev/null || exit 1
 
-# Use exec form (no shell) for proper signal handling and clean process tree.
-# PSEUDONYMIZER_HOST defaults to 127.0.0.1 in config.py; Docker sets it to
-# 0.0.0.0 via the environment variable below so the container is reachable.
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# WEB_CONCURRENCY controls the number of uvicorn worker processes.
+# Default: 1 (safe for in-memory rate limiter and single-node deployments).
+# Set WEB_CONCURRENCY=4 in production once Redis-backed rate limiting is in place (PR #36).
+# Shell form is required to expand the ${WEB_CONCURRENCY:-1} variable at runtime.
+CMD ["sh", "-c", "exec python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${WEB_CONCURRENCY:-1}"]

@@ -131,7 +131,7 @@ app.add_middleware(
     allow_origins=_profile_config.cors_origins,
     allow_credentials=_profile_config.cors_allow_credentials,
     allow_methods=_profile_config.cors_allow_methods,
-    allow_headers=["*"],
+    allow_headers=_profile_config.cors_allow_headers,
 )
 
 
