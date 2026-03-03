@@ -37,6 +37,9 @@ redis>=5.0.0,<6.0.0
 kombu>=5.3.0,<6.0.0
 flower>=2.0.0,<3.0.0
 
+# Monitoring e observability (Phase 6)
+prometheus-client>=0.19.0,<1.0.0
+
 # reportlab RIMOSSO: i report sono generati in HTML/JSON puri
 # Non è mai usato nel codice applicativo (solo in tests/create_test_data.py
 # con fallback automatico se non disponibile)

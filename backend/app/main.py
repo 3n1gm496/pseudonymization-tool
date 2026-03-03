@@ -203,6 +203,7 @@ async def auth_middleware(request: Request, call_next):
     public_paths = {
         "/api/health",
         "/api/ready",
+        "/api/metrics",
         "/api/auth/login",
         "/api/auth/me",
         "/api/docs",
@@ -240,6 +241,7 @@ async def csrf_middleware(request: Request, call_next):
         "/api/auth/login",  # Login non ha ancora token CSRF
         "/api/health",  # Endpoint di monitoring
         "/api/ready",  # Endpoint di monitoring
+        "/api/metrics",  # Prometheus metrics (GET only, ma esentato per coerenza)
         "/api/docs",  # Documentazione API
         "/api/auth/me",  # Auth status check
     }
@@ -256,6 +258,7 @@ async def csrf_middleware(request: Request, call_next):
     public_paths = {
         "/api/health",
         "/api/ready",
+        "/api/metrics",
         "/api/auth/login",
         "/api/auth/me",
         "/api/docs",

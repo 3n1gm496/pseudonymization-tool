@@ -24,7 +24,9 @@ from app.core.auth import (
     verify_credentials,
 )
 from app.core.config import CONFIG_DIR
+from app.core.metrics import get_metrics_output
 from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi.responses import Response as FastAPIResponse
 
 router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
@@ -85,6 +87,25 @@ async def ready_check():
             "timestamp": datetime.now(timezone.utc).isoformat(),
         },
     )
+
+
+@router.get("/metrics")
+async def metrics_endpoint():
+    """
+    Endpoint Prometheus metrics in formato text/plain 0.0.4.
+
+    Espone metriche applicative per il monitoring:
+    - pseudonymizer_scans_total: contatore scan completati per preset
+    - pseudonymizer_applies_total: contatore apply completati
+    - pseudonymizer_errors_total: contatore errori HTTP per status code ed endpoint
+    - pseudonymizer_active_batches: gauge batch attivi in memoria
+    - pseudonymizer_http_requests_total: contatore richieste HTTP
+
+    Esentato da autenticazione e CSRF (configurato in main.py).
+    Proteggere con firewall o nginx auth_basic in produzione se necessario.
+    """
+    content, content_type = get_metrics_output()
+    return FastAPIResponse(content=content, media_type=content_type)
 
 
 @router.post("/auth/login")
