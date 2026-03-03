@@ -1,0 +1,98 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# requirements.lock — Dipendenze pinnate per build deterministici
+#
+# Generato da: pip freeze (Python 3.11, ambiente di test CI)
+# Aggiornare con: pip-compile requirements.txt -o requirements.lock
+#
+# UTILIZZO PRODUZIONE:
+#   pip install -r requirements.lock
+#
+# UTILIZZO SVILUPPO (versioni flessibili):
+#   pip install -r requirements.txt
+#
+# Data generazione: 2026-03-03
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Framework web ─────────────────────────────────────────────────────────────
+fastapi==0.119.0
+uvicorn==0.37.0
+starlette==0.48.0
+python-multipart==0.0.22
+
+# ── Pydantic (validazione dati) ───────────────────────────────────────────────
+pydantic==2.12.5
+pydantic_core==2.41.5
+annotated-types==0.7.0
+typing_extensions==4.15.0
+
+# ── Async I/O ─────────────────────────────────────────────────────────────────
+anyio==4.11.0
+sniffio==1.3.1
+h11==0.16.0
+click==8.3.0
+
+# ── Autenticazione ────────────────────────────────────────────────────────────
+PyJWT==2.11.0
+
+# ── Cifratura ─────────────────────────────────────────────────────────────────
+cryptography==46.0.2
+cffi==2.0.0
+pycparser==2.23
+
+# ── Parsing documenti ─────────────────────────────────────────────────────────
+python-docx==1.2.0
+openpyxl==3.1.5
+pypdf==6.7.4
+
+# ── Immagini e OCR ────────────────────────────────────────────────────────────
+pillow==11.3.0
+pytesseract==0.3.13
+piexif==1.1.3
+
+# ── Logging strutturato ───────────────────────────────────────────────────────
+structlog==24.4.0
+
+# ── NLP / NER (spaCy) ─────────────────────────────────────────────────────────
+spacy==3.8.11
+spacy-legacy==3.0.12
+spacy-loggers==1.0.5
+thinc==8.3.4
+blis==1.2.1
+cymem==2.0.13
+preshed==3.0.12
+murmurhash==1.0.15
+srsly==2.5.2
+catalogue==2.0.10
+wasabi==1.1.3
+weasel==0.4.3
+confection==0.1.5
+cloudpathlib==0.23.0
+smart_open==7.5.1
+typer==0.24.1
+langcodes==3.5.0
+numpy==2.3.3
+
+# ── Task queue (Celery + Redis) ───────────────────────────────────────────────
+celery==5.6.2
+redis==5.3.1
+kombu==5.6.2
+amqp==5.3.1
+vine==5.1.0
+billiard==4.2.4
+flower==2.0.1
+
+# ── HTTP client ───────────────────────────────────────────────────────────────
+httpx==0.28.1
+requests==2.32.5
+certifi==2025.10.5
+charset-normalizer==3.4.4
+idna==3.11
+
+# ── LDAP (opzionale) ──────────────────────────────────────────────────────────
+ldap3==2.9.1
+pyasn1==0.6.2
+
+# ── Utilità ───────────────────────────────────────────────────────────────────
+packaging==25.0
+six==1.17.0
+python-dateutil==2.9.0.post0

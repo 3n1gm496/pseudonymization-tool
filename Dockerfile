@@ -23,8 +23,6 @@ COPY frontend/index.html ./
 COPY frontend/vite.config.js ./
 COPY frontend/tailwind.config.js ./
 COPY frontend/postcss.config.js ./
-COPY frontend/tsconfig.json ./
-
 # Build React app with Vite
 RUN npm run build && \
     echo "✓ Frontend built successfully"
@@ -58,12 +56,14 @@ RUN groupadd --gid 1001 appgroup && \
 
 WORKDIR /app
 
-# Install Python dependencies (as root, before switching user)
-COPY backend/requirements.txt ./requirements.txt
+# Install Python dependencies using lock file for deterministic builds (as root, before switching user)
+# Use requirements.lock for reproducible production builds;
+# fall back to requirements.txt only if lock file is absent.
+COPY backend/requirements.lock backend/requirements.txt ./
 RUN pip install --upgrade pip && \
-    pip install -r requirements.txt && \
-    rm requirements.txt && \
-    echo "✓ Python packages installed successfully"
+    pip install -r requirements.lock && \
+    rm -f requirements.lock requirements.txt && \
+    echo "✓ Python packages installed from lock file (deterministic build)"
 
 # Copy backend application
 COPY backend /app/backend
