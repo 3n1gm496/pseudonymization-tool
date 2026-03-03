@@ -339,7 +339,7 @@ class TestCSRFTokenManagement:
     def test_validate_csrf_token_invalid(self, clear_sessions):
         """Test validation fails with wrong token."""
         session_id = "test_session"
-        token = create_csrf_token(session_id)
+        create_csrf_token(session_id)
         wrong_token = generate_csrf_token()
 
         result = validate_csrf_token(session_id, wrong_token)
@@ -591,3 +591,79 @@ class TestIntegrationWithAuthEndpoints:
 
         # Should succeed (or at least not error)
         assert response.status_code in [200, 401, 403]  # Depends on auth settings
+
+
+# ─── Rate Limiting sul Login ──────────────────────────────────────────────────
+
+class TestLoginRateLimit:
+    """Verifica che /api/auth/login sia protetto da rate limiting brute-force."""
+
+    def _reset_buckets(self):
+        import app.core.rate_limit as rl_module
+        with rl_module._rate_limiter._lock:
+            rl_module._rate_limiter._buckets.clear()
+
+    def test_login_rate_limit_blocks_after_limit(self):
+        """Dopo 10 tentativi dallo stesso IP, l'11° deve ricevere 429."""
+        from fastapi.testclient import TestClient
+        from app.main import app
+
+        self._reset_buckets()
+
+        client = TestClient(app, raise_server_exceptions=False)
+
+        # 10 tentativi: tutti devono passare il rate limiter (possono dare 401)
+        for i in range(10):
+            r = client.post(
+                "/api/auth/login",
+                json={"username": "admin", "password": "wrong"},
+                headers={"X-Forwarded-For": "10.1.0.1"},
+            )
+            assert r.status_code in (200, 401), f"Tentativo {i+1}: atteso 200/401, ottenuto {r.status_code}"
+
+        # L'11° tentativo deve essere bloccato dal rate limiter
+        r = client.post(
+            "/api/auth/login",
+            json={"username": "admin", "password": "wrong"},
+            headers={"X-Forwarded-For": "10.1.0.1"},
+        )
+        assert r.status_code == 429, f"Atteso 429 (rate limit), ottenuto {r.status_code}"
+
+        self._reset_buckets()
+
+    def test_login_rate_limit_independent_per_ip(self):
+        """IP diversi hanno bucket separati: un IP bloccato non blocca gli altri.
+        
+        TestClient usa request.client.host (non X-Forwarded-For) come IP.
+        Usiamo il rate limiter direttamente con mock request per testare
+        l'isolamento tra bucket di IP diversi.
+        """
+        import app.core.rate_limit as rl_module
+        from unittest.mock import Mock
+        from fastapi import Request
+
+        self._reset_buckets()
+
+        def make_req(ip):
+            r = Mock(spec=Request)
+            r.client = Mock()
+            r.client.host = ip
+            return r
+
+        limiter = rl_module._rate_limiter
+
+        # Esaurisci il limite per IP A (10 richieste)
+        for _ in range(10):
+            limiter.check_limit(make_req("10.2.0.1"), scope="auth_login", limit=10, window_seconds=60)
+
+        # IP A deve essere bloccato all'11° tentativo
+        from fastapi import HTTPException
+        with pytest.raises(HTTPException) as exc_info:
+            limiter.check_limit(make_req("10.2.0.1"), scope="auth_login", limit=10, window_seconds=60)
+        assert exc_info.value.status_code == 429
+
+        # IP B deve ancora passare (bucket separato)
+        result = limiter.check_limit(make_req("10.2.0.2"), scope="auth_login", limit=10, window_seconds=60)
+        assert result is not None  # nessuna eccezione = OK
+
+        self._reset_buckets()
