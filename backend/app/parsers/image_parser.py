@@ -99,7 +99,6 @@ class ImageParser(BaseParser):
             # Crea TextChunk per ogni linea OCR
             for line_key, line_data in sorted(lines.items()):
                 line_text = " ".join(line_data["words"])
-                avg_conf = sum(line_data["confs"]) / len(line_data["confs"]) if line_data["confs"] else 0
 
                 # Calcola il bounding box che racchiude tutta la linea
                 if line_data["bboxes"]:

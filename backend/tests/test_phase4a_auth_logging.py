@@ -91,7 +91,7 @@ def test_add_app_context_enriches_event_dict():
     event = {"event": "hello"}
     out = logging_config.add_app_context(None, "info", event)
     assert out["app"] == "pseudonymization-tool"
-    assert out["version"] == "5.0.0"  # ✅ FIX: Updated to current version
+    assert out["version"] == "5.0.0"
 
 
 def test_configure_logging_json_and_console():
@@ -101,7 +101,6 @@ def test_configure_logging_json_and_console():
     assert logger is not None
 
 
-@pytest.mark.skip(reason="pytest-mock not installed - mocker fixture unavailable")
 def test_request_and_error_logging_helpers(mocker):
     fake_logger = mocker.Mock()
     mocker.patch("app.core.logging_config.get_logger", return_value=fake_logger)

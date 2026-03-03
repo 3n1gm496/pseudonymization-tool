@@ -77,7 +77,6 @@ def run_scan_pipeline(batch_id: str) -> Batch:
     batch.policy_hash = get_policy_hash(batch.config.preset)
 
     all_findings: List[Finding] = []
-    global_warnings: List[str] = []
     _clear_parse_results(batch_id)
 
     for file_rec in batch.files:
