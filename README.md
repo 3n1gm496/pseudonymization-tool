@@ -1,565 +1,205 @@
+> Questo file è stato aggiornato automaticamente da Manus per riflettere lo stato finale del progetto dopo 6 pull request.
+
 # Local Pseudonymization Tool v5.0.0
 
-[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
-[![React 18.2](https://img.shields.io/badge/React-18.2-61dafb.svg)](https://react.dev)
-[![FastAPI 0.110](https://img.shields.io/badge/FastAPI-0.110-009688.svg)](https://fastapi.tiangolo.com)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests: 348 passing](https://img.shields.io/badge/Tests-348%20passing-brightgreen.svg)](backend/tests/)
-[![Coverage: 71%](https://img.shields.io/badge/Coverage-71%25-yellowgreen.svg)]()
-[![Async: Celery + Redis](https://img.shields.io/badge/Async-Celery%20%2B%20Redis-red.svg)](docs/02_Technical_Architecture.md)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/) [![React 18.2](https://img.shields.io/badge/React-18.2-61dafb.svg)](https://react.dev) [![FastAPI 0.110](https://img.shields.io/badge/FastAPI-0.110-009688.svg)](https://fastapi.tiangolo.com) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Tests: 483 passing](https://img.shields.io/badge/Tests-483%20passing-brightgreen.svg)](backend/tests/) [![Coverage: 82%](https://img.shields.io/badge/Coverage-82%25-brightgreen.svg)](https://github.com/3n1gm496/pseudonymization-tool/pull/37) [![Monitoring: Prometheus](https://img.shields.io/badge/Monitoring-Prometheus-orange.svg)](#-monitoring-prometheus)
 
 Web application locale moderna per la pseudonimizzazione sicura di dati sensibili in documenti di testo, DOCX, XLSX, PDF e immagini. Interfaccia React con Tailwind CSS, darkmode supportato. Progettato per ambienti enterprise che richiedono massima sicurezza e capacità di operare completamente offline.
 
 🔗 **Repository:** [github.com/3n1gm496/pseudonymization-tool](https://github.com/3n1gm496/pseudonymization-tool)
 
-## ✨ Caratteristiche
+## ✨ Caratteristiche Principali
 
-- **🔒 100% Offline** — Nessuna chiamata di rete esterna, tutti i dati rimangono sulla macchina locale
-- **📄 Multi-formato** — Supporto per TXT, CSV, MD, DOCX, XLSX, PDF (testuali), JPG, PNG
-- **🔐 Sicurezza Avanzata** — Mapping cifrato con passphrase AES-256-GCM, zero logging di dati sensibili
-- **⚡ Architettura Asincrona** — Elaborazione con Celery + Redis, scalabile e resiliente
-- **⚙️ Modalità Flessibili** — `light` (solo entità di rete) e `strict` (tutte le entità PII)
-- **🧭 Input Unificato** — testo inline e upload documenti disponibili nello stesso flusso
-- **🛡️ Preset Policy** — Profilo `SOC Logs` applicato automaticamente (massima copertura: rete, identità, path)
-- **👁️ Review Manuale** — Interfaccia per rivedere e approvare/rifiutare ogni pseudonimo proposto
-- **📊 Report Dettagliati** — HTML navigabile e JSON strutturato per audit trail
-- **✅ Readiness API** — endpoint `/api/ready` per distinguere processo attivo da servizio pronto
-- **🎯 Deterministico** — Stesso input = stesso output con la stessa passphrase
+| Categoria | Funzionalità |
+|---|---|
+| **Core** | **100% Offline** (nessuna chiamata esterna), **Multi-formato** (TXT, DOCX, XLSX, PDF, immagini), **Deterministico** (stesso input = stesso output) |
+| **Sicurezza** | **Mapping cifrato AES-256-GCM**, **Global exception handling** (no information leakage), **HTTP security headers** (via nginx), **CSRF protection** |
+| **Architettura** | **Architettura Asincrona** (Celery + Redis), **Multi-worker support** (Uvicorn), **TLS/HTTPS** (via nginx reverse proxy), **Rate Limiting** (Redis-backed) |
+| **Funzionalità** | **Modalità Flessibili** (`light`/`strict`), **Preset Policy** (`SOC Logs`), **Review Manuale**, **Report Dettagliati** (HTML/JSON) |
+| **Operatività** | **Docker Compose ready** (`dev` e `prod`), **Readiness/Liveness API** (`/api/ready`, `/api/health`), **Monitoring con Prometheus** (`/api/metrics`) |
 
 ---
 
 ## 📋 Indice
 
 - [Architettura](#-architettura)
-- [Quick Start](#-quick-start)
+- [Quick Start (Docker)](#-quick-start-docker)
+- [Deployment in Produzione](#-deployment-in-produzione)
+- [Monitoring (Prometheus)](#-monitoring-prometheus)
 - [Configurazione](#-configurazione)
-- [Utilizzo](#-utilizzo)
-- [Integrazione AI](#-integrazione-con-ai)
-- [Sicurezza](#-sicurezza-e-limitazioni)
+- [Sicurezza](#-sicurezza)
 - [Sviluppo](#-sviluppo)
-- [Contributing](#-contributing)
-- [Licenza](#-licenza)
 
 ---
 
 ## 🏗️ Architettura
 
-### High-Level Overview
+Il sistema è progettato per essere modulare, scalabile e sicuro, separando il frontend, il backend e i task asincroni in container Docker distinti.
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Frontend (React 18)                      │
-│              UI/UX Layer + Dark Mode + Responsive               │
-└────────────────────────────┬────────────────────────────────────┘
-                             │ HTTP/REST API
-┌────────────────────────────▼────────────────────────────────────┐
-│                      Backend (FastAPI)                          │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐           │
-│  │ Auth Module  │  │ API Routes   │  │ Batch Mgr    │           │
-│  │ (JWT Auth)   │  │ (/api/*)     │  │ (Lifecycle)  │           │
-│  └──────────────┘  └──────────────┘  └──────┬───────┘           │
-│                                             │                   │
-│  ┌──────────────────────────────────────────▼─────────────────┐ │
-│  │                 Celery Task Queue                          │ │
-│  │  - Async scan execution (run_scan_pipeline)                │ │
-│  │  - Background processing                                   │ │
-│  │  - Task status tracking                                    │ │ 
-│  └──────────────────────────────────────────┬─────────────────┘ │
-│                                             │                   │
-│  ┌──────────────┐  ┌──────────────┐   ┌─────▼──────┐            │
-│  │ Detectors    │  │ Parsers      │   │ Redis      │            │
-│  │ (Regex/Dict/ │  │ (PDF/DOCX/   │   │ (Broker +  │            │
-│  │  SOC)        │  │  XLSX/IMG)   │   │  Results)  │            │
-│  └──────────────┘  └──────────────┘   └────────────┘            │
-│                                                                 │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐           │
-│  │ Pseudonymizer│  │ Crypto (AES) │  │ Report Gen   │           │
-│  │ (Transform)  │  │ (Encryption) │  │ (HTML/JSON)  │           │
-│  └──────────────┘  └──────────────┘  └──────────────┘           │
-└─────────────────────────────────────────────────────────────────┘
-                             │
-┌────────────────────────────▼────────────────────────────────────┐
-│                    Storage & Persistence                        │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐           │
-│  │ Redis State  │  │ Outputs      │  │ Uploads      │           │
-│  │ (Batch/Sess) │  │ (ZIP files)  │  │ (Temp files) │           │
-│  └──────────────┘  └──────────────┘  └──────────────┘           │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph "User Browser"
+        Frontend[💻 Frontend<br>(React, Tailwind CSS)]
+    end
+
+    subgraph "Infrastruttura Server"
+        Nginx[🌐 nginx Reverse Proxy<br>TLS Termination, Rate Limiting, Security Headers]
+        Backend[🚀 Backend API<br>(FastAPI, Uvicorn)]
+        Worker[⚙️ Celery Worker<br>(Task asincroni)]
+        Redis[💾 Redis<br>(Broker, Cache, Rate Limiter)]
+        Prometheus[📊 Prometheus<br>(Scrape /api/metrics)]
+    end
+
+    Frontend -- HTTPS --> Nginx
+    Nginx -- HTTP --> Backend
+    Backend -- Task --> Redis
+    Worker -- Task --> Redis
+    Backend -- Legge/Scrive --> Redis
+    Prometheus -- Scrape --> Nginx
 ```
 
-### Architettura Asincrona (Celery + Redis)
-
-**🎯 Obiettivo:** Elaborazione asincrona per scan di lunga durata, evitando timeout HTTP.
-
-**Componenti:**
-
-1. **Celery Workers**: Processano task in background
-   - `run_scan_pipeline`: Task principale per scan completi
-   - Scalabilità orizzontale (multiple workers)
-   - Graceful shutdown e error handling
-
-2. **Redis**: Message broker e result backend
-   - Queue: `celery` (task dispatch)
-   - Results: `celery-task-meta-*` (task status/results)
-
-3. **API Pattern (202 Accepted)**:
-   ```
-   POST /api/batches → 202 Accepted + task_id
-   GET /api/batches/{id}/status → {status, progress, result}
-   ```
-
-4. **Task Lifecycle**:
-   ```
-   PENDING → STARTED → SUCCESS/FAILURE
-              ↓
-          PROGRESS updates (opzionale)
-   ```
-
-**🔧 Deployment Modes:**
-
-- **Docker Compose** (raccomandato): All-in-one con Redis + Celery worker
-- **Local Dev**: Celery EAGER mode (task sincroni, no Redis)
-- **Production**: Multiple workers, Redis cluster, monitoring con Flower
-
-Vedi [docs/02_Technical_Architecture.md](docs/02_Technical_Architecture.md) per dettagli completi.
+- **nginx**: funge da reverse proxy, gestendo la terminazione TLS, il rate limiting a livello IP e l'aggiunta di security header (HSTS, X-Frame-Options, etc.).
+- **Backend (FastAPI)**: espone le API REST, gestisce l'autenticazione, la logica di business e l'invio di task a Celery.
+- **Celery Worker**: esegue in background i task di lunga durata (scansione e pseudonimizzazione dei file) senza bloccare l'API.
+- **Redis**: serve come message broker per Celery, cache per le sessioni utente e backend per il rate limiting distribuito.
 
 ---
 
-## ⚡ Quick Start
+## ⚡ Quick Start (Docker)
 
-### Metodo 1: Docker (Raccomandato)
+**Prerequisiti**: Docker e Docker Compose installati.
 
-**Prerequisiti**: Docker e Docker Compose installati
+1.  **Clonare il repository:**
+    ```bash
+    git clone https://github.com/3n1gm496/pseudonymization-tool.git
+    cd pseudonymization-tool
+    ```
 
-```bash
-# Clone del repository
-git clone https://github.com/3n1gm496/pseudonymization-tool.git
-cd pseudonymization-tool
+2.  **Creare e configurare `.env`:**
+    Copia il file di esempio e genera le chiavi segrete necessarie.
+    ```bash
+    cp .env.example .env
+    
+    # Popola .env con valori sicuri (le password sono obbligatorie)
+    echo "AUTH_PASSWORD=$(openssl rand -base64 24)" >> .env
+    echo "REDIS_PASSWORD=$(openssl rand -base64 24)" >> .env
+    echo "AUTH_SECRET=$(openssl rand -base64 48)" >> .env
+    echo "FLOWER_USER=admin" >> .env
+    echo "FLOWER_PASSWORD=$(openssl rand -base64 24)" >> .env
+    ```
 
-# 1. Crea il file .env a partire dall'esempio (OBBLIGATORIO)
-touch .env
-# Modifica .env e imposta almeno:
-#   AUTH_PASSWORD=<password-sicura>
-#   REDIS_PASSWORD=<password-redis-sicura>
+3.  **Avviare i servizi:**
+    Il `Makefile` astrae i comandi Docker Compose per semplicità.
+    ```bash
+    make start
+    ```
 
-# 2. Avvio con Docker
-make start
-```
-
-Oppure manualmente:
-
-```bash
-touch .env
-# Modifica .env con le tue credenziali
-docker compose up --build -d
-```
-
-> **Nota:** Il file `.env` contiene credenziali sensibili e non deve mai essere committato. È già incluso nel `.gitignore`.
-
-**Servizi avviati:**
-- `backend`: FastAPI app (port 8000)
-- `redis`: Message broker (porta interna, non esposta sull'host)
-- `celery-worker`: Background task processor
-
-Accedi all'interfaccia: **http://localhost:8000**
+L'applicazione sarà disponibile su **http://localhost:8000**.
 
 **Comandi utili:**
-```bash
-make logs      # Visualizza i log
-make stop      # Ferma il servizio
-make health    # Verifica lo stato
-```
-
-Vedi [Makefile](Makefile) per tutti i comandi disponibili.
+- `make logs`: Visualizza i log di tutti i container.
+- `make stop`: Ferma e rimuove i container.
+- `make health`: Controlla lo stato degli endpoint `health` e `ready`.
+- `make monitoring`: Avvia i servizi con il profilo `monitoring` (include Flower UI su http://localhost:5555).
 
 ---
 
-### Metodo 2: Installazione Locale (Senza Docker)
+## 🚀 Deployment in Produzione
 
-**Per ambienti air-gapped o sistemi senza Docker**
+Per un ambiente di produzione, è fornito un file `docker-compose.prod.yml` che orchestra il backend insieme a un reverse proxy **nginx**.
 
-Vedi [scripts/legacy/README.md](scripts/legacy/README.md) per istruzioni dettagliate su:
-1. Installazione con Python venv
-2. Modalità offline (machine senza internet)
-3. Preparazione pacchetto wheelhouse
-4. Troubleshooting prerequisiti (Python, Tesseract)
+**Funzionalità aggiuntive del setup di produzione:**
+- **Terminazione TLS/HTTPS**: nginx gestisce i certificati SSL.
+- **Security Header**: Aggiunta automatica di header come `Strict-Transport-Security` e `X-Content-Type-Options`.
+- **Rate Limiting a livello IP**: Protezione contro attacchi di forza bruta o DoS.
+- **Certificati Self-Signed**: Script per generare certificati di sviluppo inclusi.
 
-**Quick command:**
-```bash
-make legacy-start
-```
+### Avvio in Produzione
+
+1.  **Configura `.env`**: Assicurati che `DEPLOYMENT_PROFILE` sia impostato su `prod` e che `PROD_FRONTEND_URL` corrisponda al dominio pubblico (es. `https://pseudonymizer.example.com`).
+
+2.  **Genera i certificati**: Per lo sviluppo, puoi usare lo script fornito.
+    ```bash
+    ./scripts/generate-dev-certs.sh
+    ```
+    In produzione, sostituisci `nginx/certs/dev.crt` e `nginx/certs/dev.key` con i tuoi certificati firmati da una CA.
+
+3.  **Avvia con il file di produzione:**
+    ```bash
+    docker compose -f docker-compose.prod.yml up --build -d
+    ```
+
+L'applicazione sarà esposta sulla porta **443 (HTTPS)**.
+
+---
+
+## 📊 Monitoring (Prometheus)
+
+L'applicazione espone un endpoint `/api/metrics` in formato Prometheus per il monitoring.
+
+**Metriche principali:**
+| Metrica | Tipo | Descrizione |
+|---|---|---|
+| `pseudonymizer_scans_total` | Counter | Numero di scansioni completate (con label `preset`) |
+| `pseudonymizer_applies_total` | Counter | Numero di apply completati |
+| `pseudonymizer_errors_total` | Counter | Errori HTTP (con label `status_code`, `endpoint`) |
+| `pseudonymizer_active_batches` | Gauge | Numero di batch attivi in memoria |
+| `pseudonymizer_http_requests_total` | Counter | Richieste HTTP totali (con label `method`, `endpoint`, `status`) |
+
+L'endpoint è esentato da autenticazione e CSRF per facilitare lo scraping. In produzione, l'accesso a `/api/metrics` dovrebbe essere limitato a livello di rete (es. consentito solo dall'IP del server Prometheus).
 
 ---
 
 ## ⚙️ Configurazione
 
-### Environment Variables
+La configurazione avviene tramite **variabili d'ambiente**, definite nel file `.env`.
 
-**Core Backend:**
-```bash
-# Server
-BACKEND_HOST=0.0.0.0                    # Bind address
-BACKEND_PORT=8000                       # HTTP port
-LOG_LEVEL=info                          # Logging: debug|info|warning|error
-
-# Async Processing
-CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@redis:6379/0  # Message broker (con auth)
-REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0          # Result backend (con auth)
-CELERY_RESULT_BACKEND=${REDIS_URL}                         # Task results storage
-
-# Security
-JWT_SECRET_KEY=your-secret-key-change-in-production  # JWT signing key
-JWT_ALGORITHM=HS256                     # JWT algorithm
-ACCESS_TOKEN_EXPIRE_MINUTES=30          # Token validity
-
-# Storage Paths
-UPLOAD_DIR=/app/uploads                 # Temp file uploads
-OUTPUT_DIR=/app/outputs                 # Generated reports (ZIP)
-PSEUDONYMIZER_STATE_DIR=/app/state  # Runtime writable state (montato come volume Docker)
-```
-
-**Celery Worker Configuration:**
-```bash
-# Worker settings
-CELERY_WORKER_CONCURRENCY=4             # Concurrent tasks per worker
-CELERY_WORKER_MAX_TASKS_PER_CHILD=100   # Restart after N tasks (memory)
-CELERY_TASK_TIME_LIMIT=3600             # Hard timeout (seconds)
-CELERY_TASK_SOFT_TIME_LIMIT=3300        # Soft timeout (55 min)
-
-# Queue routing
-CELERY_TASK_DEFAULT_QUEUE=celery        # Default queue name
-```
-
-**Redis Configuration:**
-```bash
-# Redis persistence (optional)
-REDIS_MAXMEMORY=256mb                   # Memory limit
-REDIS_MAXMEMORY_POLICY=allkeys-lru      # Eviction policy
-```
-
-**Development Mode:**
-```bash
-# Disable async for local dev (tasks run synchronously)
-CELERY_TASK_ALWAYS_EAGER=true           # Run tasks inline (no broker needed)
-CELERY_TASK_EAGER_PROPAGATES=true       # Propagate exceptions in eager mode
-```
-
-### Configuration Files
-
-**Backend Policies:**
-- `backend/config/policies/*.yaml` - Scan policies (SOC Logs, Email Archive, etc.)
-- `backend/config/dictionaries/` - Detection dictionaries (hostnames, names, codes)
-
-**Frontend Settings:**
-- `frontend/.env` - API URL configuration (Vite environment)
-- `frontend/vite.config.js` - Dev server proxy setup
-
-Vedi [docs/04_Policies.md](docs/04_Policies.md) per dettagli sulle policy di scan.
+| Variabile | Descrizione | Default |
+|---|---|---|
+| `DEPLOYMENT_PROFILE` | Profilo di deployment (`dev`, `staging`, `prod`). Controlla CORS, auth, log level. | `prod` |
+| `AUTH_ENABLED` | Abilita/disabilita l'autenticazione. | `true` |
+| `AUTH_USERNAME` | Username per l'accesso. | `admin` |
+| `AUTH_PASSWORD` | Password per l'accesso. | **Obbligatoria** |
+| `AUTH_SECRET` | Chiave segreta per la firma dei token di sessione (HMAC). | **Obbligatoria** |
+| `REDIS_PASSWORD` | Password per l'accesso a Redis. | **Obbligatoria** |
+| `WEB_CONCURRENCY` | Numero di worker Uvicorn. Aumentare solo con Redis abilitato. | `1` |
+| `PROD_FRONTEND_URL` | URL pubblico del frontend (per CORS in produzione). | `""` |
 
 ---
 
-## 💡 Utilizzo
+## 🛡️ Sicurezza
 
-1. **Upload**: Trascina i file da processare nell'area di upload
-2. **Configura**: Inserisci una **passphrase robusta** (essenziale per la sicurezza del mapping). Il profilo di scansione `SOC Logs` viene applicato automaticamente.
-3. **Avvia Scansione**: Il backend analizza i file e rileva le entità sensibili.
-4. **Review**: Rivedi i "finding" proposti. Puoi deselezionare quelli che non vuoi pseudonimizzare.
-5. **Applica**: Applica le modifiche. I file originali non vengono mai toccati.
-6. **Risultati**: Nella sezione Results accedi a:
-   - **Testo pseudonimizzato** — Copia negli appunti o scarica come .txt
-   - **Passphrase visibile** — Mostri/nascondi e copia per l'uso successivo
-   - **File mapping.enc** — Scarica il mapping cifrato (essenziale per reversi)
-   - **ZIP finale** (per file) — Contiene documenti pseudonimizzati + report.html + report.json + mapping.enc
+- **Autenticazione**: Basata su session token JWT firmati con `AUTH_SECRET` e veicolati tramite cookie `HttpOnly` e `Secure`.
+- **CSRF Protection**: Token "Double Submit Cookie" validato per tutte le richieste non-idempotenti.
+- **Information Leakage**: Un global exception handler impedisce che dettagli di errori interni vengano esposti nelle risposte API.
+- **Rate Limiting**: Il backend usa un rate limiter Redis-backed per endpoint sensibili. nginx fornisce un ulteriore livello di protezione a livello IP.
+- **CORS**: Configurata in modo restrittivo per il profilo `prod`, consentendo solo `PROD_FRONTEND_URL`.
 
 ---
 
-## 🤖 Integrazione con AI
+## 🔧 Sviluppo
 
-Vuoi inviare i tuoi dati a un modello AI (ChatGPT, Claude, LLaMA) senza esporre informazioni sensibili?
+### Test
 
-### Workflow
-
-1. **Pseudonimizza i tuoi dati** nel Tool (vedi sezione Utilizzo sopra)
-2. **Nella sezione Results:**
-   - Copia o scarica il **testo pseudonimizzato**
-   - Scarica il file **mapping.enc** (cifrato, essenziale)
-   - Copia e salva la **passphrase** (in luogo sicuro)
-3. **Invia il testo pseudonimo all'AI** (non inviare mapping.enc o passphrase)
-4. **Ricevi la risposta dall'AI** (contiene i tuoi pseudonimi)
-5. **Usa il Revert Panel → "Decifra Risposta AI"** per reintegrare i dati originali
-
-### Operazioni Disponibili
-
-**Nel Revert Panel (tab separate):**
-- **Decifra Risposta AI** — Decifra il testo pseudonimizzato ricevuto dall'AI usando mapping.enc + passphrase
-- **Revert Batch ZIP** — Reversi completamente i file di un batch precedente
-
-### Documentazione Completa
-
-→ Vedi [docs/11_AI_Integration_and_Revert_Flows.md](docs/11_AI_Integration_and_Revert_Flows.md) per:
-- Passaggio-per-passaggio del workflow Pseudonimizza → AI → Decifra
-- Come scegliere una passphrase robusta
-- Operazioni Revert e scenari di utilizzo
-- Troubleshooting avanzato
-
----
-
-## 📚 Documentation Guide
-
-### Per Iniziare
-- **[README.md](README.md)** — Questa pagina. Quick start e feature overview.
-- **[docs/01_PRD.md](docs/01_PRD.md)** — Product requirements, caso d'uso e stack tecnico.
-
-### Capire l'Architettura
-- **[docs/02_Technical_Architecture.md](docs/02_Technical_Architecture.md)** — Architettura backend, flussi, dipendenze moduli.
-- **[docs/03_Data_Model.md](docs/03_Data_Model.md)** — Schemi Pydantic e flusso dei dati.
-- **[docs/06_Detector_Strategy.md](docs/06_Detector_Strategy.md)** — Strategia di detection (regex, dict, NER, pattern custom).
-
-### Workflow & Usabilità
-- **[docs/05_UX_Flow.md](docs/05_UX_Flow.md)** — Flussi utente interfaccia e casi d'uso.
-- **[docs/04_Policies.md](docs/04_Policies.md)** — Policy di scansione: profili disponibili (`SOC Logs`, `Policy Docs`, `Email Headers`) e configurazione entità.
-- **[docs/11_AI_Integration_and_Revert_Flows.md](docs/11_AI_Integration_and_Revert_Flows.md)** — Integrazione AI, reversibilità, gestione passphrase.
-
-### Testing & Qualità
-- **[docs/07_Test_Plan_and_Metrics.md](docs/07_Test_Plan_and_Metrics.md)** — Strategia testing, metriche coverage.
-- **[docs/15_CI_Quality_Gates.md](docs/15_CI_Quality_Gates.md)** — Automated quality gates (coverage thresholds, exception patterns).
-- **[docs/14_Parser_Capability_Matrix.md](docs/14_Parser_Capability_Matrix.md)** — Feature matrix per parser, limitazioni note.
-
-### Operational & Deployment
-- **[docs/08_Risks_and_Mitigations.md](docs/08_Risks_and_Mitigations.md)** — Analisi rischi e mitigazioni.
-- **[docs/17_Deployment_Profiles.md](docs/17_Deployment_Profiles.md)** — Profili deployment (DEV, STAGING, PROD), configurazione per ambiente.
-- **[docs/18_Deployment_Guide.md](docs/18_Deployment_Guide.md)** — Guida completa al deployment: Docker Compose, Kubernetes, Systemd.
-- **[docs/16_Rate_Limit_Robustness.md](docs/16_Rate_Limit_Robustness.md)** — Rate limiting, cleanup auto, memory bounds.
-
-### Planning & Roadmap
-- **[docs/09_Roadmap.md](docs/09_Roadmap.md)** — Roadmap prodotto.
-- **[docs/10_Backlog.md](docs/10_Backlog.md)** — Backlog item e priorità.
-- **[docs/RELEASES.md](docs/RELEASES.md)** — Changelog, release notes e versioni.
-
----
-
-## 🔐 Sicurezza e Limitazioni
-
-- **Passphrase**: La sicurezza del mapping dipende dalla robustezza della passphrase. Usane una lunga e complessa (min 12 char, con maiuscole/minuscole/numeri/simboli).
-- **Cookie di sessione**: Il backend imposta il cookie auth con flag `Secure` abilitato di default. Solo in sviluppo locale HTTP puoi disabilitarlo esplicitamente con `AUTH_SESSION_COOKIE_SECURE=false`.
-- **OCR**: La qualità dell'OCR dipende dalla risoluzione e dalla chiarezza dell'immagine. Testo sfocato o scritto a mano potrebbe non essere rilevato.
-- **Formule XLSX**: Le formule vengono ignorate e non pseudonimizzate per evitare di corrompere i fogli di calcolo.
-- **Log di Installazione**: In caso di problemi durante l'installazione delle dipendenze, il log completo viene salvato in `install.log`.
-- **Mapping.enc**: Una volta persa la passphrase, il file mapping.enc non è più recuperabile. Conservarlo in un luogo sicuro.
----
-
-## 🛠️ Sviluppo
-
-### Setup Ambiente Sviluppo
+La suite di test (basata su `pytest`) copre unità, integrazione e funzionalità end-to-end.
 
 ```bash
-# Crea virtual environment
-python3 -m venv .venv  # Python 3.11+ richiesto (3.12 usato in produzione)
-source .venv/bin/activate  # Linux/macOS
-# oppure .venv\Scripts\activate  # Windows
+# Eseguire tutti i test (esclusi quelli marcati come 'integration')
+make test
 
-# Installa dipendenze backend
-pip install -r backend/requirements.txt
+# Eseguire i test e generare un report di coverage
+make coverage
 ```
 
-### Frontend React (v5.0+)
+### Linting
 
-Il frontend è stato modernizzato con **React 18**, **Tailwind CSS** e **dark mode**.
-
-#### Setup Frontend
+Il progetto usa `pyflakes` per il linting del codice Python e `eslint` per il frontend.
 
 ```bash
-cd frontend
-npm install
+# Verificare il backend
+make lint-backend
+
+# Verificare il frontend
+make lint-frontend
 ```
-
-#### Dev (Vite + HMR)
-
-```bash
-# Terminal 1: Backend
-cd backend
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
-
-# Terminal 2: Frontend (Vite dev server)
-cd frontend
-npm run dev
-```
-
-Accedi a: `http://localhost:5173` (con API proxy a backend)
-
-#### Build per Production
-
-```bash
-cd frontend
-npm run build
-```
-
-Crea `frontend/dist/` che FastAPI servira' automaticamente in produzione.
-
-#### Dev Mode (Full Stack)
-
-```bash
-make dev
-```
-
-Avvia sia backend che frontend in parallelo con HMR (Hot Module Reload). Backend su `:8000`, Frontend su `:5173` con hot reload.
-
-Alternativamente, manuale:
-```bash
-./scripts/dev-stack.sh  # se preferisci lo script diretto
-```
-
-#### Caratteristiche Frontend
-
-✨ **UI/UX**
-- Dark mode toggle (persiste in localStorage)
-- Responsive design mobile-first
-- Smooth animations e transitions
-- Toast notifications (success, error, warning, info)
-- Drag-and-drop file upload
-
-📊 **Workflow**
-- Scanner unificato (testo + file)
-- Profilo `SOC Logs` applicato automaticamente
-- Findings table con review interattivo
-- Custom pseudonym personalizzato
-- Download ZIP con report (HTML + JSON)
-
-🔧 **Tech Stack**
-- React 18 con Hooks
-- Tailwind CSS v3 (dark mode)
-- Vite bundler (velocissimo)
-- Axios for API calls
-- Context API per state management
-
-
-
-```bash
-cd backend
-pytest tests/ -v
-pytest tests/test_api_contract.py -v
-```
-
-### Endpoint Operativi
-
-```bash
-curl http://127.0.0.1:8000/api/health
-curl http://127.0.0.1:8000/api/ready
-curl http://127.0.0.1:8000/api/settings/policies
-curl http://127.0.0.1:8000/api/settings/policies/SOC%20Logs
-```
-
-### Testing
-
-**Test Suite Status:**
-- ✅ **348 test passanti, 12 skippati** (Tesseract OCR non disponibile in CI)
-  - `test_functional.py`: 49 test (detectors, parsers, sicurezza, crypto)
-  - `test_auth_complete.py`: suite completa autenticazione e JWT
-  - `test_csrf_middleware.py`: protezione CSRF globale
-  - `test_api_contract.py`: contratti API (202 Accepted pattern)
-  - `test_parser_limitations.py`: edge case parser
-- 📊 **Coverage: 71%** — Moduli critici:
-  - `crypto.py`: 95% (eccellente)
-  - `schemas.py`: 98% (eccellente)
-  - `safety.py`: 92% (eccellente)
-  - `auth.py`: 79% (buono)
-  - `pipeline.py`: 71% (buono)
-
-**Test Infrastructure:**
-- Celery EAGER mode per esecuzione sincrona in test (no broker necessario)
-- Redis mocking con fallback in-memory
-- Test di integrazione multicontainer separati (`pytest -m integration`, richiede Docker)
-
-```bash
-# Esegui tutti i test unitari (no Docker necessario)
-cd backend
-pytest tests/ -m "not integration" -v
-
-# Con coverage report
-pytest tests/ -m "not integration" --cov=app --cov-report=html
-
-# Test di integrazione (richiede Docker Compose attivo)
-pytest tests/ -m integration -v
-
-# Tramite Makefile
-make test       # test unitari
-make test-cov   # con coverage report
-```
-
-### Struttura Progetto
-
-```
-pseudonymization-tool/
-├── backend/                    # FastAPI backend
-│   ├── app/
-│   │   ├── api/               # API routes (/api/*)
-│   │   ├── core/              # Business logic
-│   │   ├── detectors/         # Entity detection (regex, dict, SOC)
-│   │   ├── parsers/           # Document parsers (PDF, DOCX, XLSX, IMG)
-│   │   ├── pseudonymizer/     # Transformation engine
-│   │   ├── mapping/           # Crypto (AES-256 encryption)
-│   │   ├── report/            # Report generation
-│   │   └── models/            # Pydantic schemas
-│   ├── config/                # Configuration files
-│   ├── tests/                 # Unit & integration tests
-│   └── requirements.txt
-├── frontend/                  # React 18 + Tailwind CSS
-│   ├── src/
-│   │   ├── components/        # React components
-│   │   │   ├── Header.jsx
-│   │   │   ├── Scanner.jsx
-│   │   │   ├── FindingsTable.jsx
-│   │   │   └── Results.jsx
-│   │   ├── context/           # Context API (dark mode)
-│   │   ├── hooks/             # Custom hooks (useToast)
-│   │   ├── App.jsx            # Root component
-│   │   ├── main.jsx           # Entry point
-│   │   └── index.css          # Tailwind imports
-│   ├── dist/                  # Build output (production)
-│   ├── index.html
-│   ├── package.json
-│   ├── vite.config.js
-│   └── tailwind.config.js
-├── scripts/
-│   ├── dev-stack.sh           # Development mode helper
-│   ├── verify_features.py     # Feature verification script
-│   └── legacy/                # Venv-based startup scripts (air-gapped)
-│       ├── start.sh           # Linux/macOS startup
-│       ├── start.bat          # Windows startup
-│       ├── prepare_offline.sh # Offline preparation
-│       ├── prepare_offline.bat
-│       └── README.md          # Legacy installation guide
-├── docs/                      # Documentation & Roadmap
-├── Makefile                   # Universal command interface
-├── docker-compose.yml         # Docker orchestration
-└── README.md
-```
-
----
-
-## 🤝 Contributing
-
-Le contribuzioni sono benvenute! Per contribuire:
-
-1. Fork del progetto
-2. Crea un branch per la tua feature (`git checkout -b feature/AmazingFeature`)
-3. Commit delle modifiche (`git commit -m 'Add some AmazingFeature'`)
-4. Push al branch (`git push origin feature/AmazingFeature`)
-5. Apri una Pull Request
-
-Leggi la [documentazione tecnica](docs/02_Technical_Architecture.md) per comprendere l'architettura.
-
----
-
-## 📄 Licenza
-
-Questo progetto è distribuito sotto licenza MIT. Vedi il file `LICENSE` per maggiori dettagli.
-
----
-
-## 🙏 Riconoscimenti
-
-- **Tesseract OCR** per il riconoscimento ottico dei caratteri
-- **FastAPI** per il framework web
-- **python-docx, openpyxl, pypdf** per il parsing dei documenti
-- Community open source per i contributi e il feedback
