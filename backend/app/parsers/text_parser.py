@@ -29,8 +29,8 @@ class TextParser(BaseParser):
                 try:
                     content = file_path.read_text(encoding="latin-1")
                     result.warnings.append(
-                        f"Il file non era in UTF-8; letto con codifica latin-1. "
-                        f"Potrebbero esserci caratteri non corretti."
+                        "Il file non era in UTF-8; letto con codifica latin-1. "
+                        "Potrebbero esserci caratteri non corretti."
                     )
                 except Exception as fallback_err:
                     # Catena esplicita: fallback_err causato da ue (UnicodeDecodeError originale)
