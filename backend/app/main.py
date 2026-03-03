@@ -19,14 +19,13 @@ from app.api.settings_routes import router as settings_router
 from app.core.auth import (
     SESSION_COOKIE_NAME,
     auth_uses_default_password,
-    auth_uses_ephemeral_secret,
     extract_token_from_request,
     validate_csrf_token,
     validate_session,
 )
 from app.core.batch_manager import start_cleanup_scheduler
 from app.core.config import SERVER_HOST, SERVER_PORT, TEMP_BASE_DIR, validate_writable_paths
-from app.core.profiles import Profile, get_config, print_profile_info, validate_production_secrets
+from app.core.profiles import get_config, print_profile_info, validate_production_secrets
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
