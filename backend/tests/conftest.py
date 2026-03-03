@@ -56,12 +56,14 @@ def temp_output_dir(tmp_path):
 @pytest.fixture(scope="session", autouse=True)
 def setup_test_credentials():
     """
-    ✅ FIX #I-006: Set test credentials for authentication tests.
-    AUTH_PASSWORD must be explicitly configured (no hardcoded default).
+    Set test credentials for authentication tests.
+    Uses a dedicated test password (not a real credential — never used in production).
+    AUTH_SECRET is a fixed test value to ensure deterministic passphrase encryption in tests.
     """
     import os
 
-    os.environ["AUTH_PASSWORD"] = "admin123!"
+    # NOTE: This is a test-only credential. Production credentials are set via .env
+    os.environ["AUTH_PASSWORD"] = "T3st-0nly-N0t-Pr0d!#2026"
     os.environ["AUTH_SECRET"] = "test-secret-key-32-chars-min-1234567890ab"
     yield
 
