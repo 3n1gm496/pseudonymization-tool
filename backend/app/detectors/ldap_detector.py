@@ -23,6 +23,8 @@ import threading
 import time
 from typing import Dict, List, Optional, Set, Tuple
 
+from app.core.circuit_breaker import CircuitBreaker
+from app.core.exceptions import LDAPDetectionError
 from app.detectors.base import BaseDetector, RawFinding
 from app.detectors.ldap_client import LdapClient, LdapDiagnostics, LdapEntry
 from app.models.schemas import EntityType, LdapConfig
@@ -173,11 +175,16 @@ class LdapCache:
 
 
 # ─────────────────────────────────────────────────────────────
-# Singleton
+# Singleton + circuit breaker
 # ─────────────────────────────────────────────────────────────
 
 _ldap_cache = LdapCache()
 _ldap_config: Optional[LdapConfig] = None
+
+# Open after 3 consecutive detect() failures; half-open after 60 s.
+# Protects the scan pipeline from unexpected errors in cache access
+# or token-matching code without requiring a full LDAP connectivity check.
+_LDAP_CIRCUIT_BREAKER = CircuitBreaker(failure_threshold=3, recovery_timeout=60.0, name="ldap_detector")
 
 
 def configure_ldap(config: LdapConfig) -> None:
@@ -238,57 +245,68 @@ class LdapPersonDetector(BaseDetector):
         if chunk.is_formula or not self._is_enabled():
             return []
 
-        accounts_set, fullname_set, fullname_reverse_map, account_to_canonical = _ldap_cache.get_lookup_sets()
-        if not accounts_set and not fullname_set:
+        # Skip if circuit is open (repeated failures); allow trial on HALF-OPEN
+        if _LDAP_CIRCUIT_BREAKER.is_open:
             return []
 
-        findings: List[RawFinding] = []
-        text = chunk.text
-        tokens = _tokenize_with_spans(text)
+        try:
+            accounts_set, fullname_set, fullname_reverse_map, account_to_canonical = _ldap_cache.get_lookup_sets()
+            if not accounts_set and not fullname_set:
+                _LDAP_CIRCUIT_BREAKER.record_success()
+                return []
 
-        # ── Account matching (token singolo) ──────────────────
-        for tok_lower, start, end in tokens:
-            if tok_lower in accounts_set:
-                original = text[start:end]
-                canonical = account_to_canonical.get(tok_lower, tok_lower)
-                findings.append(
-                    RawFinding(
-                        entity_type=EntityType.ACCOUNT,
-                        original_value=original,
-                        canonical_value=canonical,
-                        source_chunk=chunk,
-                        confidence_score=0.92,
-                        detector_name=self.name,
-                        start_pos=start,
-                        end_pos=end,
+            findings: List[RawFinding] = []
+            text = chunk.text
+            tokens = _tokenize_with_spans(text)
+
+            # ── Account matching (token singolo) ──────────────────
+            for tok_lower, start, end in tokens:
+                if tok_lower in accounts_set:
+                    original = text[start:end]
+                    canonical = account_to_canonical.get(tok_lower, tok_lower)
+                    findings.append(
+                        RawFinding(
+                            entity_type=EntityType.ACCOUNT,
+                            original_value=original,
+                            canonical_value=canonical,
+                            source_chunk=chunk,
+                            confidence_score=0.92,
+                            detector_name=self.name,
+                            start_pos=start,
+                            end_pos=end,
+                        )
                     )
-                )
 
-        # ── Fullname matching (bigramma) ──────────────────────
-        for i in range(len(tokens) - 1):
-            tok1_lower, start1, _ = tokens[i]
-            tok2_lower, _, end2 = tokens[i + 1]
-            bigram = f"{tok1_lower} {tok2_lower}"
+            # ── Fullname matching (bigramma) ──────────────────────
+            for i in range(len(tokens) - 1):
+                tok1_lower, start1, _ = tokens[i]
+                tok2_lower, _, end2 = tokens[i + 1]
+                bigram = f"{tok1_lower} {tok2_lower}"
 
-            canonical_fn = None
-            if bigram in fullname_set:
-                canonical_fn = bigram
-            elif bigram in fullname_reverse_map:
-                canonical_fn = fullname_reverse_map[bigram]
+                canonical_fn = None
+                if bigram in fullname_set:
+                    canonical_fn = bigram
+                elif bigram in fullname_reverse_map:
+                    canonical_fn = fullname_reverse_map[bigram]
 
-            if canonical_fn:
-                original = text[start1:end2]
-                findings.append(
-                    RawFinding(
-                        entity_type=EntityType.LDAP_PERSON,
-                        original_value=original,
-                        canonical_value=canonical_fn,
-                        source_chunk=chunk,
-                        confidence_score=0.95,
-                        detector_name=self.name,
-                        start_pos=start1,
-                        end_pos=end2,
+                if canonical_fn:
+                    original = text[start1:end2]
+                    findings.append(
+                        RawFinding(
+                            entity_type=EntityType.LDAP_PERSON,
+                            original_value=original,
+                            canonical_value=canonical_fn,
+                            source_chunk=chunk,
+                            confidence_score=0.95,
+                            detector_name=self.name,
+                            start_pos=start1,
+                            end_pos=end2,
+                        )
                     )
-                )
 
-        return findings
+            _LDAP_CIRCUIT_BREAKER.record_success()
+            return findings
+
+        except Exception as exc:
+            _LDAP_CIRCUIT_BREAKER.record_failure()
+            raise LDAPDetectionError(f"LDAP detection failed: {exc}") from exc
