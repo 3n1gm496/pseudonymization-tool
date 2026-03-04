@@ -12,9 +12,8 @@ Routes:
 
 from typing import Optional
 
-from fastapi import APIRouter, Query
-
 from app.core.audit import get_audit_events, get_audit_stats
+from fastapi import APIRouter, Query
 
 router = APIRouter(prefix="/api/audit", tags=["audit"])
 
