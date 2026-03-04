@@ -1,20 +1,34 @@
 import { useState, type JSX } from 'react'
 import AuditLog from './AuditLog'
 import LDAPSettings from './LDAPSettings'
-import type { ToastType } from '../types'
+import UserManagement from './UserManagement'
+import type { ToastType, UserRole } from '../types'
 
 interface SettingsPanelProps {
   isOpen: boolean
   onClose: () => void
   showToast: (message: string, type?: ToastType) => void
+  currentUsername?: string
+  currentRole?: UserRole
 }
 
-type TabId = 'ldap' | 'audit' | 'info'
+type TabId = 'ldap' | 'audit' | 'users' | 'info'
 
-const SettingsPanel = ({ isOpen, onClose, showToast }: SettingsPanelProps): JSX.Element | null => {
+const SettingsPanel = ({
+  isOpen,
+  onClose,
+  showToast,
+  currentUsername = 'admin',
+  currentRole = 'admin',
+}: SettingsPanelProps): JSX.Element | null => {
+  const isAdmin = currentRole === 'admin'
   const [activeTab, setActiveTab] = useState<TabId>('ldap')
 
   if (!isOpen) return null
+
+  const availableTabs: TabId[] = isAdmin
+    ? ['ldap', 'audit', 'users', 'info']
+    : ['ldap', 'audit', 'info']
 
   return (
     <div className="fixed inset-0 bg-black/50 dark:bg-black/70 z-50 flex items-center justify-center p-4">
@@ -32,10 +46,11 @@ const SettingsPanel = ({ isOpen, onClose, showToast }: SettingsPanelProps): JSX.
         </div>
         {/* Tabs */}
         <div className="flex border-b border-slate-200 dark:border-slate-700">
-          {(['ldap', 'audit', 'info'] as TabId[]).map((tab) => {
+          {availableTabs.map((tab) => {
             const labels: Record<TabId, string> = {
               ldap: '🔗 LDAP',
               audit: '📋 Audit Log',
+              users: '👥 Utenti',
               info: 'ℹ️ Info',
             }
             return (
@@ -57,6 +72,9 @@ const SettingsPanel = ({ isOpen, onClose, showToast }: SettingsPanelProps): JSX.
         <div className="p-6">
           {activeTab === 'ldap' && <LDAPSettings showToast={showToast} />}
           {activeTab === 'audit' && <AuditLog />}
+          {activeTab === 'users' && isAdmin && (
+            <UserManagement currentUsername={currentUsername} />
+          )}
           {activeTab === 'info' && (
             <div className="space-y-4">
               <div>
@@ -99,7 +117,7 @@ const SettingsPanel = ({ isOpen, onClose, showToast }: SettingsPanelProps): JSX.
                   <b>Version:</b> 5.0.0
                   <br />
                   <b>Security:</b> AES-256-GCM, PBKDF2, Session auth, Rate limiting, Audit log
-                  SQLite
+                  SQLite, Multi-user RBAC
                 </p>
               </div>
             </div>

@@ -106,44 +106,40 @@ class TestCredentialVerification:
     def test_verify_credentials_valid(self):
         """Test verification of correct credentials when auth enabled."""
         result = verify_credentials(ADMIN_USERNAME, "test_password")
-        assert result is True
-
+        # verify_credentials ora ritorna il ruolo ('admin') o None
+        assert result == "admin"
     @patch("app.core.auth.AUTH_ENABLED", True)
     @patch("app.core.auth._password_env", "test_password")
     def test_verify_credentials_wrong_password(self):
         """Test verification with wrong password."""
         result = verify_credentials(ADMIN_USERNAME, "wrong_password")
-        assert result is False
-
+        assert result is None
     @patch("app.core.auth.AUTH_ENABLED", True)
     def test_verify_credentials_wrong_username(self):
         """Test verification with wrong username."""
         result = verify_credentials("wrong_admin", "test_password")
-        assert result is False
-
+        assert result is None
     @patch("app.core.auth.AUTH_ENABLED", True)
     def test_verify_credentials_empty_username(self):
         """Test verification with empty username."""
         result = verify_credentials("", "test_password")
-        assert result is False
-
+        assert result is None
     @patch("app.core.auth.AUTH_ENABLED", True)
     def test_verify_credentials_empty_password(self):
         """Test verification with empty password."""
         result = verify_credentials(ADMIN_USERNAME, "")
-        assert result is False
-
+        assert result is None
     @patch("app.core.auth.AUTH_ENABLED", True)
     def test_verify_credentials_none_values(self):
         """Test verification with None values."""
         result = verify_credentials(None, None)
-        assert result is False
-
+        assert result is None
     @patch("app.core.auth.AUTH_ENABLED", False)
     def test_verify_credentials_auth_disabled(self):
         """Test that any credentials are accepted when auth disabled."""
         result = verify_credentials("any_user", "any_pass")
-        assert result is True
+        # Auth disabilitata: ritorna 'admin' come ruolo di default
+        assert result == "admin"
 
 
 class TestSessionManagement:
@@ -195,17 +191,19 @@ class TestSessionManagement:
     def test_validate_session_valid_token(self, clear_sessions, enable_auth):
         """Test validation of valid session token."""
         token, _, _ = create_session("testuser")
-        username = validate_session(token)
+        result = validate_session(token)
+        # validate_session ora ritorna (username, role)
+        assert result is not None
+        username, role = result
         assert username == "testuser"
-
+        assert role in ("admin", "operator")  # ruolo valido
     def test_validate_session_invalid_signature(self, clear_sessions, enable_auth):
         """Test validation fails with corrupted signature."""
         token, _, _ = create_session("testuser")
         payload_b64, sig = token.split(".")
         corrupted_token = payload_b64 + ".corrupted_signature"
-
-        username = validate_session(corrupted_token)
-        assert username is None
+        result = validate_session(corrupted_token)
+        assert result is None
 
     def test_validate_session_expired(self, clear_sessions, enable_auth):
         """Test validation fails when session is expired."""
@@ -225,9 +223,8 @@ class TestSessionManagement:
         sig = _sign(old_payload)
         expired_token = f"{_b64(old_payload)}.{sig}"
 
-        username = validate_session(expired_token)
-        assert username is None
-
+        result = validate_session(expired_token)
+        assert result is None
         # Expired session should be cleaned up
         with _lock:
             assert sid not in _sessions
@@ -245,30 +242,29 @@ class TestSessionManagement:
         modified_sig = _sign(modified_payload)
         modified_token = f"{_b64(modified_payload)}.{modified_sig}"
 
-        username = validate_session(modified_token)
-        assert username is None
-
+        result = validate_session(modified_token)
+        assert result is None
     def test_validate_session_malformed_token(self, clear_sessions, enable_auth):
         """Test validation with malformed token (no dot)."""
         result = validate_session("malformed_token_no_dot")
         assert result is None
-
     def test_validate_session_none_token(self, enable_auth):
         """Test validation with None token."""
         result = validate_session(None)
         assert result is None
-
     def test_validate_session_empty_token(self, enable_auth):
         """Test validation with empty token."""
         result = validate_session("")
         assert result is None
-
     @patch("app.core.auth.AUTH_ENABLED", False)
     def test_validate_session_auth_disabled(self, clear_sessions):
         """Test that any session is valid when auth disabled."""
-        # Should return admin username without creating actual session
+        # Should return (admin_username, 'admin') without creating actual session
         result = validate_session("any_token")
-        assert result == ADMIN_USERNAME
+        assert result is not None
+        username, role = result
+        assert username == ADMIN_USERNAME
+        assert role == "admin"
 
     def test_destroy_session_removes_session(self, clear_sessions):
         """Test that destroy_session removes session from storage."""

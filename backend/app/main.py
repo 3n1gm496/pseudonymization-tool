@@ -17,6 +17,7 @@ from app.api.console_routes import router as console_router
 from app.api.revert_routes import router as revert_router
 from app.api.routes import router as api_router
 from app.api.settings_routes import router as settings_router
+from app.api.users_routes import router as users_router
 from app.core.auth import (
     SESSION_COOKIE_NAME,
     auth_uses_default_password,
@@ -81,6 +82,14 @@ async def lifespan(app: FastAPI):
         logger.warning("Errore nel caricamento dei dizionari: %s", e)
     start_cleanup_scheduler()
     logger.info("Cleanup scheduler avviato.")
+    # Inizializza il database utenti e bootstrap admin
+    try:
+        from app.core.user_manager import initialize as init_users
+
+        init_users()
+        logger.info("User manager inizializzato.")
+    except Exception as e:
+        logger.warning("Errore nell'inizializzazione del user manager: %s", e)
     # Validazione secrets obbligatori (PROD/STAGING)
     secret_errors = validate_production_secrets()
     if secret_errors:
@@ -212,10 +221,12 @@ async def auth_middleware(request: Request, call_next):
 
     if path.startswith("/api") and path not in public_paths and not path.startswith("/api/docs"):
         token = extract_token_from_request(request)
-        username = validate_session(token)
-        if not username:
+        session_result = validate_session(token)
+        if not session_result:
             return JSONResponse(status_code=401, content={"detail": "Authentication required"})
+        username, role = session_result
         request.state.auth_user = username
+        request.state.auth_role = role
 
     return await call_next(request)
 
@@ -339,6 +350,7 @@ app.include_router(revert_router)
 app.include_router(batches_router)
 app.include_router(settings_router)
 app.include_router(audit_router)
+app.include_router(users_router)
 app.include_router(api_router)
 
 # Serve i file statici del frontend React (production build o fallback)

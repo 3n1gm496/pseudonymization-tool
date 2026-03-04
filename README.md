@@ -12,6 +12,7 @@ Web application locale moderna per la pseudonimizzazione sicura di dati sensibil
 - **🔒 100% Offline** — Nessuna chiamata di rete esterna, tutti i dati rimangono sulla macchina locale
 - **📄 Multi-formato** — Supporto per TXT, CSV, MD, DOCX, XLSX, PDF (testuali), JPG, PNG
 - **🔐 Sicurezza Avanzata** — Mapping cifrato con passphrase AES-256-GCM, zero logging di dati sensibili
+- **👥 Multi-utente** — Gestione utenti locali con ruoli `admin` e `operator`, database SQLite, password bcrypt
 - **⚡ Architettura Asincrona** — Elaborazione con Celery + Redis, scalabile e resiliente
 - **⚙️ Modalità Flessibili** — `light` (solo entità di rete) e `strict` (tutte le entità PII)
 - **🧭 Input Unificato** — testo inline e upload documenti disponibili nello stesso flusso
@@ -220,8 +221,8 @@ La configurazione avviene tramite **variabili d'ambiente**, definite nel file `.
 |---|---|---|
 | `DEPLOYMENT_PROFILE` | Profilo di deployment (`dev`, `staging`, `prod`). Controlla CORS, auth, log level. | `prod` |
 | `AUTH_ENABLED` | Abilita/disabilita l'autenticazione. | `true` |
-| `AUTH_USERNAME` | Username per l'accesso. | `admin` |
-| `AUTH_PASSWORD` | Password per l'accesso. | **Obbligatoria** |
+| `AUTH_USERNAME` | Username legacy per il fallback admin (usato se `users.db` non esiste). | `admin` |
+| `AUTH_PASSWORD` | Password legacy per il fallback admin. | **Obbligatoria** |
 | `AUTH_SECRET` | Chiave segreta per la firma dei token di sessione (HMAC). | **Obbligatoria** |
 | `REDIS_PASSWORD` | Password per l'accesso a Redis. | **Obbligatoria** |
 | `WEB_CONCURRENCY` | Numero di worker Uvicorn. Aumentare solo con Redis abilitato. | `1` |
@@ -313,6 +314,7 @@ Vuoi inviare i tuoi dati a un modello AI (ChatGPT, Claude, LLaMA) senza esporre 
 
 - **Passphrase**: La sicurezza del mapping dipende dalla robustezza della passphrase. Usane una lunga e complessa (min 12 char, con maiuscole/minuscole/numeri/simboli).
 - **Cookie di sessione**: Il backend imposta il cookie auth con flag `Secure` abilitato di default. Solo in sviluppo locale HTTP puoi disabilitarlo esplicitamente con `AUTH_SESSION_COOKIE_SECURE=false`.
+- **Gestione Utenti**: Al primo avvio viene creato automaticamente un utente `admin` con password generata casualmente (visibile nei log di avvio). Cambiare la password immediatamente tramite **Impostazioni → Utenti**. Gli utenti `operator` hanno accesso in sola lettura alle impostazioni e non possono gestire altri utenti. Il database utenti è salvato in `STATE_DIR/users.db` (volume persistente Docker).
 - **OCR**: La qualità dell'OCR dipende dalla risoluzione e dalla chiarezza dell'immagine. Testo sfocato o scritto a mano potrebbe non essere rilevato.
 - **Formule XLSX**: Le formule vengono ignorate e non pseudonimizzate per evitare di corrompere i fogli di calcolo.
 - **Log di Installazione**: In caso di problemi durante l'installazione delle dipendenze, il log completo viene salvato in `install.log`.

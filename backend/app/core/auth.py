@@ -7,10 +7,9 @@ import os
 import secrets
 import threading
 import time
-from typing import TYPE_CHECKING, Optional, Tuple
+from typing import Optional, Tuple
 
-if TYPE_CHECKING:
-    from fastapi import Request
+from fastapi import Request
 
 logger = logging.getLogger(__name__)
 
@@ -292,12 +291,40 @@ def _b64_decode(data: str) -> str:
     return base64.urlsafe_b64decode((data + padding).encode("utf-8")).decode("utf-8")
 
 
-def verify_credentials(username: str, password: str) -> bool:
+def verify_credentials(username: str, password: str) -> Optional[str]:
+    """
+    Verifica le credenziali dell'utente.
+
+    Ritorna il ruolo ('admin' o 'operator') se le credenziali sono valide,
+    None altrimenti.
+
+    Priorità:
+    1. user_manager (SQLite) — utenti locali con bcrypt
+    2. Fallback legacy: AUTH_USERNAME + AUTH_PASSWORD env vars (retrocompatibilità)
+    """
     if not AUTH_ENABLED:
-        return True
-    if _password_env is None:
-        return False  # Auth enabled but no password configured → deny access
-    return hmac.compare_digest(username or "", ADMIN_USERNAME) and hmac.compare_digest(password or "", _password_env)
+        return "admin"
+
+    username_clean = (username or "").strip().lower()
+    if not username_clean or not password:
+        return None
+
+    # Priorità 1: user_manager (SQLite con bcrypt)
+    try:
+        from app.core.user_manager import verify_credentials as um_verify
+
+        role = um_verify(username_clean, password)
+        if role is not None:
+            return role
+    except Exception as exc:
+        logger.warning("auth: user_manager non disponibile, fallback legacy: %s", exc)
+
+    # Priorità 2: fallback legacy (AUTH_USERNAME + AUTH_PASSWORD env vars)
+    if _password_env is not None:
+        if hmac.compare_digest(username_clean, ADMIN_USERNAME.lower()) and hmac.compare_digest(password, _password_env):
+            return "admin"
+
+    return None
 
 
 def create_session(username: str) -> Tuple[str, int, str]:
@@ -311,9 +338,17 @@ def create_session(username: str) -> Tuple[str, int, str]:
     return token, expires_at, csrf_token
 
 
-def validate_session(token: Optional[str]) -> Optional[str]:
+def validate_session(token: Optional[str]) -> Optional[Tuple[str, str]]:
+    """
+    Valida un token di sessione.
+
+    Ritorna (username, role) se la sessione è valida, None altrimenti.
+    Il ruolo viene recuperato dal user_manager (SQLite) per riflettere
+    eventuali modifiche ai ruoli avvenute dopo il login.
+    """
     if not AUTH_ENABLED:
-        return ADMIN_USERNAME
+        # Quando l'auth è disabilitata, ritorna admin di default
+        return (ADMIN_USERNAME, "admin")
     if not token or "." not in token:
         return None
     try:
@@ -331,7 +366,18 @@ def validate_session(token: Optional[str]) -> Optional[str]:
         stored_exp = _get_session_expires(sid)
         if stored_exp is None or stored_exp != expires_at:
             return None
-        return username
+        # Recupera il ruolo aggiornato dal user_manager
+        try:
+            from app.core.user_manager import get_user_role
+
+            role = get_user_role(username)
+            if role is None:
+                # Utente non trovato nel DB (es. eliminato mentre loggato)
+                # Fallback: ruolo admin per retrocompatibilità con utenti legacy
+                role = "admin" if username == ADMIN_USERNAME else "operator"
+        except Exception:
+            role = "admin" if username == ADMIN_USERNAME else "operator"
+        return (username, role)
     except Exception:
         return None
 
@@ -437,7 +483,7 @@ def cleanup_csrf_token(session_id: str) -> None:
 
 
 def validate_csrf_dependency(
-    request: "Request",
+    request: Request,
 ) -> None:
     """
     FastAPI dependency for CSRF validation on mutating endpoints.

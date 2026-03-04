@@ -15,7 +15,8 @@ def test_verify_credentials_when_auth_disabled():
     old = auth.AUTH_ENABLED
     try:
         auth.AUTH_ENABLED = False
-        assert auth.verify_credentials("any", "any") is True
+        # Auth disabilitata: ritorna 'admin' come ruolo di default
+        assert auth.verify_credentials("any", "any") == "admin"
     finally:
         auth.AUTH_ENABLED = old
 
@@ -29,9 +30,10 @@ def test_verify_credentials_when_auth_enabled():
         auth.ADMIN_USERNAME = "admin"
         auth._password_env = "secret"
 
-        assert auth.verify_credentials("admin", "secret") is True
-        assert auth.verify_credentials("admin", "wrong") is False
-        assert auth.verify_credentials("wrong", "secret") is False
+        # verify_credentials ritorna il ruolo ('admin') o None
+        assert auth.verify_credentials("admin", "secret") == "admin"
+        assert auth.verify_credentials("admin", "wrong") is None
+        assert auth.verify_credentials("wrong", "secret") is None
     finally:
         auth.AUTH_ENABLED = old_enabled
         auth.ADMIN_USERNAME = old_user
@@ -44,7 +46,10 @@ def test_create_validate_and_destroy_session():
     auth._sessions.clear()
     try:
         token, _expires, _ = auth.create_session("admin")
-        assert auth.validate_session(token) == "admin"
+        result = auth.validate_session(token)
+        # validate_session ritorna (username, role)
+        assert result is not None
+        assert result[0] == "admin"
 
         auth.destroy_session(token)
         assert auth.validate_session(token) is None

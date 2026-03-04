@@ -1,13 +1,15 @@
 import type { JSX } from 'react'
 import { useTheme } from '../context/ThemeContext'
+import type { UserRole } from '../types'
 
 interface HeaderProps {
   user: string | null
+  userRole?: UserRole | null
   onLogout: (() => void) | null
   onSettingsClick?: (() => void) | null
 }
 
-const Header = ({ user, onLogout, onSettingsClick }: HeaderProps): JSX.Element => {
+const Header = ({ user, userRole, onLogout, onSettingsClick }: HeaderProps): JSX.Element => {
   const { isDark, toggleTheme } = useTheme()
 
   return (
@@ -19,7 +21,25 @@ const Header = ({ user, onLogout, onSettingsClick }: HeaderProps): JSX.Element =
         </div>
         <div className="flex items-center gap-3">
           {user && (
-            <span className="text-sm text-blue-100">{user}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-blue-100">{user}</span>
+              {userRole && (
+                <span
+                  className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                    userRole === 'admin'
+                      ? 'bg-purple-500/30 text-purple-100 border border-purple-400/40'
+                      : 'bg-blue-500/30 text-blue-100 border border-blue-400/40'
+                  }`}
+                  title={
+                    userRole === 'admin'
+                      ? 'Amministratore: accesso completo'
+                      : 'Operatore: accesso limitato'
+                  }
+                >
+                  {userRole === 'admin' ? '★ Admin' : 'Operator'}
+                </span>
+              )}
+            </div>
           )}
           {onSettingsClick && (
             <button
