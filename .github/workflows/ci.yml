@@ -38,10 +38,9 @@ jobs:
 
     - name: Lint with flake8
       run: |
-        # Stop the build if there are Python syntax errors or undefined names
-        flake8 backend/app --count --select=E9,F63,F7,F82 --show-source --statistics
-        # Exit-zero treats all errors as warnings. Max line length 120
-        flake8 backend/app --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
+        cd backend
+        flake8 app --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 app --count --max-complexity=10 --max-line-length=120 --extend-ignore=C901,E203 --statistics
 
     - name: Check code formatting with black
       run: |
@@ -89,10 +88,11 @@ jobs:
         pytest tests/ -m "not integration" --cov=app.core.auth             --cov-report=term --cov-fail-under=75 -q
         pytest tests/ -m "not integration" --cov=app.core.pipeline         --cov-report=term --cov-fail-under=70 -q
         pytest tests/ -m "not integration" --cov=app.pseudonymizer.engine  --cov-report=term --cov-fail-under=90 -q
-        pytest tests/ -m "not integration" --cov=app.pseudonymizer.transformer --cov-report=term --cov-fail-under=50 -q
-        pytest tests/ -m "not integration" --cov=app.core.exceptions       --cov-report=term --cov-fail-under=55 -q
+        pytest tests/ -m "not integration" --cov=app.pseudonymizer.transformer --cov-report=term --cov-fail-under=75 -q
+        pytest tests/ -m "not integration" --cov=app.core.exceptions       --cov-report=term --cov-fail-under=100 -q
         pytest tests/ -m "not integration" --cov=app.core.console_pipeline --cov-report=term --cov-fail-under=100 -q
         pytest tests/ -m "not integration" --cov=app.core.audit            --cov-report=term --cov-fail-under=100 -q
+        pytest tests/ -m "not integration" --cov=app.core.ldap_auth        --cov-report=term --cov-fail-under=90 -q
       continue-on-error: false
 
     - name: Check for untyped broad exceptions in critical paths
