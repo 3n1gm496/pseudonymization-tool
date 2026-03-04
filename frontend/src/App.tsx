@@ -206,10 +206,10 @@ const App = (): JSX.Element => {
     throw new Error('Timeout attesa completamento apply batch')
   }
 
-  const handleLogin = async (username: string, password: string): Promise<void> => {
+  const handleLogin = async (username: string, password: string, authMethod: 'local' | 'ldap' = 'local'): Promise<void> => {
     setIsLoading(true)
     try {
-      const response = await axios.post<LoginResponse>('/api/auth/login', { username, password })
+      const response = await axios.post<LoginResponse>('/api/auth/login', { username, password, auth_method: authMethod })
       const csrfTokenFromResponse = response.headers['x-csrf-token'] as string | undefined
       if (csrfTokenFromResponse) {
         setCsrfToken(csrfTokenFromResponse)

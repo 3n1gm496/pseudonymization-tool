@@ -110,6 +110,22 @@ async def metrics_endpoint():
     return FastAPIResponse(content=content, media_type=content_type)
 
 
+@router.get("/auth/ldap-status")
+async def auth_ldap_status():
+    """
+    Ritorna se l'autenticazione LDAP è abilitata e configurata.
+    Usato dal frontend per mostrare/nascondere l'opzione 'Login Aziendale (LDAP)'.
+    Non richiede autenticazione.
+    """
+    try:
+        from app.core.ldap_auth import is_ldap_auth_available
+
+        available = is_ldap_auth_available()
+    except Exception:
+        available = False
+    return {"ldap_auth_available": available}
+
+
 @router.post("/auth/login")
 async def auth_login(req: dict, response: Response, request: Request):
     # Protezione brute-force: max 10 tentativi/minuto per IP.
@@ -118,7 +134,11 @@ async def auth_login(req: dict, response: Response, request: Request):
     enforce_rate_limit(request, "auth_login", limit=10)
     username = (req.get("username") or "").strip()
     password = req.get("password") or ""
-    role = verify_credentials(username, password)
+    # auth_method: 'local' (default) o 'ldap' (scelta esplicita dell'utente in UI)
+    auth_method = (req.get("auth_method") or "local").strip().lower()
+    if auth_method not in ("local", "ldap"):
+        auth_method = "local"
+    role = verify_credentials(username, password, auth_method=auth_method)
     if role is None:
         audit_event(request, "auth_login_failed", username=username)
         raise HTTPException(status_code=401, detail="Credenziali non valide")
