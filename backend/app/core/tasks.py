@@ -82,10 +82,10 @@ celery_app.conf.update(
 #: configuration problems that will not resolve themselves on a subsequent
 #: attempt.  Retrying them would waste resources and potentially corrupt state.
 NON_RETRYABLE_EXCEPTIONS = (
-    CriticalError,   # BatchStateError, CryptoError, PipelineError, BatchError, ConfigError …
-    ValueError,      # Raised explicitly for "Batch not found" guard clauses
-    TypeError,       # Programming errors
-    KeyError,        # Missing required keys — programming error
+    CriticalError,  # BatchStateError, CryptoError, PipelineError, BatchError, ConfigError …
+    ValueError,  # Raised explicitly for "Batch not found" guard clauses
+    TypeError,  # Programming errors
+    KeyError,  # Missing required keys — programming error
     AttributeError,  # Programming errors
 )
 
