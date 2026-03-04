@@ -13,6 +13,7 @@ Questo modulo è interno al package core: usare batch_manager.py come API pubbli
 import json
 import logging
 import os
+import re as _re
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -52,8 +53,16 @@ def batch_start_time_path(batch_id: str) -> Path:
     return get_batch_dir(batch_id) / "started_at.txt"
 
 
+_UUID_RE = _re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    _re.IGNORECASE,
+)
+
+
 def get_batch_dir(batch_id: str) -> Path:
     """Restituisce la directory temporanea del batch."""
+    if not _UUID_RE.match(batch_id):
+        raise ValueError(f"Invalid batch_id format: {batch_id!r}")
     return TEMP_BASE_DIR / batch_id
 
 

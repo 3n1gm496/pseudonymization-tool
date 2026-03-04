@@ -136,8 +136,12 @@ def transform_xlsx_file(
             ws = wb[sheet_name]
             for row in ws.iter_rows():
                 for cell in row:
-                    # Non toccare le formule
+                    # Applica sostituzioni anche alle formule (es. stringhe hardcoded in CONCATENATE)
                     if isinstance(cell.value, str) and cell.value.startswith("="):
+                        new_value = _apply_substitutions_to_text(cell.value, sub_map)
+                        if new_value != cell.value:
+                            cell.value = new_value
+                            modified_cells += 1
                         continue
                     if isinstance(cell.value, str) and cell.value.strip():
                         new_value = _apply_substitutions_to_text(cell.value, sub_map)
@@ -146,7 +150,7 @@ def transform_xlsx_file(
                             modified_cells += 1
 
         wb.save(str(output_path))
-        warnings.append(f"Modificate {modified_cells} celle testuali. Le formule sono state preservate.")
+        warnings.append(f"Modificate {modified_cells} celle (testo e formule con PII).")
 
     except Exception as e:
         warnings.append(f"Errore durante la trasformazione del file XLSX: {e}")
@@ -294,7 +298,7 @@ def transform_pdf_file(
         rebuild_warnings = _rebuild_pdf_from_pages(pages_pseudo, output_path)
         warnings.extend(rebuild_warnings)
 
-        if not rebuild_warnings or "fallito" in rebuild_warnings[0]:
+        if rebuild_warnings and "fallito" in rebuild_warnings[0]:
             shutil.copy2(str(original_path), str(output_path))
 
     except Exception as e:
