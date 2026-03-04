@@ -1,5 +1,5 @@
 /**
- * Tests for utils/text-export.js
+ * Tests for utils/text-export.ts
  * Covers: copyToClipboard, downloadTextFile, downloadBinaryFile
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -15,20 +15,20 @@ describe('copyToClipboard', () => {
   })
 
   it('returns true when clipboard write succeeds', async () => {
-    navigator.clipboard.writeText.mockResolvedValue(undefined)
+    vi.mocked(navigator.clipboard.writeText).mockResolvedValue(undefined)
     const result = await copyToClipboard('hello world')
     expect(result).toBe(true)
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('hello world')
   })
 
   it('returns false when clipboard write fails', async () => {
-    navigator.clipboard.writeText.mockRejectedValue(new Error('Permission denied'))
+    vi.mocked(navigator.clipboard.writeText).mockRejectedValue(new Error('Permission denied'))
     const result = await copyToClipboard('hello world')
     expect(result).toBe(false)
   })
 
   it('copies empty string', async () => {
-    navigator.clipboard.writeText.mockResolvedValue(undefined)
+    vi.mocked(navigator.clipboard.writeText).mockResolvedValue(undefined)
     const result = await copyToClipboard('')
     expect(result).toBe(true)
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('')
@@ -36,14 +36,14 @@ describe('copyToClipboard', () => {
 })
 
 describe('downloadTextFile', () => {
-  let mockAnchor
-  let revokeObjectURLSpy
+  let mockAnchor: { href: string; download: string; click: ReturnType<typeof vi.fn> }
+  let revokeObjectURLSpy: ReturnType<typeof vi.spyOn>
 
   beforeEach(() => {
     mockAnchor = { href: '', download: '', click: vi.fn() }
     vi.spyOn(window.URL, 'createObjectURL').mockReturnValue('blob:mock-url')
     revokeObjectURLSpy = vi.spyOn(window.URL, 'revokeObjectURL').mockImplementation(() => {})
-    vi.spyOn(document, 'createElement').mockReturnValue(mockAnchor)
+    vi.spyOn(document, 'createElement').mockReturnValue(mockAnchor as unknown as HTMLElement)
   })
 
   afterEach(() => {
@@ -75,15 +75,17 @@ describe('downloadTextFile', () => {
 })
 
 describe('downloadBinaryFile', () => {
-  let mockAnchor
-  let createObjectURLSpy
-  let revokeObjectURLSpy
+  let mockAnchor: { href: string; download: string; click: ReturnType<typeof vi.fn> }
+  let createObjectURLSpy: ReturnType<typeof vi.spyOn>
+  let revokeObjectURLSpy: ReturnType<typeof vi.spyOn>
 
   beforeEach(() => {
     mockAnchor = { href: '', download: '', click: vi.fn() }
-    createObjectURLSpy = vi.spyOn(window.URL, 'createObjectURL').mockReturnValue('blob:binary-url')
+    createObjectURLSpy = vi
+      .spyOn(window.URL, 'createObjectURL')
+      .mockReturnValue('blob:binary-url')
     revokeObjectURLSpy = vi.spyOn(window.URL, 'revokeObjectURL').mockImplementation(() => {})
-    vi.spyOn(document, 'createElement').mockReturnValue(mockAnchor)
+    vi.spyOn(document, 'createElement').mockReturnValue(mockAnchor as unknown as HTMLElement)
   })
 
   afterEach(() => {

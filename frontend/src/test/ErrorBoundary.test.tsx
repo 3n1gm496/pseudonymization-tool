@@ -1,13 +1,17 @@
 /**
- * Tests for components/ErrorBoundary.jsx
+ * Tests for components/ErrorBoundary.tsx
  * Covers: normal rendering, error state, reset, reload
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import ErrorBoundary from '../components/ErrorBoundary'
 
+interface ThrowingComponentProps {
+  shouldThrow: boolean
+}
+
 // Component that throws an error when told to
-const ThrowingComponent = ({ shouldThrow }) => {
+const ThrowingComponent = ({ shouldThrow }: ThrowingComponentProps): React.JSX.Element => {
   if (shouldThrow) {
     throw new Error('Test error message')
   }
@@ -24,7 +28,7 @@ describe('ErrorBoundary', () => {
     render(
       <ErrorBoundary>
         <div>Child content</div>
-      </ErrorBoundary>
+      </ErrorBoundary>,
     )
     expect(screen.getByText('Child content')).toBeInTheDocument()
   })
@@ -33,7 +37,7 @@ describe('ErrorBoundary', () => {
     render(
       <ErrorBoundary>
         <ThrowingComponent shouldThrow={true} />
-      </ErrorBoundary>
+      </ErrorBoundary>,
     )
     expect(screen.getByText('Si è verificato un errore imprevisto')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /riprova/i })).toBeInTheDocument()
@@ -44,19 +48,16 @@ describe('ErrorBoundary', () => {
     render(
       <ErrorBoundary>
         <ThrowingComponent shouldThrow={true} />
-      </ErrorBoundary>
+      </ErrorBoundary>,
     )
     expect(screen.getByText('Test error message')).toBeInTheDocument()
   })
 
   it('Riprova button is present and enabled in error state', () => {
-    // Verify that the reset button is rendered and clickable when an error occurs.
-    // React class component state reset after re-throw cannot be tested with
-    // rerender alone; this test confirms the button is accessible.
     render(
       <ErrorBoundary>
         <ThrowingComponent shouldThrow={true} />
-      </ErrorBoundary>
+      </ErrorBoundary>,
     )
     expect(screen.getByText('Si è verificato un errore imprevisto')).toBeInTheDocument()
     const riprovaBtn = screen.getByRole('button', { name: /riprova/i })
@@ -73,13 +74,11 @@ describe('ErrorBoundary', () => {
       writable: true,
       configurable: true,
     })
-
     render(
       <ErrorBoundary>
         <ThrowingComponent shouldThrow={true} />
-      </ErrorBoundary>
+      </ErrorBoundary>,
     )
-
     fireEvent.click(screen.getByRole('button', { name: /ricarica pagina/i }))
     expect(reloadMock).toHaveBeenCalledOnce()
   })
@@ -88,7 +87,7 @@ describe('ErrorBoundary', () => {
     render(
       <ErrorBoundary>
         <ThrowingComponent shouldThrow={false} />
-      </ErrorBoundary>
+      </ErrorBoundary>,
     )
     expect(screen.queryByText('Si è verificato un errore imprevisto')).not.toBeInTheDocument()
     expect(screen.getByText('Normal content')).toBeInTheDocument()

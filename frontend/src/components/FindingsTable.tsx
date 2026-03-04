@@ -1,91 +1,92 @@
-import { useState, useEffect } from 'react'
+import { memo, useState, useEffect, type JSX, type ChangeEvent } from 'react'
 import axios from '../utils/axios'
 import { useToast } from '../hooks/useToast'
+import type { Batch, ApplyRequest, SafetyLabel, Finding } from '../types'
 
-/**
- * @typedef {import('../types').Batch} Batch
- * @typedef {import('../types').Finding} Finding
- * @typedef {import('../types').ApplyRequest} ApplyRequest
- */
+interface DecisionState {
+  action: 'accept' | 'reject' | 'modify'
+  custom_pseudonym: string
+}
 
-/**
- * FindingsTable Component - Interactive table for reviewing and modifying detected findings
- * 
- * @param {Object} props
- * @param {Batch} props.batch - Batch data containing findings array
- * @param {function(ApplyRequest): Promise<void>} props.onApply - Callback when user applies decisions
- * @param {boolean} props.isLoading - Loading state for apply operation
- * @returns {React.ReactElement}
- */
-const FindingsTable = ({ batch, onApply, isLoading }) => {
-  const [decisions, setDecisions] = useState({})
+type DecisionsMap = Record<string, DecisionState>
+
+interface FindingsTableProps {
+  batch: Batch
+  onApply: (req: ApplyRequest) => Promise<void>
+  isLoading: boolean
+}
+
+const FindingsTable = ({ batch, onApply, isLoading }: FindingsTableProps): JSX.Element => {
+  const [decisions, setDecisions] = useState<DecisionsMap>({})
   const { showToast } = useToast()
 
-  // Initialize decisions when batch.findings changes
-  // This ensures that when user uploads a new file, the findings state is synced
+  // Initialize decisions when batch.findings changes.
+  // This ensures that when user uploads a new file, the findings state is synced.
   useEffect(() => {
     setDecisions(
       Object.fromEntries(
-        batch.findings.map((f) => [
+        batch.findings.map((f: Finding) => [
           f.finding_id,
           {
-            action: 'accept',
+            action: 'accept' as const,
             custom_pseudonym: f.proposed_pseudonym,
           },
-        ])
-      )
+        ]),
+      ),
     )
   }, [batch.findings])
 
-  const handleActionChange = (findingId, action) => {
+  const handleActionChange = (findingId: string, action: string): void => {
     setDecisions((prev) => ({
       ...prev,
-      [findingId]: { ...prev[findingId], action },
+      [findingId]: { ...prev[findingId], action: action as DecisionState['action'] },
     }))
   }
 
-  const handleCustomPseudonymChange = (findingId, value) => {
+  const handleCustomPseudonymChange = (findingId: string, value: string): void => {
     setDecisions((prev) => ({
       ...prev,
       [findingId]: { ...prev[findingId], custom_pseudonym: value },
     }))
   }
 
-  const handleApply = async () => {
+  const handleApply = async (): Promise<void> => {
     try {
       const reviewItems = Object.entries(decisions).map(([findingId, { action, custom_pseudonym }]) => ({
         finding_id: findingId,
         action,
         modified_pseudonym: custom_pseudonym,
       }))
-
       await axios.post(`/api/batches/${batch.batch_id}/review`, {
         decisions: reviewItems,
       })
-
-      const fileId = batch.file_id || batch.files?.[0]?.id || batch.files?.[0]?.file_id
+      const fileId =
+        (batch as Batch & { file_id?: string }).file_id ??
+        batch.files?.[0]?.file_id ??
+        ''
       await onApply({
         batchId: batch.batch_id,
         fileId,
         isTextInput: !!batch.is_text_input,
-        sourceText: batch.source_text || '',
+        sourceText: batch.source_text ?? '',
       })
       showToast('Pseudonimizzazione applicata', 'success')
-    } catch (error) {
-      showToast(error.response?.data?.detail || 'Errore durante l\'applicazione', 'error')
+    } catch (error: unknown) {
+      const axiosError = error as { response?: { data?: { detail?: string } }; message?: string }
+      showToast(axiosError.response?.data?.detail ?? axiosError.message ?? "Errore durante l'applicazione", 'error')
     }
   }
 
-  const getSafetyColor = (label) => {
-    const colors = {
+  const getSafetyColor = (label: SafetyLabel | string): string => {
+    const colors: Record<string, string> = {
       SAFE_TO_UPLOAD: 'text-green-600 dark:text-green-400',
       CAUTION: 'text-yellow-600 dark:text-yellow-400',
       UNSAFE: 'text-red-600 dark:text-red-400',
     }
-    return colors[label] || 'text-slate-600'
+    return colors[label] ?? 'text-slate-600'
   }
 
-  const getConfidenceColor = (score) => {
+  const getConfidenceColor = (score: number): string => {
     if (score >= 0.9) return 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
     if (score >= 0.7) return 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200'
     return 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200'
@@ -107,7 +108,6 @@ const FindingsTable = ({ batch, onApply, isLoading }) => {
             </div>
           </div>
         </div>
-
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <caption className="sr-only">Tabella findings con decisioni di review</caption>
@@ -124,8 +124,7 @@ const FindingsTable = ({ batch, onApply, isLoading }) => {
             {batch.findings.length === 0 ? (
               <tbody>
                 <tr>
-                  <td colSpan="6" className="px-4 py-8 text-center">
-                    {/* Improved empty state UX with positive messaging */}
+                  <td colSpan={6} className="px-4 py-8 text-center">
                     <div className="flex flex-col items-center justify-center py-4">
                       <div className="text-4xl mb-3">✅</div>
                       <p className="text-lg font-semibold text-green-600 dark:text-green-400 mb-2">
@@ -140,7 +139,7 @@ const FindingsTable = ({ batch, onApply, isLoading }) => {
               </tbody>
             ) : (
               <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                {batch.findings.map((finding) => (
+                {batch.findings.map((finding: Finding) => (
                   <tr key={finding.finding_id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
                     <td className="px-4 py-3 font-medium text-blue-600 dark:text-blue-400">
                       {finding.entity_type}
@@ -155,8 +154,8 @@ const FindingsTable = ({ batch, onApply, isLoading }) => {
                       <input
                         type="text"
                         name={`pseudonym-${finding.finding_id}`}
-                        value={decisions[finding.finding_id]?.custom_pseudonym || ''}
-                        onChange={(e) =>
+                        value={decisions[finding.finding_id]?.custom_pseudonym ?? ''}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) =>
                           handleCustomPseudonymChange(finding.finding_id, e.target.value)
                         }
                         className="w-full px-2 py-1 text-xs border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -172,7 +171,7 @@ const FindingsTable = ({ batch, onApply, isLoading }) => {
                     <td className="px-4 py-3">
                       <span
                         className={`px-2 py-1 rounded text-xs font-medium ${getConfidenceColor(
-                          finding.confidence_score
+                          finding.confidence_score,
                         )}`}
                         title={`Confidence score: ${(finding.confidence_score * 100).toFixed(0)}%`}
                         aria-label={`Punteggio di confidenza: ${(finding.confidence_score * 100).toFixed(0)}%`}
@@ -185,8 +184,8 @@ const FindingsTable = ({ batch, onApply, isLoading }) => {
                     <td className="px-4 py-3">
                       <select
                         name={`action-${finding.finding_id}`}
-                        value={decisions[finding.finding_id]?.action || 'accept'}
-                        onChange={(e) =>
+                        value={decisions[finding.finding_id]?.action ?? 'accept'}
+                        onChange={(e: ChangeEvent<HTMLSelectElement>) =>
                           handleActionChange(finding.finding_id, e.target.value)
                         }
                         className="px-2 py-1 text-xs border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -208,7 +207,6 @@ const FindingsTable = ({ batch, onApply, isLoading }) => {
             )}
           </table>
         </div>
-
         <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-700 flex justify-end">
           <button
             onClick={handleApply}
@@ -223,5 +221,4 @@ const FindingsTable = ({ batch, onApply, isLoading }) => {
   )
 }
 
-import { memo } from 'react'
 export default memo(FindingsTable)

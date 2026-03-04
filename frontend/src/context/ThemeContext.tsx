@@ -1,9 +1,18 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
 
-const ThemeContext = createContext()
+interface ThemeContextValue {
+  isDark: boolean
+  toggleTheme: () => void
+}
 
-export const ThemeProvider = ({ children }) => {
-  const [isDark, setIsDark] = useState(() => {
+const ThemeContext = createContext<ThemeContextValue | undefined>(undefined)
+
+interface ThemeProviderProps {
+  children: ReactNode
+}
+
+export const ThemeProvider = ({ children }: ThemeProviderProps) => {
+  const [isDark, setIsDark] = useState<boolean>(() => {
     // Check system preference
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('theme')
@@ -23,7 +32,7 @@ export const ThemeProvider = ({ children }) => {
     localStorage.setItem('theme', isDark ? 'dark' : 'light')
   }, [isDark])
 
-  const toggleTheme = () => setIsDark(!isDark)
+  const toggleTheme = () => setIsDark((prev) => !prev)
 
   return (
     <ThemeContext.Provider value={{ isDark, toggleTheme }}>
@@ -32,7 +41,7 @@ export const ThemeProvider = ({ children }) => {
   )
 }
 
-export const useTheme = () => {
+export const useTheme = (): ThemeContextValue => {
   const context = useContext(ThemeContext)
   if (!context) {
     throw new Error('useTheme must be used within ThemeProvider')

@@ -1,53 +1,51 @@
-import React from 'react'
+import { memo, useState, type JSX } from 'react'
 import axios from '../utils/axios'
 import { useToast } from '../hooks/useToast'
 import { copyToClipboard } from '../utils/text-export'
+import type { Batch } from '../types'
 
-/**
- * @typedef {import('../types').Batch} Batch
- */
+/** Batch extended with optional passphrase field returned by the apply endpoint. */
+type BatchWithPassphrase = Batch & { passphrase?: string }
 
-/**
- * Results Component - Displays pseudonymization results and download options
- * 
- * @param {Object} props
- * @param {Batch} props.batch - Batch data with findings and status
- * @param {string} props.pseudonymizedText - Pseudonymized text output (for text scans)
- * @param {function(): void} props.onNewScan - Callback to start a new scan
- * @returns {React.ReactElement}
- */
-const Results = ({ batch, pseudonymizedText, onNewScan }) => {
+interface ResultsProps {
+  batch: BatchWithPassphrase
+  pseudonymizedText: string | null
+  onNewScan: () => void
+}
+
+const Results = ({ batch, pseudonymizedText, onNewScan }: ResultsProps): JSX.Element => {
   const { showToast } = useToast()
-  const [copied, setCopied] = React.useState(false)
-  const [showPassphrase, setShowPassphrase] = React.useState(false)
-  const [downloadingMapping, setDownloadingMapping] = React.useState(false)
+  const [copied, setCopied] = useState(false)
+  const [showPassphrase, setShowPassphrase] = useState(false)
+  const [downloadingMapping, setDownloadingMapping] = useState(false)
+
   const isTextFlow = !!batch?.is_text_input
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(pseudonymizedText || '')
+  const handleCopy = (): void => {
+    void navigator.clipboard.writeText(pseudonymizedText ?? '')
     setCopied(true)
     showToast('Testo copiato negli appunti', 'success')
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const handleDownload = async () => {
+  const handleDownload = async (): Promise<void> => {
     try {
       const response = await axios.get(`/api/batches/${batch.batch_id}/download`, {
         responseType: 'blob',
       })
-      const url = window.URL.createObjectURL(response.data)
+      const url = window.URL.createObjectURL(response.data as Blob)
       const a = document.createElement('a')
       a.href = url
       a.download = `pseudonymized-batch-${batch.batch_id.slice(0, 8)}.zip`
       a.click()
       showToast('Download completato', 'success')
-    } catch (error) {
+    } catch {
       showToast('Errore durante il download', 'error')
     }
   }
 
-  const handleDownloadText = () => {
-    const textContent = pseudonymizedText || ''
+  const handleDownloadText = (): void => {
+    const textContent = pseudonymizedText ?? ''
     const blob = new Blob([textContent], { type: 'text/plain;charset=utf-8' })
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -58,7 +56,7 @@ const Results = ({ batch, pseudonymizedText, onNewScan }) => {
     showToast('Download TXT completato', 'success')
   }
 
-  const handleDownloadMapping = async () => {
+  const handleDownloadMapping = async (): Promise<void> => {
     if (!batch?.batch_id) {
       showToast('Batch non trovato', 'error')
       return
@@ -68,7 +66,7 @@ const Results = ({ batch, pseudonymizedText, onNewScan }) => {
       const response = await axios.get(`/api/console/${batch.batch_id}/mapping.enc`, {
         responseType: 'blob',
       })
-      const blob = new Blob([response.data], { type: 'application/octet-stream' })
+      const blob = new Blob([response.data as BlobPart], { type: 'application/octet-stream' })
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -76,16 +74,20 @@ const Results = ({ batch, pseudonymizedText, onNewScan }) => {
       a.click()
       window.URL.revokeObjectURL(url)
       showToast('Mapping.enc scaricato', 'success')
-    } catch (error) {
-      showToast(error.response?.data?.detail || 'Errore download mapping', 'error')
+    } catch (error: unknown) {
+      const axiosError = error as { response?: { data?: { detail?: string } } }
+      showToast(axiosError.response?.data?.detail ?? 'Errore download mapping', 'error')
     } finally {
       setDownloadingMapping(false)
     }
   }
 
-  const handleCopyPassphrase = async () => {
-    const success = await copyToClipboard(batch?.passphrase || '')
-    showToast(success ? 'Passphrase copiata negli appunti' : 'Errore copia', success ? 'success' : 'error')
+  const handleCopyPassphrase = async (): Promise<void> => {
+    const success = await copyToClipboard(batch?.passphrase ?? '')
+    showToast(
+      success ? 'Passphrase copiata negli appunti' : 'Errore copia',
+      success ? 'success' : 'error',
+    )
   }
 
   const canShowText = typeof pseudonymizedText === 'string' && pseudonymizedText.length > 0
@@ -96,37 +98,38 @@ const Results = ({ batch, pseudonymizedText, onNewScan }) => {
         <div className="p-6 border-b border-slate-200 dark:border-slate-700">
           <h2 className="text-lg font-semibold mb-2">Risultato Pseudonimizzazione</h2>
           <p className="text-sm text-slate-600 dark:text-slate-400">
-            Batch ID: <code className="font-mono text-xs bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded">{batch.batch_id.slice(0, 8)}...{batch.batch_id.slice(-8)}</code>
+            Batch ID:{' '}
+            <code className="font-mono text-xs bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded">
+              {batch.batch_id.slice(0, 8)}...{batch.batch_id.slice(-8)}
+            </code>
           </p>
         </div>
-
         <div className="p-6 space-y-4">
           {canShowText && (
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-semibold mb-2">Testo Pseudonimizzato</label>
-              <div className="relative">
-                <textarea
-                  readOnly
-                  value={pseudonymizedText}
-                  rows={8}
-                  className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-900 dark:text-white font-mono text-sm resize-none"
-                />
-                <button
-                  onClick={handleCopy}
-                  className="absolute top-2 right-2 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm transition-colors"
-                >
-                  {copied ? '✓ Copiato' : 'Copia'}
-                </button>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold mb-2">Testo Pseudonimizzato</label>
+                <div className="relative">
+                  <textarea
+                    readOnly
+                    value={pseudonymizedText ?? ''}
+                    rows={8}
+                    className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-900 dark:text-white font-mono text-sm resize-none"
+                  />
+                  <button
+                    onClick={handleCopy}
+                    className="absolute top-2 right-2 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm transition-colors"
+                  >
+                    {copied ? '✓ Copiato' : 'Copia'}
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
           )}
-
           <div className="flex gap-3">
             {!isTextFlow ? (
               <button
-                onClick={handleDownload}
+                onClick={() => void handleDownload()}
                 className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
               >
                 📥 Scarica ZIP
@@ -149,7 +152,6 @@ const Results = ({ batch, pseudonymizedText, onNewScan }) => {
           </div>
         </div>
       </div>
-
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
           <div className="text-sm font-semibold text-blue-900 dark:text-blue-200">Entità Pseudonimizzate</div>
@@ -166,32 +168,35 @@ const Results = ({ batch, pseudonymizedText, onNewScan }) => {
           </div>
         </div>
       </div>
-
-      {/* PASSPHRASE & MAPPING - Integrato nel flusso principale */}
+      {/* PASSPHRASE & MAPPING */}
       <div className="bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 rounded-lg shadow p-6 border border-orange-200 dark:border-orange-700 space-y-4">
         <h3 className="text-lg font-semibold text-orange-900 dark:text-orange-100">🔐 Passphrase e Mapping Cifrato</h3>
-        
+
         {/* PASSPHRASE */}
         <div className="space-y-2">
-          <label className="block text-sm font-semibold text-orange-800 dark:text-orange-200">Passphrase per Decifrazione</label>
-          <p className="text-xs text-orange-600 dark:text-orange-300 mb-2">Salva questa passphrase. La userai per decifrare risposte AI o reversi batch.</p>
+          <label className="block text-sm font-semibold text-orange-800 dark:text-orange-200">
+            Passphrase per Decifrazione
+          </label>
+          <p className="text-xs text-orange-600 dark:text-orange-300 mb-2">
+            Salva questa passphrase. La userai per decifrare risposte AI o reversi batch.
+          </p>
           <div className="flex gap-2">
             <input
               type={showPassphrase ? 'text' : 'password'}
-              value={batch?.passphrase || ''}
+              value={batch?.passphrase ?? ''}
               readOnly
               className="flex-1 px-3 py-2 border border-orange-300 dark:border-orange-600 rounded-lg bg-white dark:bg-slate-900 font-mono text-sm"
               placeholder="Passphrase non disponibile"
             />
             <button
-              onClick={() => setShowPassphrase(!showPassphrase)}
+              onClick={() => setShowPassphrase((prev) => !prev)}
               className="px-3 py-2 bg-orange-300 dark:bg-orange-700 rounded-lg hover:bg-orange-400 dark:hover:bg-orange-600 transition-colors"
               title={showPassphrase ? 'Nascondi' : 'Mostra'}
             >
               {showPassphrase ? '👁️' : '👁️‍🗨️'}
             </button>
             <button
-              onClick={handleCopyPassphrase}
+              onClick={() => void handleCopyPassphrase()}
               disabled={!batch?.passphrase}
               className="px-3 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
@@ -199,27 +204,31 @@ const Results = ({ batch, pseudonymizedText, onNewScan }) => {
             </button>
           </div>
         </div>
-
         {/* MAPPING.ENC */}
         <div className="space-y-2 pt-2 border-t border-orange-200 dark:border-orange-700">
-          <label className="block text-sm font-semibold text-orange-800 dark:text-orange-200">File di Mapping Cifrato</label>
-          <p className="text-xs text-orange-600 dark:text-orange-300 mb-3">Scarica questo file. Serve per decifrare risposte AI o reversi batch. <b>Non inviarlo a terzi.</b></p>
+          <label className="block text-sm font-semibold text-orange-800 dark:text-orange-200">
+            File di Mapping Cifrato
+          </label>
+          <p className="text-xs text-orange-600 dark:text-orange-300 mb-3">
+            Scarica questo file. Serve per decifrare risposte AI o reversi batch.{' '}
+            <b>Non inviarlo a terzi.</b>
+          </p>
           <button
-            onClick={handleDownloadMapping}
+            onClick={() => void handleDownloadMapping()}
             disabled={downloadingMapping || !batch?.batch_id}
             className="w-full px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
           >
             {downloadingMapping ? 'Scaricamento...' : '📥 Scarica mapping.enc'}
           </button>
         </div>
-
         {/* FOOTER NOTE */}
         <div className="text-xs text-orange-700 dark:text-orange-300 pt-2 border-t border-orange-200 dark:border-orange-700">
-          <b>⚠️ Ricorda:</b> Conserva securely questo file e questa passphrase. Serviranno per decifrare risposte AI o reversi batch.
+          <b>⚠️ Ricorda:</b> Conserva securely questo file e questa passphrase. Serviranno per
+          decifrare risposte AI o reversi batch.
         </div>
       </div>
     </div>
   )
 }
 
-export default React.memo(Results)
+export default memo(Results)

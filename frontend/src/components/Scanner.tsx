@@ -1,147 +1,133 @@
-import { memo, useState, useRef } from 'react'
+import { memo, useState, useRef, type JSX, type FormEvent, type DragEvent, type KeyboardEvent } from 'react'
 import axios from '../utils/axios'
 import { useToast } from '../hooks/useToast'
+import type { Batch } from '../types'
 
-/**
- * @typedef {import('../types').Batch} Batch
- */
+interface ScannerProps {
+  onScan: (batch: Batch) => void
+  isLoading: boolean
+}
 
-/**
- * Scanner Component - Handles text and file scanning input
- * 
- * @param {Object} props
- * @param {function(Batch): void} props.onScan - Callback when scan completes with batch data
- * @param {boolean} props.isLoading - Loading state from parent (shared across operations)
- * @returns {React.ReactElement}
- */
-const Scanner = ({ onScan, isLoading }) => {
+const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024 // 100 MB
+
+const Scanner = ({ onScan, isLoading }: ScannerProps): JSX.Element => {
   const [text, setText] = useState('')
-  const [uploadedFile, setUploadedFile] = useState(null)
-  const [scanLoading, setScanLoading] = useState(false)  // Local loading state for scans
-  const fileInputRef = useRef(null)
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null)
+  const [scanLoading, setScanLoading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const { showToast } = useToast()
 
-  const pollBatchUntilReview = async (batchId, timeoutMs = 20 * 60 * 1000, intervalMs = 1500) => {
+  const pollBatchUntilReview = async (
+    batchId: string,
+    timeoutMs = 20 * 60 * 1000,
+    intervalMs = 1500,
+  ): Promise<Batch> => {
     const startedAt = Date.now()
-
     while (Date.now() - startedAt < timeoutMs) {
-      const statusResponse = await axios.get(`/api/batches/${batchId}/status`)
+      const statusResponse = await axios.get<Batch>(`/api/batches/${batchId}/status`)
       const currentBatch = statusResponse.data
-      const status = String(currentBatch?.status || '').toLowerCase()
-
+      const status = String(currentBatch?.status ?? '').toLowerCase()
       if (status === 'review' || status === 'done' || status === 'done_with_errors') {
-        const fullBatchResponse = await axios.get(`/api/batches/${batchId}`)
+        const fullBatchResponse = await axios.get<Batch>(`/api/batches/${batchId}`)
         return fullBatchResponse.data
       }
-
       if (status === 'error') {
-        throw new Error(currentBatch?.error_message || 'Errore durante la scansione del batch')
+        const batchWithError = currentBatch as Batch & { error_message?: string }
+        throw new Error(batchWithError.error_message ?? 'Errore durante la scansione del batch')
       }
-
-      await new Promise((resolve) => setTimeout(resolve, intervalMs))
+      await new Promise<void>((resolve) => setTimeout(resolve, intervalMs))
     }
-
     throw new Error('Timeout attesa completamento scansione batch')
   }
 
-  const handleTextScan = async (e) => {
+  const handleTextScan = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault()
     if (!text.trim()) {
       showToast('Inserisci del testo da scansionare', 'warning')
       return
     }
-
-    // Add timeout handling for text scan
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 30000)  // 30 second timeout
-
-    setScanLoading(true)  // Set local loading state
+    const timeoutId = setTimeout(() => controller.abort(), 30000)
+    setScanLoading(true)
     try {
-      const response = await axios.post(
+      const response = await axios.post<Batch>(
         '/api/console/scan',
         { text },
-        { signal: controller.signal }
+        { signal: controller.signal },
       )
       onScan({ ...response.data, is_text_input: true, source_text: text })
       showToast('Scan completato', 'success')
-    } catch (error) {
-      if (error.code === 'ECONNABORTED') {
+    } catch (error: unknown) {
+      const axiosError = error as {
+        code?: string
+        response?: { data?: { detail?: string } }
+        message?: string
+      }
+      if (axiosError.code === 'ECONNABORTED') {
         showToast('Timeout dello scan dopo 30 secondi', 'error')
       } else {
-        showToast(error.response?.data?.detail || 'Errore durante lo scan', 'error')
+        showToast(axiosError.response?.data?.detail ?? 'Errore durante lo scan', 'error')
       }
     } finally {
       clearTimeout(timeoutId)
-      setScanLoading(false)  // Always reset loading state on error or success
+      setScanLoading(false)
     }
   }
 
-  const handleFileScan = async (e) => {
-    e.preventDefault()
+  const handleFileScan = async (): Promise<void> => {
     if (!uploadedFile) {
       showToast('Seleziona un file', 'warning')
       return
     }
-
-    // Check file size before uploading
-    const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024  // 100MB
     if (uploadedFile.size > MAX_FILE_SIZE_BYTES) {
       const fileSizeMB = (uploadedFile.size / 1024 / 1024).toFixed(1)
       const maxSizeMB = (MAX_FILE_SIZE_BYTES / 1024 / 1024).toFixed(0)
-      showToast(
-        `File troppo grande: ${fileSizeMB}MB (massimo ${maxSizeMB}MB)`,
-        'error'
-      )
+      showToast(`File troppo grande: ${fileSizeMB}MB (massimo ${maxSizeMB}MB)`, 'error')
       return
     }
-
-    setScanLoading(true)  // Set local loading state
+    setScanLoading(true)
     try {
       const formData = new FormData()
       formData.append('files', uploadedFile)
-
-      // Add upload progress tracking
-      const response = await axios.post('/api/batches', formData, {
+      const response = await axios.post<Batch & { passphrase?: string }>('/api/batches', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
-        onUploadProgress: (progressEvent) => {
-          // Could add progress bar here if needed
-          // Progress tracking disponibile ma UI non ancora implementata
-          const _percentComplete = Math.round(
-            (progressEvent.loaded * 100) / progressEvent.total
-          )
-        },
       })
-      let batchPayload = { ...response.data }
-
+      let batchPayload: Batch = { ...response.data }
       if (response.status === 202 && response.data?.batch_id) {
         showToast('Scansione accodata, attendo completamento...', 'info')
         const completedBatch = await pollBatchUntilReview(response.data.batch_id)
         batchPayload = {
           ...completedBatch,
-          passphrase: response.data.passphrase,
-        }
+          ...(response.data.passphrase ? { passphrase: response.data.passphrase } : {}),
+        } as Batch
       }
-
       onScan({ ...batchPayload, is_text_input: false })
       showToast('File scansionato', 'success')
       setUploadedFile(null)
-    } catch (error) {
-      showToast(error.response?.data?.detail || error.message || 'Errore durante lo scan', 'error')
+    } catch (error: unknown) {
+      const axiosError = error as {
+        response?: { data?: { detail?: string } }
+        message?: string
+      }
+      showToast(
+        axiosError.response?.data?.detail ?? axiosError.message ?? 'Errore durante lo scan',
+        'error',
+      )
     } finally {
-      setScanLoading(false)  // Always reset loading state on error or success
+      setScanLoading(false)
     }
   }
 
-  const handleDragOver = (e) => {
+  const handleDragOver = (e: DragEvent<HTMLDivElement>): void => {
     e.preventDefault()
     e.currentTarget.classList.add('border-blue-500', 'bg-blue-50', 'dark:bg-blue-900/20')
   }
 
-  const handleDragLeave = (e) => {
+  const handleDragLeave = (e: DragEvent<HTMLDivElement>): void => {
     e.currentTarget.classList.remove('border-blue-500', 'bg-blue-50', 'dark:bg-blue-900/20')
   }
 
-  const handleDrop = (e) => {
+  const handleDrop = (e: DragEvent<HTMLDivElement>): void => {
     e.preventDefault()
     e.currentTarget.classList.remove('border-blue-500', 'bg-blue-50', 'dark:bg-blue-900/20')
     const files = e.dataTransfer.files
@@ -150,7 +136,7 @@ const Scanner = ({ onScan, isLoading }) => {
     }
   }
 
-  const handleDropzoneKeyDown = (e) => {
+  const handleDropzoneKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault()
       fileInputRef.current?.click()
@@ -162,8 +148,10 @@ const Scanner = ({ onScan, isLoading }) => {
       {/* Text Input */}
       <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-6">
         <h2 className="text-lg font-semibold mb-4">Testo Diretto</h2>
-        <form onSubmit={handleTextScan} className="space-y-4">
-          <label htmlFor="scan-text" className="sr-only">Testo da pseudonimizzare</label>
+        <form onSubmit={(e) => void handleTextScan(e)} className="space-y-4">
+          <label htmlFor="scan-text" className="sr-only">
+            Testo da pseudonimizzare
+          </label>
           <textarea
             id="scan-text"
             value={text}
@@ -189,7 +177,6 @@ const Scanner = ({ onScan, isLoading }) => {
           </div>
         </form>
       </div>
-
       {/* File Upload */}
       <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-6">
         <h2 className="text-lg font-semibold mb-4">Carica File</h2>
@@ -208,7 +195,7 @@ const Scanner = ({ onScan, isLoading }) => {
             ref={fileInputRef}
             type="file"
             accept=".pdf,.docx,.xlsx,.jpg,.png,.txt,.csv,.md"
-            onChange={(e) => setUploadedFile(e.target.files?.[0] || null)}
+            onChange={(e) => setUploadedFile(e.target.files?.[0] ?? null)}
             className="hidden"
             disabled={isLoading || scanLoading}
             aria-label="Seleziona file"
@@ -225,14 +212,12 @@ const Scanner = ({ onScan, isLoading }) => {
         </div>
         {uploadedFile && (
           <div className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-300 dark:border-green-700 rounded-lg">
-            <p className="text-sm text-green-800 dark:text-green-200">
-              ✓ {uploadedFile.name}
-            </p>
+            <p className="text-sm text-green-800 dark:text-green-200">✓ {uploadedFile.name}</p>
           </div>
         )}
         <div className="mt-4">
           <button
-            onClick={handleFileScan}
+            onClick={() => void handleFileScan()}
             disabled={isLoading || scanLoading || !uploadedFile}
             className="w-full px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >

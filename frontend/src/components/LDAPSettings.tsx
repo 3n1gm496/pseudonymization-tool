@@ -1,11 +1,20 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type JSX, type FormEvent, type ChangeEvent } from 'react'
 import axios from '../utils/axios'
+import type { LDAPTestResult, ToastType } from '../types'
 
-const LDAPSettings = ({ showToast }) => {
+interface LDAPSettingsProps {
+  showToast: (message: string, type?: ToastType) => void
+}
+
+interface LDAPDiagnostics {
+  [key: string]: unknown
+}
+
+const LDAPSettings = ({ showToast }: LDAPSettingsProps): JSX.Element => {
   const [isLoading, setIsLoading] = useState(false)
   const [isConfigured, setIsConfigured] = useState(false)
-  const [testResult, setTestResult] = useState(null)
-  const [diagnostics, setDiagnostics] = useState(null)
+  const [testResult, setTestResult] = useState<LDAPTestResult | null>(null)
+  const [diagnostics, setDiagnostics] = useState<LDAPDiagnostics | null>(null)
   const [showForm, setShowForm] = useState(false)
 
   // Form state
@@ -18,39 +27,48 @@ const LDAPSettings = ({ showToast }) => {
   const [useSSL, setUseSSL] = useState(false)
 
   useEffect(() => {
-    loadConfig()
+    void loadConfig()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const loadConfig = async () => {
+  const loadConfig = async (): Promise<void> => {
     try {
-      const response = await axios.get('/api/settings/ldap')
-      setIsConfigured(response.data.configured || false)
-      setDiagnostics(response.data.diagnostics)
+      const response = await axios.get<{
+        configured?: boolean
+        diagnostics?: LDAPDiagnostics | null
+        host?: string
+        port?: number | string
+        base_dn?: string
+        bind_dn?: string
+        search_filter?: string
+        use_ssl?: boolean
+      }>('/api/settings/ldap')
+      setIsConfigured(response.data.configured ?? false)
+      setDiagnostics(response.data.diagnostics ?? null)
       if (response.data.host) {
         setHost(response.data.host)
-        setPort(response.data.port || '389')
-        setBaseDN(response.data.base_dn || '')
-        setBindDN(response.data.bind_dn || '')
-        setSearchFilter(response.data.search_filter || '(uid=*)')
-        setUseSSL(response.data.use_ssl || false)
+        setPort(String(response.data.port ?? '389'))
+        setBaseDN(response.data.base_dn ?? '')
+        setBindDN(response.data.bind_dn ?? '')
+        setSearchFilter(response.data.search_filter ?? '(uid=*)')
+        setUseSSL(response.data.use_ssl ?? false)
       }
-    } catch (error) {
+    } catch {
       setDiagnostics(null)
     }
   }
 
-  const handleSave = async (e) => {
+  const handleSave = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault()
     if (!host || !baseDN) {
       showToast('Host e BaseDN sono obbligatori', 'error')
       return
     }
-
     setIsLoading(true)
     try {
       await axios.post('/api/settings/ldap', {
         host,
-        port: parseInt(port),
+        port: parseInt(port, 10),
         base_dn: baseDN,
         bind_dn: bindDN,
         bind_password: bindPassword,
@@ -59,46 +77,51 @@ const LDAPSettings = ({ showToast }) => {
       })
       showToast('Configurazione LDAP salvata', 'success')
       setShowForm(false)
-      loadConfig()
-    } catch (error) {
-      showToast(error.response?.data?.detail || 'Errore salvataggio LDAP', 'error')
+      void loadConfig()
+    } catch (error: unknown) {
+      const axiosError = error as { response?: { data?: { detail?: string } } }
+      showToast(axiosError.response?.data?.detail ?? 'Errore salvataggio LDAP', 'error')
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleTest = async () => {
+  const handleTest = async (): Promise<void> => {
     setIsLoading(true)
     try {
-      const response = await axios.post('/api/settings/ldap/test')
+      const response = await axios.post<LDAPTestResult>('/api/settings/ldap/test')
       setTestResult({
         ok: response.data.ok,
         error: response.data.error,
         user_count: response.data.user_count,
       })
       if (response.data.ok) {
-        showToast(`Connessione OK - ${response.data.user_count} utenti trovati`, 'success')
+        showToast(`Connessione OK - ${response.data.user_count ?? 0} utenti trovati`, 'success')
       } else {
-        showToast(response.data.error || 'Test fallito', 'error')
+        showToast(response.data.error ?? 'Test fallito', 'error')
       }
-    } catch (error) {
+    } catch {
       showToast('Errore test connessione', 'error')
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleRefresh = async () => {
+  const handleRefresh = async (): Promise<void> => {
     setIsLoading(true)
     try {
-      const response = await axios.post('/api/settings/ldap/refresh')
-      setDiagnostics(response.data.diagnostics)
+      const response = await axios.post<{
+        ok?: boolean
+        message?: string
+        diagnostics?: LDAPDiagnostics
+      }>('/api/settings/ldap/refresh')
+      setDiagnostics(response.data.diagnostics ?? null)
       if (response.data.ok) {
         showToast('Cache LDAP aggiornata', 'success')
       } else {
-        showToast(response.data.message || 'Refresh completato con warnings', 'warning')
+        showToast(response.data.message ?? 'Refresh completato con warnings', 'warning')
       }
-    } catch (error) {
+    } catch {
       showToast('Errore refresh cache', 'error')
     } finally {
       setIsLoading(false)
@@ -116,7 +139,6 @@ const LDAPSettings = ({ showToast }) => {
             </span>
           )}
         </div>
-
         {isConfigured && !showForm && (
           <>
             <div className="mb-4 p-3 rounded bg-slate-50 dark:bg-slate-900 text-sm space-y-1">
@@ -135,17 +157,16 @@ const LDAPSettings = ({ showToast }) => {
                 <span className="font-medium">Filter:</span> {searchFilter}
               </div>
             </div>
-
             <div className="flex gap-3 flex-wrap mb-4">
               <button
-                onClick={handleTest}
+                onClick={() => void handleTest()}
                 disabled={isLoading}
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 text-sm"
               >
                 🔗 Test connessione
               </button>
               <button
-                onClick={handleRefresh}
+                onClick={() => void handleRefresh()}
                 disabled={isLoading}
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg disabled:opacity-50 text-sm"
               >
@@ -161,16 +182,15 @@ const LDAPSettings = ({ showToast }) => {
             </div>
           </>
         )}
-
         {showForm && (
-          <form onSubmit={handleSave} className="space-y-3">
+          <form onSubmit={(e) => void handleSave(e)} className="space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium mb-1">Host LDAP *</label>
                 <input
                   type="text"
                   value={host}
-                  onChange={(e) => setHost(e.target.value)}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setHost(e.target.value)}
                   placeholder="es: ldap.ente.it"
                   className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm"
                   disabled={isLoading}
@@ -181,33 +201,30 @@ const LDAPSettings = ({ showToast }) => {
                 <input
                   type="number"
                   value={port}
-                  onChange={(e) => setPort(e.target.value)}
-                  placeholder="389"
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setPort(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm"
                   disabled={isLoading}
                 />
               </div>
             </div>
-
             <div>
               <label className="block text-sm font-medium mb-1">Base DN *</label>
               <input
                 type="text"
                 value={baseDN}
-                onChange={(e) => setBaseDN(e.target.value)}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setBaseDN(e.target.value)}
                 placeholder="es: dc=ente,dc=it"
                 className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm"
                 disabled={isLoading}
               />
             </div>
-
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium mb-1">Bind DN (opzionale)</label>
                 <input
                   type="text"
                   value={bindDN}
-                  onChange={(e) => setBindDN(e.target.value)}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setBindDN(e.target.value)}
                   placeholder="es: uid=admin,ou=people,dc=ente,dc=it"
                   className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm"
                   disabled={isLoading}
@@ -218,19 +235,18 @@ const LDAPSettings = ({ showToast }) => {
                 <input
                   type="password"
                   value={bindPassword}
-                  onChange={(e) => setBindPassword(e.target.value)}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setBindPassword(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm"
                   disabled={isLoading}
                 />
               </div>
             </div>
-
             <div>
               <label className="block text-sm font-medium mb-1">Search Filter</label>
               <input
                 type="text"
                 value={searchFilter}
-                onChange={(e) => setSearchFilter(e.target.value)}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchFilter(e.target.value)}
                 placeholder="(uid=*)"
                 className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm font-mono"
                 disabled={isLoading}
@@ -239,13 +255,12 @@ const LDAPSettings = ({ showToast }) => {
                 Es: (uid=*), (|(uid=*)(cn=*))
               </p>
             </div>
-
             <div className="flex items-center gap-2">
               <input
                 type="checkbox"
                 id="useSSL"
                 checked={useSSL}
-                onChange={(e) => setUseSSL(e.target.checked)}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setUseSSL(e.target.checked)}
                 disabled={isLoading}
                 className="rounded"
               />
@@ -253,7 +268,6 @@ const LDAPSettings = ({ showToast }) => {
                 Usa SSL/TLS
               </label>
             </div>
-
             <div className="flex gap-3 pt-4">
               <button
                 type="submit"
@@ -273,11 +287,11 @@ const LDAPSettings = ({ showToast }) => {
             </div>
           </form>
         )}
-
         {!isConfigured && !showForm && (
           <div>
             <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-              Configura un server LDAP per rilevare automaticamente account utenti durante la scansione.
+              Configura un server LDAP per rilevare automaticamente account utenti durante la
+              scansione.
             </p>
             <button
               onClick={() => setShowForm(true)}
@@ -288,16 +302,20 @@ const LDAPSettings = ({ showToast }) => {
           </div>
         )}
       </div>
-
       {testResult && (
-        <div className={`p-4 rounded-lg ${testResult.ok ? 'bg-green-50 dark:bg-green-900/30 border border-green-200' : 'bg-red-50 dark:bg-red-900/30 border border-red-200'}`}>
+        <div
+          className={`p-4 rounded-lg ${testResult.ok ? 'bg-green-50 dark:bg-green-900/30 border border-green-200' : 'bg-red-50 dark:bg-red-900/30 border border-red-200'}`}
+        >
           <h4 className="font-semibold mb-2">Risultato test</h4>
-          <p className={`text-sm ${testResult.ok ? 'text-green-800 dark:text-green-200' : 'text-red-800 dark:text-red-200'}`}>
-            {testResult.ok ? `✓ Connessione riuscita - ${testResult.user_count} utenti trovati` : `✗ ${testResult.error}`}
+          <p
+            className={`text-sm ${testResult.ok ? 'text-green-800 dark:text-green-200' : 'text-red-800 dark:text-red-200'}`}
+          >
+            {testResult.ok
+              ? `✓ Connessione riuscita - ${testResult.user_count ?? 0} utenti trovati`
+              : `✗ ${testResult.error ?? 'Errore sconosciuto'}`}
           </p>
         </div>
       )}
-
       {diagnostics && (
         <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
           <h4 className="font-semibold mb-2 text-sm">Diagnostica</h4>
