@@ -20,7 +20,8 @@ RUN npm ci && \
 # Copy source
 COPY frontend/src ./src
 COPY frontend/index.html ./
-COPY frontend/vite.config.js ./
+COPY frontend/vite.config.ts ./
+COPY frontend/tsconfig.json ./
 COPY frontend/tailwind.config.js ./
 COPY frontend/postcss.config.js ./
 # Build React app with Vite

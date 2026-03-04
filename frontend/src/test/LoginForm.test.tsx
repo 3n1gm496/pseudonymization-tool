@@ -58,7 +58,7 @@ describe('LoginForm', () => {
     const { passwordInput } = getInputs()
     await user.type(passwordInput!, 'secret')
     await user.click(screen.getByRole('button', { name: /login/i }))
-    expect(onLogin).toHaveBeenCalledWith('admin', 'secret')
+    expect(onLogin).toHaveBeenCalledWith('admin', 'secret', 'local')
   })
 
   it('shows "Accesso in corso..." when isLoading is true', () => {

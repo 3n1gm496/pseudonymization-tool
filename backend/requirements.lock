@@ -88,6 +88,12 @@ certifi==2025.10.5
 charset-normalizer==3.4.4
 idna==3.11
 
+# ── Hashing password utenti locali ─────────────────────────────────────────────
+bcrypt==5.0.0
+
+# ── Monitoring e observability ─────────────────────────────────────────────────
+prometheus-client==0.24.1
+
 # ── LDAP (opzionale) ──────────────────────────────────────────────────────────
 ldap3==2.9.1
 pyasn1==0.6.2
