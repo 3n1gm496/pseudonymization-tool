@@ -12,7 +12,7 @@ URL Accesso: https://intranet.ente.gov.it/admin/login
 Connessioni sospette da: 203.0.113.42
 Verso: vpn.ente.local (10.0.0.1)
 Utente coinvolto: luigi.ferrari@ente.gov.it
-Codice Fiscale: RSSMRA80A01H501A
+Codice Fiscale: RSSMRA80A01H501U
 Telefono: +39 333 1234567
 
 [WARNING] Accesso multiplo fallito per l'account:

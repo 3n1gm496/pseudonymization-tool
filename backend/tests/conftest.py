@@ -27,7 +27,7 @@ def sample_text():
     Email: mario.rossi@ente.gov.it
     IP: 10.24.8.1
     Phone: +39 02 12345678
-    Codice Fiscale: RSSMRA80A01H501A
+    Codice Fiscale: RSSMRA80A01H501U
     """
 
 

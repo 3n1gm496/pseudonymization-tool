@@ -29,7 +29,7 @@ URL Accesso: https://intranet.ente.gov.it/admin/login
 Connessioni sospette da: 203.0.113.42
 Verso: vpn.ente.local (10.0.0.1)
 Utente coinvolto: luigi.ferrari@ente.gov.it
-Codice Fiscale: RSSMRA80A01H501A
+Codice Fiscale: RSSMRA80A01H501U
 Telefono: +39 333 1234567
 
 [WARNING] Accesso multiplo fallito per l'account:
@@ -69,7 +69,7 @@ I server principali sono:
 Gli accessi sono gestiti tramite il portale: https://intranet.ente.gov.it/accessi
 
 Utenti autorizzati:
-- mario.rossi@ente.gov.it (CF: RSSMRA80A01H501A)
+- mario.rossi@ente.gov.it (CF: RSSMRA80A01H501U)
 - anna.bianchi@ente.gov.it
 
 ## 4. Note
@@ -84,10 +84,10 @@ Unità organizzativa: UO-SICUREZZA
 def create_csv_test():
     """File CSV con dati anagrafici."""
     content = """nome,cognome,email,telefono,codice_fiscale,ip_workstation
-Mario,Rossi,mario.rossi@ente.gov.it,+39 333 1234567,RSSMRA80A01H501A,10.24.1.15
-Luigi,Ferrari,luigi.ferrari@ente.gov.it,06 1234 5678,FRRLGU75B12F205X,10.24.1.16
-Anna,Bianchi,anna.bianchi@ente.gov.it,+39 347 9876543,BNCNNA82C41H501Z,10.24.1.17
-Giovanni,Conti,giovanni.conti@ente.gov.it,06 9876 5432,CNTGNN70D15H501W,10.24.1.18
+Mario,Rossi,mario.rossi@ente.gov.it,+39 333 1234567,RSSMRA80A01H501U,10.24.1.15
+Luigi,Ferrari,luigi.ferrari@ente.gov.it,06 1234 5678,FRRLGU75B12F205F,10.24.1.16
+Anna,Bianchi,anna.bianchi@ente.gov.it,+39 347 9876543,BNCNNA82C41H501X,10.24.1.17
+Giovanni,Conti,giovanni.conti@ente.gov.it,06 9876 5432,CNTGNN70D15H501Z,10.24.1.18
 """
     (TEST_DATA_DIR / "test_users.csv").write_text(content, encoding="utf-8")
     print("✓ Creato test_users.csv")
@@ -109,7 +109,7 @@ def create_docx_test():
         doc.add_paragraph(
             "Durante l'analisi del sistema srv-dc-01.ente.local (IP: 10.24.8.1) "
             "è stato rilevato un accesso anomalo dall'indirizzo 203.0.113.42. "
-            "Il responsabile Luigi Ferrari (luigi.ferrari@ente.gov.it, CF: FRRLGU75B12F205X) "
+            "Il responsabile Luigi Ferrari (luigi.ferrari@ente.gov.it, CF: FRRLGU75B12F205F) "
             "è stato notificato al numero +39 333 9876543."
         )
 
@@ -150,9 +150,9 @@ def create_xlsx_test():
         ws.append(["Nome", "Email", "IP", "Codice Fiscale", "Stipendio", "Bonus", "Totale"])
 
         # Dati
-        ws.append(["Mario Rossi", "mario.rossi@ente.gov.it", "10.24.1.15", "RSSMRA80A01H501A", 2500, 500, "=E2+F2"])
-        ws.append(["Luigi Ferrari", "luigi.ferrari@ente.gov.it", "10.24.1.16", "FRRLGU75B12F205X", 2800, 300, "=E3+F3"])
-        ws.append(["Anna Bianchi", "anna.bianchi@ente.gov.it", "10.24.1.17", "BNCNNA82C41H501Z", 2600, 400, "=E4+F4"])
+        ws.append(["Mario Rossi", "mario.rossi@ente.gov.it", "10.24.1.15", "RSSMRA80A01H501U", 2500, 500, "=E2+F2"])
+        ws.append(["Luigi Ferrari", "luigi.ferrari@ente.gov.it", "10.24.1.16", "FRRLGU75B12F205F", 2800, 300, "=E3+F3"])
+        ws.append(["Anna Bianchi", "anna.bianchi@ente.gov.it", "10.24.1.17", "BNCNNA82C41H501X", 2600, 400, "=E4+F4"])
 
         # Secondo foglio con note
         ws2 = wb.create_sheet("Note")
@@ -182,7 +182,7 @@ def create_pdf_test():
         story.append(Spacer(1, 12))
         story.append(
             Paragraph(
-                "Responsabile: Dott. Mario Rossi (mario.rossi@ente.gov.it) — CF: RSSMRA80A01H501A", styles["Normal"]
+                "Responsabile: Dott. Mario Rossi (mario.rossi@ente.gov.it) — CF: RSSMRA80A01H501U", styles["Normal"]
             )
         )
         story.append(Spacer(1, 12))
@@ -220,7 +220,7 @@ BT
 50 750 Td
 (Documento Riservato - mario.rossi@ente.gov.it) Tj
 0 -20 Td
-(IP: 10.24.8.15 - CF: RSSMRA80A01H501A) Tj
+(IP: 10.24.8.15 - CF: RSSMRA80A01H501U) Tj
 ET
 endstream
 endobj
@@ -262,7 +262,7 @@ def create_image_test():
             "SISTEMA: srv-dc-01.ente.local",
             "IP: 10.24.8.15",
             "UTENTE: mario.rossi@ente.gov.it",
-            "CF: RSSMRA80A01H501A",
+            "CF: RSSMRA80A01H501U",
             "STATO: ACCESSO FALLITO",
             "URL: https://intranet.ente.gov.it/admin",
         ]

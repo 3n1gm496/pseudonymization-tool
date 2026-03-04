@@ -118,7 +118,7 @@ def test_cf_detection():
     from app.detectors.regex_detectors import CODICE_FISCALE_DETECTOR as detector
     from app.parsers.base import TextChunk
 
-    chunk = TextChunk(text="CF: RSSMRA80A01H501A e FRRLGU75B12F205X", source_ref="test.txt")
+    chunk = TextChunk(text="CF: RSSMRA80A01H501U e FRRLGU75B12F205F", source_ref="test.txt")
     findings = detector.detect(chunk)
     assert len(findings) == 2, f"Attesi 2, trovati {len(findings)}"
 
@@ -717,7 +717,7 @@ def test_security_no_originals_in_report():
     batch.files.append(file_rec)
     report_data = build_report_data(batch, findings, "2024-03-15T09:00:00", "2024-03-15T09:01:00")
     report_str = json.dumps(report_data)
-    sensitive_values = ["mario.rossi@ente.gov.it", "RSSMRA80A01H501A", "10.24.1.15"]
+    sensitive_values = ["mario.rossi@ente.gov.it", "RSSMRA80A01H501U", "10.24.1.15"]
     for val in sensitive_values:
         assert val not in report_str, f"Valore sensibile trovato nel report: {val}"
 
@@ -752,14 +752,14 @@ def test_security_no_sensitive_in_logs():
     handler = logging.StreamHandler(log_capture)
     logging.getLogger("app").addHandler(handler)
     try:
-        chunk = TextChunk(text="Email: mario.rossi@ente.gov.it, CF: RSSMRA80A01H501A", source_ref="sec-test")
+        chunk = TextChunk(text="Email: mario.rossi@ente.gov.it, CF: RSSMRA80A01H501U", source_ref="sec-test")
         detect_in_chunk(chunk)
     finally:
         logging.getLogger("app").removeHandler(handler)
 
     log_output = log_capture.getvalue()
     assert "mario.rossi@ente.gov.it" not in log_output, "Email sensibile nei log"
-    assert "RSSMRA80A01H501A" not in log_output, "CF sensibile nei log"
+    assert "RSSMRA80A01H501U" not in log_output, "CF sensibile nei log"
 
 
 # ─── Esecuzione standalone ─────────────────────────────────────────────────────
