@@ -356,3 +356,261 @@ def test_ldap_refresh_failure():
     assert response.status_code == 200
     data = response.json()
     assert data["ok"] is False
+
+
+# ─── POST /api/settings/ldap — Validazione campi auth ────────────────────────
+
+
+def test_set_ldap_config_auth_enabled_without_bind_dn_returns_422():
+    """POST /api/settings/ldap returns 422 when auth_enabled=True but bind_dn is missing."""
+    with patch("app.detectors.ldap_detector.configure_ldap"):
+        response = client.post(
+            "/api/settings/ldap",
+            json={
+                "host": "ldap.example.com",
+                "port": 389,
+                "base_dn": "dc=example,dc=com",
+                "bind_dn": "",  # Mancante
+                "bind_password": "secret",
+                "enabled": True,
+                "auth_enabled": True,
+                "auth_user_base_dn": "ou=users,dc=example,dc=com",
+            },
+        )
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert "bind_dn" in str(detail)
+
+
+def test_set_ldap_config_auth_enabled_without_base_dn_returns_422():
+    """POST /api/settings/ldap returns 422 when auth_enabled=True but both base_dn and auth_user_base_dn are empty."""
+    with patch("app.detectors.ldap_detector.configure_ldap"):
+        response = client.post(
+            "/api/settings/ldap",
+            json={
+                "host": "ldap.example.com",
+                "port": 389,
+                "base_dn": "",  # Vuoto
+                "bind_dn": "cn=admin,dc=example,dc=com",
+                "bind_password": "secret",
+                "enabled": True,
+                "auth_enabled": True,
+                "auth_user_base_dn": "",  # Vuoto
+            },
+        )
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert "auth_user_base_dn" in str(detail) or "base_dn" in str(detail)
+
+
+def test_set_ldap_config_auth_enabled_invalid_default_role_returns_422():
+    """POST /api/settings/ldap returns 422 when auth_default_role is not valid."""
+    with patch("app.detectors.ldap_detector.configure_ldap"):
+        response = client.post(
+            "/api/settings/ldap",
+            json={
+                "host": "ldap.example.com",
+                "port": 389,
+                "base_dn": "dc=example,dc=com",
+                "bind_dn": "cn=admin,dc=example,dc=com",
+                "bind_password": "secret",
+                "enabled": True,
+                "auth_enabled": True,
+                "auth_user_base_dn": "ou=users,dc=example,dc=com",
+                "auth_default_role": "superuser",  # Non valido
+            },
+        )
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert "auth_default_role" in str(detail)
+
+
+def test_set_ldap_config_auth_enabled_valid_config_returns_200():
+    """POST /api/settings/ldap returns 200 when auth_enabled=True with valid config."""
+    with patch("app.detectors.ldap_detector.configure_ldap") as mock_configure:
+        response = client.post(
+            "/api/settings/ldap",
+            json={
+                "host": "ldap.example.com",
+                "port": 389,
+                "base_dn": "dc=example,dc=com",
+                "bind_dn": "cn=admin,dc=example,dc=com",
+                "bind_password": "secret",
+                "enabled": True,
+                "auth_enabled": True,
+                "auth_user_base_dn": "ou=users,dc=example,dc=com",
+                "auth_admin_group_dn": "cn=admins,ou=groups,dc=example,dc=com",
+                "auth_operator_group_dn": "cn=operators,ou=groups,dc=example,dc=com",
+                "auth_default_role": "operator",
+            },
+        )
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+    mock_configure.assert_called_once()
+
+
+def test_set_ldap_config_auth_disabled_skips_validation():
+    """POST /api/settings/ldap skips auth validation when auth_enabled=False."""
+    with patch("app.detectors.ldap_detector.configure_ldap") as mock_configure:
+        response = client.post(
+            "/api/settings/ldap",
+            json={
+                "host": "ldap.example.com",
+                "port": 389,
+                "base_dn": "",  # Vuoto, ma auth_enabled=False
+                "bind_dn": "",  # Vuoto, ma auth_enabled=False
+                "bind_password": "",
+                "enabled": True,
+                "auth_enabled": False,
+            },
+        )
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+    mock_configure.assert_called_once()
+
+
+# ─── GET /api/settings/ldap — Redazione campi sensibili auth ─────────────────
+
+
+def test_get_ldap_config_redacts_group_dns():
+    """GET /api/settings/ldap replaces group DNs with '***configured***' if set."""
+    from app.models.schemas import LdapConfig
+
+    cfg = LdapConfig(
+        host="ldap.example.com",
+        port=389,
+        enabled=True,
+        bind_password="supersecret",
+        auth_enabled=True,
+        auth_admin_group_dn="cn=admins,ou=groups,dc=example,dc=com",
+        auth_operator_group_dn="cn=operators,ou=groups,dc=example,dc=com",
+    )
+    mock_cache = MagicMock()
+    mock_cache.get_diagnostics.return_value = {}
+
+    with patch("app.detectors.ldap_detector.get_ldap_config", return_value=cfg):
+        with patch("app.detectors.ldap_detector.get_ldap_cache", return_value=mock_cache):
+            response = client.get("/api/settings/ldap")
+
+    assert response.status_code == 200
+    data = response.json()
+    # bind_password deve essere rimosso completamente
+    assert "bind_password" not in data
+    # I group DN devono essere oscurati
+    assert data["auth_admin_group_dn"] == "***configured***"
+    assert data["auth_operator_group_dn"] == "***configured***"
+    # auth_enabled deve essere visibile
+    assert data["auth_enabled"] is True
+
+
+def test_get_ldap_config_empty_group_dns_not_redacted():
+    """GET /api/settings/ldap returns empty string for group DNs if not configured."""
+    from app.models.schemas import LdapConfig
+
+    cfg = LdapConfig(
+        host="ldap.example.com",
+        port=389,
+        enabled=True,
+        auth_enabled=False,
+        auth_admin_group_dn="",  # Non configurato
+        auth_operator_group_dn="",  # Non configurato
+    )
+    mock_cache = MagicMock()
+    mock_cache.get_diagnostics.return_value = {}
+
+    with patch("app.detectors.ldap_detector.get_ldap_config", return_value=cfg):
+        with patch("app.detectors.ldap_detector.get_ldap_cache", return_value=mock_cache):
+            response = client.get("/api/settings/ldap")
+
+    assert response.status_code == 200
+    data = response.json()
+    # I group DN vuoti non devono essere oscurati
+    assert data["auth_admin_group_dn"] == ""
+    assert data["auth_operator_group_dn"] == ""
+
+
+# ─── POST /api/settings/ldap/test-auth ───────────────────────────────────────
+
+
+def test_test_ldap_auth_success():
+    """POST /api/settings/ldap/test-auth returns ok=True when authentication succeeds."""
+    from app.models.schemas import LdapConfig
+
+    cfg = LdapConfig(host="ldap.example.com", auth_enabled=True)
+    mock_cache = MagicMock()
+
+    with patch("app.detectors.ldap_detector.get_ldap_config", return_value=cfg):
+        with patch("app.core.ldap_auth.authenticate_ldap", return_value="operator"):
+            response = client.post(
+                "/api/settings/ldap/test-auth",
+                json={"username": "jdoe", "password": "secret"},
+            )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is True
+    assert data["authenticated"] is True
+    assert data["role"] == "operator"
+
+
+def test_test_ldap_auth_failure():
+    """POST /api/settings/ldap/test-auth returns ok=False when authentication fails."""
+    from app.models.schemas import LdapConfig
+
+    cfg = LdapConfig(host="ldap.example.com", auth_enabled=True)
+
+    with patch("app.detectors.ldap_detector.get_ldap_config", return_value=cfg):
+        with patch("app.core.ldap_auth.authenticate_ldap", return_value=None):
+            response = client.post(
+                "/api/settings/ldap/test-auth",
+                json={"username": "jdoe", "password": "wrongpassword"},
+            )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is False
+    assert data["authenticated"] is False
+    assert data["role"] is None
+
+
+def test_test_ldap_auth_not_configured_returns_400():
+    """POST /api/settings/ldap/test-auth returns 400 when LDAP is not configured."""
+    with patch("app.detectors.ldap_detector.get_ldap_config", return_value=None):
+        response = client.post(
+            "/api/settings/ldap/test-auth",
+            json={"username": "jdoe", "password": "secret"},
+        )
+
+    assert response.status_code == 400
+    assert "non configurato" in response.json()["detail"].lower()
+
+
+def test_test_ldap_auth_not_enabled_returns_400():
+    """POST /api/settings/ldap/test-auth returns 400 when auth_enabled=False."""
+    from app.models.schemas import LdapConfig
+
+    cfg = LdapConfig(host="ldap.example.com", auth_enabled=False)
+
+    with patch("app.detectors.ldap_detector.get_ldap_config", return_value=cfg):
+        response = client.post(
+            "/api/settings/ldap/test-auth",
+            json={"username": "jdoe", "password": "secret"},
+        )
+
+    assert response.status_code == 400
+    assert "auth_enabled" in response.json()["detail"]
+
+
+def test_test_ldap_auth_missing_credentials_returns_422():
+    """POST /api/settings/ldap/test-auth returns 422 when username or password is empty."""
+    from app.models.schemas import LdapConfig
+
+    cfg = LdapConfig(host="ldap.example.com", auth_enabled=True)
+
+    with patch("app.detectors.ldap_detector.get_ldap_config", return_value=cfg):
+        response = client.post(
+            "/api/settings/ldap/test-auth",
+            json={"username": "", "password": ""},
+        )
+
+    assert response.status_code == 422

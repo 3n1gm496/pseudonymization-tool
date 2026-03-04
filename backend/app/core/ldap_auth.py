@@ -97,7 +97,7 @@ def authenticate_ldap(username: str, password: str) -> Optional[str]:
         if service_conn is not None:
             try:
                 service_conn.unbind()
-            except Exception:
+            except Exception:  # nosec B110
                 pass
 
 

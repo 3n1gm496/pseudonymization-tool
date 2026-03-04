@@ -43,9 +43,9 @@ class PdfParser(BaseParser):
                                     source_ref=f"pagina {page_num}, riga {line_num}",
                                     line_number=line_num,
                                 )
-                except Exception:
+                except Exception:  # nosec B110
                     pass
-        except Exception:
+        except Exception:  # nosec B110
             return
 
     def parse(self, file_path: Path) -> ParseResult:

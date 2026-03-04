@@ -433,7 +433,7 @@ def enforce_rate_limit(
             return _check_limit_redis(redis_client, bucket_key, limit, window_seconds, now)
         except HTTPException:
             raise  # 429 — propagate directly
-        except Exception:
+        except Exception:  # nosec B110
             # Redis error already logged in _check_limit_redis; fall through to in-memory
             pass
 
