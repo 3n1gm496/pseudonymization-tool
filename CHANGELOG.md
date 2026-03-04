@@ -9,6 +9,33 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Coverage exceptions.py 100% (PR #56)**
+  - Aggiunto `tests/test_exceptions.py` con **62 test case** che coprono tutte le 35 classi di eccezione del dominio e le due funzioni helper (`exception_to_http_status`, `exception_to_detail`).
+  - La coverage di `app/core/exceptions.py` passa dal **60% al 100%**.
+
+### Changed
+
+- **Documentazione Redis AOF (PR #54)**
+  - Aggiunta sezione dedicata nel `RUNBOOK.md` (§4) che documenta la decisione architetturale consapevole di non abilitare la persistenza AOF di default, con istruzioni per abilitarla in ambienti con requisiti di durabilità elevati.
+  - Aggiornato `docs/08_Risks_and_Mitigations.md` con due nuovi rischi documentati: perdita sessioni e perdita task Celery a riavvio Redis.
+  - Aggiunto commento esplicativo in `docker-compose.yml` sulla configurazione Redis.
+
+- **Refactoring batch_manager.py (PR #55)**
+  - Estratto il layer Redis in `app/core/batch_redis.py` (client caching, chiavi, serializzazione Redis).
+  - Estratto il layer filesystem in `app/core/batch_persistence.py` (path management, atomic write, cifratura disco).
+  - `batch_manager.py` ora contiene solo la logica di business e ri-espone l'API pubblica invariata (zero breaking changes).
+
+### Fixed
+
+- **Diagramma Mermaid README (PR #57)**
+  - Sostituiti i `\n` letterali con `<br/>` nei label dei 6 nodi del diagramma architetturale. GitHub Mermaid 10.x non interpreta `\n` come newline — i caratteri venivano mostrati come testo letterale.
+
+---
+
 ## [5.1.0] - 2026-03-03
 
 Questa versione segna il completamento del piano di **production readiness**, rendendo il tool robusto, sicuro e pronto per il deployment in ambienti enterprise.
