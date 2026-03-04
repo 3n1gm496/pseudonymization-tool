@@ -1,6 +1,13 @@
+import type { JSX } from 'react'
 import { useTheme } from '../context/ThemeContext'
 
-const Header = ({ user, onLogout, onSettingsClick }) => {
+interface HeaderProps {
+  user: string | null
+  onLogout: (() => void) | null
+  onSettingsClick?: (() => void) | null
+}
+
+const Header = ({ user, onLogout, onSettingsClick }: HeaderProps): JSX.Element => {
   const { isDark, toggleTheme } = useTheme()
 
   return (

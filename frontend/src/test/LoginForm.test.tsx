@@ -1,10 +1,6 @@
 /**
- * Tests for components/LoginForm.jsx
+ * Tests for components/LoginForm.tsx
  * Covers: rendering, form submission, loading state, disabled state
- *
- * Note: LoginForm uses <label> without htmlFor, so we use
- * getByRole('textbox'), getByDisplayValue, and getAllByRole('textbox')
- * instead of getByLabelText.
  */
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
@@ -12,10 +8,13 @@ import userEvent from '@testing-library/user-event'
 import LoginForm from '../components/LoginForm'
 
 // Helper: get username input (type=text) and password input (type=password)
-const getInputs = () => {
-  const allInputs = document.querySelectorAll('input')
-  const usernameInput = Array.from(allInputs).find((i) => i.type === 'text')
-  const passwordInput = Array.from(allInputs).find((i) => i.type === 'password')
+const getInputs = (): {
+  usernameInput: HTMLInputElement | undefined
+  passwordInput: HTMLInputElement | undefined
+} => {
+  const allInputs = Array.from(document.querySelectorAll('input'))
+  const usernameInput = allInputs.find((i) => i.type === 'text') as HTMLInputElement | undefined
+  const passwordInput = allInputs.find((i) => i.type === 'password') as HTMLInputElement | undefined
   return { usernameInput, passwordInput }
 }
 
@@ -48,7 +47,7 @@ describe('LoginForm', () => {
     const user = userEvent.setup()
     render(<LoginForm onLogin={vi.fn()} isLoading={false} />)
     const { passwordInput } = getInputs()
-    await user.type(passwordInput, 'mypassword')
+    await user.type(passwordInput!, 'mypassword')
     expect(screen.getByRole('button', { name: /login/i })).toBeEnabled()
   })
 
@@ -57,7 +56,7 @@ describe('LoginForm', () => {
     const user = userEvent.setup()
     render(<LoginForm onLogin={onLogin} isLoading={false} />)
     const { passwordInput } = getInputs()
-    await user.type(passwordInput, 'secret')
+    await user.type(passwordInput!, 'secret')
     await user.click(screen.getByRole('button', { name: /login/i }))
     expect(onLogin).toHaveBeenCalledWith('admin', 'secret')
   })
@@ -83,8 +82,8 @@ describe('LoginForm', () => {
     const user = userEvent.setup()
     render(<LoginForm onLogin={vi.fn()} isLoading={false} />)
     const { usernameInput } = getInputs()
-    await user.clear(usernameInput)
-    await user.type(usernameInput, 'newuser')
+    await user.clear(usernameInput!)
+    await user.type(usernameInput!, 'newuser')
     expect(usernameInput).toHaveValue('newuser')
   })
 
@@ -92,8 +91,8 @@ describe('LoginForm', () => {
     const user = userEvent.setup()
     render(<LoginForm onLogin={vi.fn()} isLoading={false} />)
     const { usernameInput, passwordInput } = getInputs()
-    await user.type(passwordInput, 'pass')
-    await user.clear(usernameInput)
+    await user.type(passwordInput!, 'pass')
+    await user.clear(usernameInput!)
     expect(screen.getByRole('button', { name: /login/i })).toBeDisabled()
   })
 })

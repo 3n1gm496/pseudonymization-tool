@@ -1,50 +1,43 @@
-import { Component } from 'react'
+import { Component, type ReactNode, type ErrorInfo } from 'react'
 
-/**
- * ErrorBoundary — React class component that catches unhandled JS errors
- * in the component tree and displays a recovery UI instead of a blank page.
- *
- * React error boundaries must be class components (hooks cannot implement
- * componentDidCatch / getDerivedStateFromError).
- *
- * Usage:
- *   <ErrorBoundary>
- *     <App />
- *   </ErrorBoundary>
- */
-class ErrorBoundary extends Component {
-  constructor(props) {
+interface ErrorBoundaryProps {
+  children: ReactNode
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean
+  error: Error | null
+}
+
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
     super(props)
     this.state = { hasError: false, error: null }
-    this.handleReset = this.handleReset.bind(this)
   }
 
-  static getDerivedStateFromError(error) {
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error }
   }
 
-  componentDidCatch(error, info) {
-    // Log to console in development; in production this could be sent to
-    // an error tracking service (e.g. Sentry) without exposing PII.
-    console.error('[ErrorBoundary] Uncaught error:', error, info.componentStack)
+  componentDidCatch(error: Error, info: ErrorInfo): void {
+    console.error('ErrorBoundary caught:', error, info)
   }
 
-  handleReset() {
+  handleReset = (): void => {
     this.setState({ hasError: false, error: null })
   }
 
-  render() {
+  render(): ReactNode {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-6">
-          <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 text-center">
+        <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900 p-4">
+          <div className="max-w-md w-full bg-white dark:bg-slate-800 rounded-xl shadow-lg p-8 text-center">
             <div className="text-5xl mb-4">⚠️</div>
-            <h1 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+            <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-2">
               Si è verificato un errore imprevisto
-            </h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-              L&apos;applicazione ha incontrato un problema. Puoi provare a ricaricare la
-              pagina o a ripristinare lo stato.
+            </h2>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+              L&apos;applicazione ha incontrato un problema. Puoi riprovare o ricaricare la pagina.
             </p>
             {this.state.error && (
               <details className="text-left mb-6">
@@ -74,7 +67,6 @@ class ErrorBoundary extends Component {
         </div>
       )
     }
-
     return this.props.children
   }
 }

@@ -1,10 +1,15 @@
-import { useState } from 'react'
+import { useState, type JSX, type FormEvent, type ChangeEvent } from 'react'
 
-const LoginForm = ({ onLogin, isLoading }) => {
+interface LoginFormProps {
+  onLogin: (username: string, password: string) => Promise<void>
+  isLoading: boolean
+}
+
+const LoginForm = ({ onLogin, isLoading }: LoginFormProps): JSX.Element => {
   const [username, setUsername] = useState('admin')
   const [password, setPassword] = useState('')
 
-  const handleSubmit = async (event) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault()
     await onLogin(username, password)
   }
@@ -15,34 +20,31 @@ const LoginForm = ({ onLogin, isLoading }) => {
       <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
         Autenticati per usare lo strumento di pseudonimizzazione.
       </p>
-
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="block text-sm font-medium mb-1">Username</label>
           <input
             type="text"
             value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setUsername(e.target.value)}
             className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"
             autoComplete="username"
             required
             disabled={isLoading}
           />
         </div>
-
         <div>
           <label className="block text-sm font-medium mb-1">Password</label>
           <input
             type="password"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
             className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"
             autoComplete="current-password"
             required
             disabled={isLoading}
           />
         </div>
-
         <button
           type="submit"
           disabled={isLoading || !username || !password}

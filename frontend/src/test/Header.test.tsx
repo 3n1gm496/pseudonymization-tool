@@ -1,14 +1,15 @@
 /**
- * Tests for components/Header.jsx
+ * Tests for components/Header.tsx
  * Covers: rendering, logout button, settings button, theme toggle
  */
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, type RenderResult } from '@testing-library/react'
+import type { ReactNode } from 'react'
 import Header from '../components/Header'
 import { ThemeProvider } from '../context/ThemeContext'
 
 // Helper to render with ThemeProvider
-const renderWithTheme = (ui) => {
+const renderWithTheme = (ui: ReactNode): RenderResult => {
   return render(<ThemeProvider>{ui}</ThemeProvider>)
 }
 
@@ -51,9 +52,7 @@ describe('Header', () => {
   })
 
   it('shows settings button when onSettingsClick is provided', () => {
-    renderWithTheme(
-      <Header user="admin" onLogout={vi.fn()} onSettingsClick={vi.fn()} />
-    )
+    renderWithTheme(<Header user="admin" onLogout={vi.fn()} onSettingsClick={vi.fn()} />)
     expect(screen.getByRole('button', { name: /settings/i })).toBeInTheDocument()
   })
 
@@ -64,9 +63,7 @@ describe('Header', () => {
 
   it('calls onSettingsClick when settings button is clicked', () => {
     const onSettingsClick = vi.fn()
-    renderWithTheme(
-      <Header user="admin" onLogout={vi.fn()} onSettingsClick={onSettingsClick} />
-    )
+    renderWithTheme(<Header user="admin" onLogout={vi.fn()} onSettingsClick={onSettingsClick} />)
     fireEvent.click(screen.getByRole('button', { name: /settings/i }))
     expect(onSettingsClick).toHaveBeenCalledOnce()
   })
