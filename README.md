@@ -200,13 +200,15 @@ L'applicazione sarà esposta sulla porta **443 (HTTPS)**.
 L'applicazione espone un endpoint `/api/metrics` in formato Prometheus per il monitoring.
 
 **Metriche principali:**
-| Metrica | Tipo | Descrizione |
-|---|---|---|
-| `pseudonymizer_scans_total` | Counter | Numero di scansioni completate (con label `preset`) |
-| `pseudonymizer_applies_total` | Counter | Numero di apply completati |
-| `pseudonymizer_errors_total` | Counter | Errori HTTP (con label `status_code`, `endpoint`) |
-| `pseudonymizer_active_batches` | Gauge | Numero di batch attivi in memoria |
-| `pseudonymizer_http_requests_total` | Counter | Richieste HTTP totali (con label `method`, `endpoint`, `status`) |
+| Metrica | Tipo | Label | Descrizione |
+|---|---|---|---|
+| `pseudonymizer_scans_total` | Counter | `preset` | Scansioni completate |
+| `pseudonymizer_applies_total` | Counter | — | Apply completati |
+| `pseudonymizer_errors_total` | Counter | `status_code`, `endpoint` | Errori HTTP restituiti |
+| `pseudonymizer_active_batches` | Gauge | — | Batch attivi in memoria |
+| `pseudonymizer_http_requests_total` | Counter | `method`, `endpoint`, `status` | Richieste HTTP totali |
+| `pseudonymizer_detector_duration_seconds` | Histogram | `detector_name` | Latenza per singolo detector — identifica bottleneck |
+| `pseudonymizer_transformation_duration_seconds` | Histogram | `file_type` | Latenza trasformazione per tipo file (`.docx`, `.pdf`, …) |
 
 L'endpoint è esentato da autenticazione e CSRF per facilitare lo scraping. In produzione, l'accesso a `/api/metrics` dovrebbe essere limitato a livello di rete (es. consentito solo dall'IP del server Prometheus).
 
