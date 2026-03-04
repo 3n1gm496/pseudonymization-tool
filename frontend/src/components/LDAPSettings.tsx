@@ -28,8 +28,7 @@ const LDAPSettings = ({ showToast }: LDAPSettingsProps): JSX.Element => {
 
   useEffect(() => {
     void loadConfig()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, []) // loadConfig is intentionally omitted: defined below, stable, runs once on mount
 
   const loadConfig = async (): Promise<void> => {
     try {
