@@ -1,7 +1,7 @@
-# Local Pseudonymization Tool v5.0.0
+# Local Pseudonymization Tool v5.1.0
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/) [![React 18.2](https://img.shields.io/badge/React-18.2-61dafb.svg)](https://react.dev) [![FastAPI 0.110](https://img.shields.io/badge/FastAPI-0.110-009688.svg)](https://fastapi.tiangolo.com) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests: 483 passing](https://img.shields.io/badge/Tests-483%20passing-brightgreen.svg)](backend/tests/) [![Coverage: 82%](https://img.shields.io/badge/Coverage-82%25-brightgreen.svg)](https://github.com/3n1gm496/pseudonymization-tool/pull/37) [![Monitoring: Prometheus](https://img.shields.io/badge/Monitoring-Prometheus-orange.svg)](#-monitoring-prometheus)
+[![Tests: 763 passing](https://img.shields.io/badge/Tests-763%20passing-brightgreen.svg)](backend/tests/) [![Coverage: 82%](https://img.shields.io/badge/Coverage-82%25-brightgreen.svg)](https://github.com/3n1gm496/pseudonymization-tool/pull/37) [![Monitoring: Prometheus](https://img.shields.io/badge/Monitoring-Prometheus-orange.svg)](#-monitoring-prometheus)
 
 Web application locale moderna per la pseudonimizzazione sicura di dati sensibili in documenti di testo, DOCX, XLSX, PDF e immagini. Interfaccia React con Tailwind CSS, darkmode supportato. Progettato per ambienti enterprise che richiedono massima sicurezza e capacità di operare completamente offline.
 
@@ -13,7 +13,8 @@ Web application locale moderna per la pseudonimizzazione sicura di dati sensibil
 - **📄 Multi-formato** — Supporto per TXT, CSV, MD, DOCX, XLSX, PDF (testuali), JPG, PNG
 - **🔐 Sicurezza Avanzata** — Mapping cifrato con passphrase AES-256-GCM, zero logging di dati sensibili
 - **👥 Multi-utente** — Gestione utenti locali con ruoli `admin` e `operator`, database SQLite, password bcrypt
-- **⚡ Architettura Asincrona** — Elaborazione con Celery + Redis, scalabile e resiliente
+- **⚡ Notifiche Real-time** — Aggiornamenti di stato in tempo reale via Server-Sent Events (SSE) con fallback a polling.
+- **🚀 Architettura Asincrona** — Elaborazione con Celery + Redis, scalabile e resiliente
 - **⚙️ Modalità Flessibili** — `light` (solo entità di rete) e `strict` (tutte le entità PII)
 - **🧭 Input Unificato** — testo inline e upload documenti disponibili nello stesso flusso
 - **🛡️ Preset Policy** — Profilo `SOC Logs` applicato automaticamente (massima copertura: rete, identità, path)
@@ -81,11 +82,15 @@ graph TD
    - Queue: `celery` (task dispatch)
    - Results: `celery-task-meta-*` (task status/results)
 
-3. **API Pattern (202 Accepted)**:
+3. **API Pattern (202 Accepted + SSE)**:
    ```
    POST /api/batches → 202 Accepted + task_id
-   GET /api/batches/{id}/status → {status, progress, result}
+   GET /api/batches/{id}/events → text/event-stream (SSE, aggiornamenti push)
+   GET /api/batches/{id}/status → {status, progress, result} (polling fallback)
    ```
+   Il frontend si connette all'endpoint SSE (`EventSource`) per ricevere aggiornamenti
+   in tempo reale senza polling. In caso di disconnessione, il fallback automatico al
+   polling garantisce la continuità operativa.
 
 4. **Task Lifecycle**:
    ```

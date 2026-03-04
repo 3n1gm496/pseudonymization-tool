@@ -106,7 +106,17 @@ Batch Management
 ├─ POST   /api/batches/{batch_id}/review        → Submit review decisions
 ├─ POST   /api/batches/{batch_id}/apply         → Apply pseudonymization
 ├─ GET    /api/batches/{batch_id}/download      → Download results ZIP
+├─ GET    /api/batches/{batch_id}/events        → SSE stream aggiornamenti stato (text/event-stream)
+├─ GET    /api/batches/{batch_id}/status        → Polling status (fallback SSE)
 ├─ DELETE /api/batches/{batch_id}               → Clean batch
+
+User Management (v5.1+)
+├─ GET    /api/users                            → Lista utenti (solo admin)
+├─ POST   /api/users                            → Crea utente (solo admin)
+├─ GET    /api/users/me                         → Utente corrente (username + ruolo)
+├─ GET    /api/users/{username}                 → Dettaglio utente (solo admin)
+├─ PUT    /api/users/{username}                 → Aggiorna ruolo/password (solo admin o self)
+├─ DELETE /api/users/{username}                 → Elimina utente (solo admin)
 
 Mapping Management (v4.0.4+)
 ├─ GET    /api/batches/{batch_id}/mapping       → Get encrypted mapping

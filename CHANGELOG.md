@@ -13,6 +13,11 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 
 ### Added
 
+- **Notifiche SSE per batch asincroni (PR #59)**
+  - Aggiunto endpoint `GET /api/batches/{id}/events` in `batches_routes.py` che emette eventi Server-Sent Events (`text/event-stream`) con aggiornamenti di stato in tempo reale.
+  - Il frontend (`Scanner.tsx`, `App.tsx`) si connette via `EventSource` e riceve aggiornamenti push senza polling. In caso di disconnessione, il fallback automatico al polling garantisce la continuità operativa.
+  - Aggiunto `backend/tests/test_sse_events.py` con **10 test** (7 asincroni + 3 HTTP) che coprono: evento `connected`, terminazione su `done`/`done_with_errors`/`error`, batch non trovato, deduplicazione eventi, transizioni di stato, Content-Type e Cache-Control.
+
 - **Sistema multi-utente con ruoli admin/operator (PR #58)**
   - Aggiunto `app/core/user_manager.py`: gestione utenti locali con SQLite, hash bcrypt, bootstrap automatico al primo avvio con password generata casualmente.
   - Aggiunto `app/api/users_routes.py`: endpoint REST per CRUD utenti (`GET/POST /api/users`, `GET /api/users/me`, `GET/PUT/DELETE /api/users/{username}`).
