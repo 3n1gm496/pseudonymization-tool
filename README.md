@@ -1,9 +1,9 @@
-# Local Pseudonymization Tool v5.2.0
+# Local Pseudonymization Tool v5.2.1
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/) [![React 18.2](https://img.shields.io/badge/React-18.2-61dafb.svg)](https://react.dev) [![FastAPI 0.110](https://img.shields.io/badge/FastAPI-0.110-009688.svg)](https://fastapi.tiangolo.com) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests: 811 passing](https://img.shields.io/badge/Tests-802%20passing-brightgreen.svg)](backend/tests/) [![Coverage: 87%](https://img.shields.io/badge/Coverage-82%25-brightgreen.svg)](https://github.com/3n1gm496/pseudonymization-tool/pull/37) [![Monitoring: Prometheus](https://img.shields.io/badge/Monitoring-Prometheus-orange.svg)](#-monitoring-prometheus)
+[![Tests: 850 passing](https://img.shields.io/badge/Tests-850%20passing-brightgreen.svg)](backend/tests/) [![Coverage: 86%](https://img.shields.io/badge/Coverage-86%25-brightgreen.svg)](backend/tests/) [![Monitoring: Prometheus](https://img.shields.io/badge/Monitoring-Prometheus-orange.svg)](#-monitoring-prometheus)
 
-Web application locale moderna per la pseudonimizzazione sicura di dati sensibili in documenti di testo, DOCX, XLSX, PDF e immagini. Interfaccia React con Tailwind CSS, darkmode supportato. Progettato per ambienti enterprise che richiedono massima sicurezza e capacità di operare completamente offline.
+Web application locale moderna per la pseudonimizzazione sicura di dati sensibili in documenti di testo, DOCX, XLSX, PDF e immagini. Interfaccia React con TypeScript e Tailwind CSS, dark mode supportato. Progettato per ambienti enterprise che richiedono massima sicurezza e capacità di operare completamente offline.
 
 🔗 **Repository:** [github.com/3n1gm496/pseudonymization-tool](https://github.com/3n1gm496/pseudonymization-tool)
 
@@ -12,17 +12,18 @@ Web application locale moderna per la pseudonimizzazione sicura di dati sensibil
 - **🔒 100% Offline** — Nessuna chiamata di rete esterna, tutti i dati rimangono sulla macchina locale
 - **📄 Multi-formato** — Supporto per TXT, CSV, MD, DOCX, XLSX, PDF (testuali), JPG, PNG
 - **🔐 Sicurezza Avanzata** — Mapping cifrato con passphrase AES-256-GCM, zero logging di dati sensibili
-- **👥 Autenticazione Ibrida** — Supporto per login locale (SQLite + bcrypt) e aziendale (LDAP), con ruoli `admin` e `operator` mappabili da gruppi LDAP.
-- **⚡ Notifiche Real-time** — Aggiornamenti di stato in tempo reale via Server-Sent Events (SSE) con fallback a polling.
+- **👥 Autenticazione Ibrida** — Supporto per login locale (SQLite + bcrypt) e aziendale (LDAP eDirectory), con ruoli `admin` e `operator` mappabili da gruppi LDAP. La scelta del metodo avviene esplicitamente nella pagina di login.
+- **⚡ Notifiche Real-time** — Aggiornamenti di stato in tempo reale via Server-Sent Events (SSE) con fallback automatico a polling.
 - **🚀 Architettura Asincrona** — Elaborazione con Celery + Redis, scalabile e resiliente
 - **⚙️ Modalità Flessibili** — `light` (solo entità di rete) e `strict` (tutte le entità PII)
-- **🧭 Input Unificato** — testo inline e upload documenti disponibili nello stesso flusso
+- **🧭 Input Unificato** — Testo inline e upload documenti disponibili nello stesso flusso
 - **🛡️ Preset Policy** — Profilo `SOC Logs` applicato automaticamente (massima copertura: rete, identità, path)
 - **👁️ Review Manuale** — Interfaccia per rivedere e approvare/rifiutare ogni pseudonimo proposto
 - **📊 Report Dettagliati** — HTML navigabile e JSON strutturato per audit trail
-- **✅ Readiness API** — endpoint `/api/ready` per distinguere processo attivo da servizio pronto
+- **📋 Audit Log** — Log persistente su SQLite di tutte le operazioni, consultabile dall'interfaccia admin
+- **✅ Readiness API** — Endpoint `/api/ready` per distinguere processo attivo da servizio pronto
 - **🎯 Deterministico** — Stesso input = stesso output con la stessa passphrase
-- **🔍 Arricchimento Dati LDAP** — Aumenta l'accuratezza del rilevamento PII usando un server LDAP come fonte dati contestuale per nomi e email.
+- **🔍 Arricchimento Dati LDAP** — Aumenta l'accuratezza del rilevamento PII usando un server LDAP come fonte dati contestuale per nomi e account aziendali.
 
 ---
 
@@ -35,6 +36,7 @@ Web application locale moderna per la pseudonimizzazione sicura di dati sensibil
 - [Configurazione](#-configurazione)
 - [Utilizzo](#-utilizzo)
 - [Integrazione AI](#-integrazione-con-ai)
+- [Documentazione](#-documentation-guide)
 - [Sicurezza](#-sicurezza-e-limitazioni)
 - [Sviluppo](#-sviluppo)
 - [Contributing](#-contributing)
@@ -49,7 +51,7 @@ Web application locale moderna per la pseudonimizzazione sicura di dati sensibil
 ```mermaid
 graph TD
     subgraph Browser["User Browser"]
-        Frontend["Frontend<br/>React + Tailwind CSS"]
+        Frontend["Frontend<br/>React + TypeScript + Tailwind CSS"]
     end
 
     subgraph Server["Infrastruttura Server"]
@@ -60,11 +62,17 @@ graph TD
         Prometheus["Prometheus<br/>Scrape /api/metrics"]
     end
 
+    subgraph Storage["Persistenza"]
+        SQLite["SQLite<br/>Utenti + Audit Log"]
+        StateDir["STATE_DIR<br/>Batch files, mapping.enc"]
+    end
+
     Frontend -- HTTPS --> Nginx
     Nginx -- HTTP --> Backend
     Backend -- Task --> Redis
     Worker -- Task --> Redis
     Backend -- Legge/Scrive --> Redis
+    Backend -- Legge/Scrive --> SQLite
     Prometheus -- Scrape --> Nginx
 ```
 
@@ -82,6 +90,7 @@ graph TD
 2. **Redis**: Message broker e result backend
    - Queue: `celery` (task dispatch)
    - Results: `celery-task-meta-*` (task status/results)
+   - Persistenza AOF abilitata per durabilità
 
 3. **API Pattern (202 Accepted + SSE)**:
    ```
@@ -97,7 +106,7 @@ graph TD
    ```
    PENDING → STARTED → SUCCESS/FAILURE
               ↓
-          PROGRESS updates (opzionale)
+          PROGRESS updates (via SSE)
    ```
 
 **🔧 Deployment Modes:**
@@ -131,16 +140,6 @@ echo "AUTH_SECRET=$(openssl rand -base64 48)" >> .env
 echo "FLOWER_USER=admin" >> .env
 echo "FLOWER_PASSWORD=$(openssl rand -base64 24)" >> .env
 
-# Esempio configurazione LDAP (opzionale)
-# echo "LDAP_ENABLED=true" >> .env
-# echo "LDAP_HOST=ldap.example.com" >> .env
-# echo "LDAP_PORT=636" >> .env
-# echo "LDAP_BIND_DN=cn=readonly,ou=users,dc=example,dc=com" >> .env
-# echo "LDAP_BIND_PASSWORD=secret" >> .env
-# echo "LDAP_SEARCH_BASE=ou=people,dc=example,dc=com" >> .env
-# echo "LDAP_ADMIN_GROUP_DN=cn=pseudonymizer-admins,ou=groups,dc=example,dc=com" >> .env
-# echo "LDAP_OPERATOR_GROUP_DN=cn=pseudonymizer-users,ou=groups,dc=example,dc=com" >> .env
-
 # 3. Avvio con Docker
 make start
 ```
@@ -148,17 +147,19 @@ make start
 > **Nota:** Il file `.env` contiene credenziali sensibili e non deve mai essere committato. È già incluso nel `.gitignore`.
 
 **Servizi avviati:**
-- `backend`: FastAPI app (port 8000)
+- `backend`: FastAPI app (porta 8000)
 - `redis`: Message broker (porta interna, non esposta sull'host)
 - `celery-worker`: Background task processor
 
 Accedi all'interfaccia: **http://localhost:8000**
 
+> **Primo accesso:** Al primo avvio viene creato automaticamente un utente `admin` con password generata casualmente, visibile nei log di avvio (`make logs`). Cambiare la password immediatamente tramite **Impostazioni → Utenti**.
+
 **Comandi utili:**
 ```bash
-make logs      # Visualizza i log
-make stop      # Ferma il servizio
-make health    # Verifica lo stato
+make logs       # Visualizza i log
+make stop       # Ferma il servizio
+make health     # Verifica lo stato
 make monitoring # Avvia con Flower UI su http://localhost:5555
 ```
 
@@ -189,8 +190,9 @@ Per un ambiente di produzione, è fornito un file `docker-compose.prod.yml` che 
 
 **Funzionalità aggiuntive del setup di produzione:**
 - **Terminazione TLS/HTTPS**: nginx gestisce i certificati SSL.
-- **Security Header**: Aggiunta automatica di header come `Strict-Transport-Security` e `X-Content-Type-Options`.
+- **Security Headers**: Aggiunta automatica di header come `Strict-Transport-Security` e `X-Content-Type-Options`.
 - **Rate Limiting a livello IP**: Protezione contro attacchi di forza bruta o DoS.
+- **SSE Support**: nginx configurato con `proxy_buffering off` per l'endpoint SSE.
 - **Certificati Self-Signed**: Script per generare certificati di sviluppo inclusi.
 
 ### Avvio in Produzione
@@ -243,29 +245,23 @@ La configurazione avviene tramite **variabili d'ambiente**, definite nel file `.
 | `REDIS_PASSWORD` | Password per l'accesso a Redis. | **Obbligatoria** |
 | `WEB_CONCURRENCY` | Numero di worker Uvicorn. Aumentare solo con Redis abilitato. | `1` |
 | `PROD_FRONTEND_URL` | URL pubblico del frontend (per CORS in produzione). | `""` |
-| `LDAP_ENABLED` | Abilita l'autenticazione e l'arricchimento dati via LDAP. | `false` |
-| `LDAP_HOST` | Indirizzo del server LDAP. | `""` |
-| `LDAP_PORT` | Porta del server LDAP (es. 389 o 636 per LDAPS). | `389` |
-| `LDAP_USE_TLS` | Usa TLS per la connessione LDAP. | `false` |
-| `LDAP_BIND_DN` | Distinguished Name (DN) per l'utente di servizio che esegue le query. | `""` |
-| `LDAP_BIND_PASSWORD` | Password per l'utente di servizio. | `""` |
-| `LDAP_SEARCH_BASE` | Base DN da cui iniziare la ricerca degli utenti. | `""` |
-| `LDAP_ADMIN_GROUP_DN` | DN del gruppo LDAP i cui membri avranno il ruolo `admin`. | `""` |
-| `LDAP_OPERATOR_GROUP_DN`| DN del gruppo LDAP i cui membri avranno il ruolo `operator`. | `""` |
+
+La configurazione LDAP (sia per l'arricchimento dati che per l'autenticazione) avviene tramite l'interfaccia web in **Impostazioni → LDAP** ed è salvata nel database persistente. Vedi [docs/RUNBOOK.md](docs/RUNBOOK.md) per la guida alla configurazione LDAP.
 
 ---
 
 ## 💡 Utilizzo
 
-1. **Upload**: Trascina i file da processare nell'area di upload
-2. **Configura**: Inserisci una **passphrase robusta** (essenziale per la sicurezza del mapping). Il profilo di scansione `SOC Logs` viene applicato automaticamente.
-3. **Avvia Scansione**: Il backend analizza i file e rileva le entità sensibili.
-4. **Review**: Rivedi i "finding" proposti, approva o modifica gli pseudonimi.
-5. **Applica**: Applica le modifiche per generare i file pseudonimizzati.
-6. **Risultati**: Nella sezione Results accedi a:
+1. **Login**: Accedi con le credenziali locali oppure, se configurato, con le credenziali aziendali LDAP.
+2. **Upload**: Trascina i file da processare nell'area di upload.
+3. **Configura**: Inserisci una **passphrase robusta** (essenziale per la sicurezza del mapping). Il profilo di scansione `SOC Logs` viene applicato automaticamente.
+4. **Avvia Scansione**: Il backend analizza i file e rileva le entità sensibili. Lo stato avanza in tempo reale via SSE.
+5. **Review**: Rivedi i "finding" proposti, approva o modifica gli pseudonimi.
+6. **Applica**: Applica le modifiche per generare i file pseudonimizzati.
+7. **Risultati**: Nella sezione Results accedi a:
    - **Testo pseudonimizzato** — Copia negli appunti o scarica come .txt
-   - **Passphrase visibile** — Mostri/nascondi e copia per l'uso successivo
-   - **File mapping.enc** — Scarica il mapping cifrato (essenziale per reversi)
+   - **Passphrase visibile** — Mostra/nascondi e copia per l'uso successivo
+   - **File mapping.enc** — Scarica il mapping cifrato (essenziale per il revert)
    - **ZIP finale** (per file) — Contiene documenti pseudonimizzati + report.html + report.json + mapping.enc
 
 ---
@@ -308,7 +304,7 @@ Vuoi inviare i tuoi dati a un modello AI (ChatGPT, Claude, LLaMA) senza esporre 
 - **[docs/01_PRD.md](docs/01_PRD.md)** — Product requirements, caso d'uso e stack tecnico.
 
 ### Capire l'Architettura
-- **[docs/02_Technical_Architecture.md](docs/02_Technical_Architecture.md)** — Architettura backend, flussi, dipendenze moduli.
+- **[docs/02_Technical_Architecture.md](docs/02_Technical_Architecture.md)** — Architettura backend, flussi, dipendenze moduli, autenticazione ibrida LDAP, SSE.
 - **[docs/03_Data_Model.md](docs/03_Data_Model.md)** — Schemi Pydantic e flusso dei dati.
 - **[docs/06_Detector_Strategy.md](docs/06_Detector_Strategy.md)** — Strategia di detection (regex, dict, NER, pattern custom).
 
@@ -327,11 +323,13 @@ Vuoi inviare i tuoi dati a un modello AI (ChatGPT, Claude, LLaMA) senza esporre 
 - **[docs/17_Deployment_Profiles.md](docs/17_Deployment_Profiles.md)** — Profili deployment (DEV, STAGING, PROD), configurazione per ambiente.
 - **[docs/18_Deployment_Guide.md](docs/18_Deployment_Guide.md)** — Guida completa al deployment: Docker Compose, Kubernetes, Systemd.
 - **[docs/16_Rate_Limit_Robustness.md](docs/16_Rate_Limit_Robustness.md)** — Rate limiting, cleanup auto, memory bounds.
+- **[docs/RUNBOOK.md](docs/RUNBOOK.md)** — Runbook operativo: LDAP, SSE, multi-utente, troubleshooting.
 
 ### Planning & Roadmap
 - **[docs/09_Roadmap.md](docs/09_Roadmap.md)** — Roadmap prodotto.
 - **[docs/10_Backlog.md](docs/10_Backlog.md)** — Backlog item e priorità.
-- **[docs/RELEASES.md](docs/RELEASES.md)** — Changelog, release notes e versioni.
+- **[docs/RELEASES.md](docs/RELEASES.md)** — Release notes e versioni.
+- **[CHANGELOG.md](CHANGELOG.md)** — Changelog dettagliato per versione.
 
 ---
 
@@ -340,10 +338,12 @@ Vuoi inviare i tuoi dati a un modello AI (ChatGPT, Claude, LLaMA) senza esporre 
 - **Passphrase**: La sicurezza del mapping dipende dalla robustezza della passphrase. Usane una lunga e complessa (min 12 char, con maiuscole/minuscole/numeri/simboli).
 - **Cookie di sessione**: Il backend imposta il cookie auth con flag `Secure` abilitato di default. Solo in sviluppo locale HTTP puoi disabilitarlo esplicitamente con `AUTH_SESSION_COOKIE_SECURE=false`.
 - **Gestione Utenti**: Al primo avvio viene creato automaticamente un utente `admin` con password generata casualmente (visibile nei log di avvio). Cambiare la password immediatamente tramite **Impostazioni → Utenti**. Gli utenti `operator` hanno accesso in sola lettura alle impostazioni e non possono gestire altri utenti. Il database utenti è salvato in `STATE_DIR/users.db` (volume persistente Docker).
+- **Autenticazione LDAP**: L'autenticazione LDAP usa il bind sull'attributo `cn` dell'oggetto `inetOrgPerson` (compatibile con Novell/NetIQ eDirectory). I ruoli sono determinati dall'appartenenza ai gruppi LDAP configurati. Se il server LDAP non è raggiungibile, solo gli utenti locali possono accedere (fail-safe).
+- **TLS LDAP**: In produzione, abilitare `tls_validate_cert` nella configurazione LDAP per prevenire attacchi MITM. Richede un CA bundle valido per il server eDirectory.
 - **OCR**: La qualità dell'OCR dipende dalla risoluzione e dalla chiarezza dell'immagine. Testo sfocato o scritto a mano potrebbe non essere rilevato.
 - **Formule XLSX**: Le formule vengono ignorate e non pseudonimizzate per evitare di corrompere i fogli di calcolo.
-- **Log di Installazione**: In caso di problemi durante l'installazione delle dipendenze, il log completo viene salvato in `install.log`.
 - **Mapping.enc**: Una volta persa la passphrase, il file mapping.enc non è più recuperabile. Conservarlo in un luogo sicuro.
+
 ---
 
 ## 🛠️ Sviluppo
@@ -352,7 +352,7 @@ Vuoi inviare i tuoi dati a un modello AI (ChatGPT, Claude, LLaMA) senza esporre 
 
 ```bash
 # Crea virtual environment
-python3 -m venv .venv  # Python 3.11+ richiesto (3.12 usato in produzione)
+python3 -m venv .venv  # Python 3.11+ richiesto (3.12 testato in CI)
 source .venv/bin/activate  # Linux/macOS
 # oppure .venv\Scripts\activate  # Windows
 
@@ -360,9 +360,9 @@ source .venv/bin/activate  # Linux/macOS
 pip install -r backend/requirements.txt
 ```
 
-### Frontend React (v5.0+)
+### Frontend React + TypeScript
 
-Il frontend è stato modernizzato con **React 18**, **Tailwind CSS** e **dark mode**.
+Il frontend è scritto in **React 18**, **TypeScript strict mode**, **Tailwind CSS** e **dark mode**.
 
 #### Setup Frontend
 
@@ -383,7 +383,7 @@ cd frontend
 npm run dev
 ```
 
-Accedi a: `http://localhost:5173` (con API proxy a backend)
+Accedi a: `http://localhost:5173` (con API proxy a backend su `:8000`)
 
 #### Build per Production
 
@@ -392,7 +392,7 @@ cd frontend
 npm run build
 ```
 
-Crea `frontend/dist/` che FastAPI servira' automaticamente in produzione.
+Crea `frontend/dist/` che FastAPI servirà automaticamente in produzione.
 
 #### Dev Mode (Full Stack)
 
@@ -400,11 +400,11 @@ Crea `frontend/dist/` che FastAPI servira' automaticamente in produzione.
 make dev
 ```
 
-Avvia sia backend che frontend in parallelo con HMR (Hot Module Reload). Backend su `:8000`, Frontend su `:5173` con hot reload.
+Avvia sia backend che frontend in parallelo con HMR (Hot Module Reload). Backend su `:8000`, Frontend su `:5173`.
 
-Alternativamente, manuale:
+Alternativamente:
 ```bash
-./scripts/dev-stack.sh  # se preferisci lo script diretto
+./scripts/dev-stack.sh
 ```
 
 #### Caratteristiche Frontend
@@ -422,50 +422,40 @@ Alternativamente, manuale:
 - Findings table con review interattivo
 - Custom pseudonym personalizzato
 - Download ZIP con report (HTML + JSON)
+- Notifiche real-time via SSE durante la scansione
 
 🔧 **Tech Stack**
 - React 18 con Hooks
+- TypeScript strict mode
 - Tailwind CSS v3 (dark mode)
-- Vite bundler (velocissimo)
-- Axios for API calls
+- Vite bundler
+- Axios per le chiamate API
 - Context API per state management
-
-
-
-```bash
-cd backend
-pytest tests/ -v
-pytest tests/test_api_contract.py -v
-```
-
-### Endpoint Operativi
-
-```bash
-curl http://127.0.0.1:8000/api/health
-curl http://127.0.0.1:8000/api/ready
-curl http://127.0.0.1:8000/api/settings/policies
-curl http://127.0.0.1:8000/api/settings/policies/SOC%20Logs
-```
 
 ### Testing
 
-**Test Suite Status:**
-- ✅ **483 test passanti, 11 skippati**
-  - `test_functional.py`: 49 test (detectors, parsers, sicurezza, crypto)
-  - `test_auth_complete.py`: suite completa autenticazione e JWT
+**Test Suite Status (v5.2.1):**
+- ✅ **803 test backend passanti, 11 skippati** (Python 3.11 e 3.12)
+  - `test_functional.py`: detector, parser, sicurezza, crypto
+  - `test_auth_complete.py`: suite completa autenticazione locale e JWT
+  - `test_ldap_auth.py`: autenticazione LDAP ibrida (39 test, mock eDirectory)
   - `test_csrf_middleware.py`: protezione CSRF globale
   - `test_api_contract.py`: contratti API (202 Accepted pattern)
-  - `test_parser_limitations.py`: edge case parser
-- 📊 **Coverage: 87%** — Moduli critici:
-  - `crypto.py`: 95% (eccellente)
-  - `schemas.py`: 98% (eccellente)
-  - `safety.py`: 92% (eccellente)
-  - `auth.py`: 79% (buono)
-  - `pipeline.py`: 71% (buono)
+  - `test_audit.py`: audit log persistente su SQLite
+- ✅ **47 test frontend passanti** (vitest)
+- 📊 **Coverage backend: 86%** — Moduli critici:
+  - `crypto.py`: 95%
+  - `schemas.py`: 100%
+  - `exceptions.py`: 100%
+  - `safety.py`: 92%
+  - `ldap_auth.py`: 88%
+  - `auth.py`: 79%
+  - `pipeline.py`: 73%
 
 **Test Infrastructure:**
 - Celery EAGER mode per esecuzione sincrona in test (no broker necessario)
 - Redis mocking con fallback in-memory
+- LDAP mocking con `unittest.mock` (no server LDAP necessario)
 - Test di integrazione multicontainer separati (`pytest -m integration`, richiede Docker)
 
 ```bash
@@ -479,9 +469,23 @@ pytest tests/ -m "not integration" --cov=app --cov-report=html
 # Test di integrazione (richiede Docker Compose attivo)
 pytest tests/ -m integration -v
 
+# Test frontend
+cd frontend
+npx vitest run
+
 # Tramite Makefile
-make test       # test unitari
+make test       # test unitari backend
 make test-cov   # con coverage report
+```
+
+### Endpoint Operativi
+
+```bash
+curl http://127.0.0.1:8000/api/health
+curl http://127.0.0.1:8000/api/ready
+curl http://127.0.0.1:8000/api/settings/policies
+curl http://127.0.0.1:8000/api/settings/policies/SOC%20Logs
+curl http://127.0.0.1:8000/api/auth/ldap-status  # Stato connessione LDAP (pubblico)
 ```
 
 ### Struttura Progetto
@@ -491,45 +495,57 @@ pseudonymization-tool/
 ├── backend/                    # FastAPI backend
 │   ├── app/
 │   │   ├── api/               # API routes (/api/*)
+│   │   │   ├── auth_routes.py     # Login, logout, ldap-status
+│   │   │   ├── batches_routes.py  # Batch processing + SSE events
+│   │   │   ├── settings_routes.py # Configurazione LDAP, policy, profili
+│   │   │   └── users_routes.py    # Gestione utenti multi-user
 │   │   ├── core/              # Business logic
-│   │   ├── detectors/         # Entity detection (regex, dict, SOC)
+│   │   │   ├── auth.py            # Autenticazione ibrida (locale + LDAP)
+│   │   │   ├── ldap_auth.py       # Autenticazione LDAP eDirectory
+│   │   │   ├── ldap_client.py     # LDAP detector data enrichment
+│   │   │   ├── audit.py           # Audit log persistente SQLite
+│   │   │   └── user_manager.py    # Gestione utenti SQLite + bcrypt
+│   │   ├── detectors/         # Entity detection (regex, dict, NER, SOC)
 │   │   ├── parsers/           # Document parsers (PDF, DOCX, XLSX, IMG)
 │   │   ├── pseudonymizer/     # Transformation engine
-│   │   ├── mapping/           # Crypto (AES-256 encryption)
-│   │   ├── report/            # Report generation
+│   │   ├── mapping/           # Crypto (AES-256-GCM encryption)
+│   │   ├── report/            # Report generation (HTML + JSON)
 │   │   └── models/            # Pydantic schemas
-│   ├── config/                # Configuration files
-│   ├── tests/                 # Unit & integration tests
-│   └── requirements.txt
-├── frontend/                  # React 18 + Tailwind CSS
+│   ├── tests/                 # Unit & integration tests (803 test)
+│   ├── requirements.txt       # Dipendenze Python
+│   └── requirements.lock      # Lock file per build riproducibili
+├── frontend/                  # React 18 + TypeScript + Tailwind CSS
 │   ├── src/
-│   │   ├── components/        # React components
-│   │   │   ├── Header.jsx
-│   │   │   ├── Scanner.jsx
-│   │   │   ├── FindingsTable.jsx
-│   │   │   └── Results.jsx
-│   │   ├── context/           # Context API (dark mode)
+│   │   ├── components/        # React components (.tsx)
+│   │   │   ├── LoginForm.tsx      # Login con scelta metodo locale/LDAP
+│   │   │   ├── Scanner.tsx        # Scanner con SSE real-time
+│   │   │   ├── LDAPSettings.tsx   # Configurazione LDAP completa
+│   │   │   ├── UserManagement.tsx # Gestione utenti admin
+│   │   │   ├── AuditLog.tsx       # Visualizzazione audit log
+│   │   │   └── ...
+│   │   ├── context/           # Context API (ThemeContext)
 │   │   ├── hooks/             # Custom hooks (useToast)
-│   │   ├── App.jsx            # Root component
-│   │   ├── main.jsx           # Entry point
-│   │   └── index.css          # Tailwind imports
-│   ├── dist/                  # Build output (production)
+│   │   ├── test/              # Test vitest (47 test)
+│   │   ├── utils/             # Utility (axios, text-export)
+│   │   ├── App.tsx            # Root component
+│   │   ├── main.tsx           # Entry point
+│   │   └── types.ts           # TypeScript interfaces
 │   ├── index.html
 │   ├── package.json
-│   ├── vite.config.js
-│   └── tailwind.config.js
+│   ├── tsconfig.json
+│   └── vite.config.ts
+├── nginx/
+│   └── nginx.conf             # Reverse proxy con SSE support
+├── docs/                      # Documentazione tecnica e operativa
 ├── scripts/
 │   ├── dev-stack.sh           # Development mode helper
-│   ├── verify_features.py     # Feature verification script
 │   └── legacy/                # Venv-based startup scripts (air-gapped)
-│       ├── start.sh           # Linux/macOS startup
-│       ├── start.bat          # Windows startup
-│       ├── prepare_offline.sh # Offline preparation
-│       ├── prepare_offline.bat
-│       └── README.md          # Legacy installation guide
-├── docs/                      # Documentation & Roadmap
+├── .env.example               # Template variabili d'ambiente
 ├── Makefile                   # Universal command interface
-├── docker-compose.yml         # Docker orchestration
+├── docker-compose.yml         # Docker orchestration (dev)
+├── docker-compose.prod.yml    # Docker orchestration (produzione con nginx)
+├── Dockerfile                 # Multi-stage build
+├── CHANGELOG.md               # Changelog dettagliato
 └── README.md
 ```
 
@@ -560,4 +576,5 @@ Questo progetto è distribuito sotto licenza MIT. Vedi il file `LICENSE` per mag
 - **Tesseract OCR** per il riconoscimento ottico dei caratteri
 - **FastAPI** per il framework web
 - **python-docx, openpyxl, pypdf** per il parsing dei documenti
+- **ldap3** per l'integrazione con server LDAP/eDirectory
 - Community open source per i contributi e il feedback

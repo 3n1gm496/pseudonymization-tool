@@ -1,16 +1,18 @@
 """
-Settings & LDAP Configuration Router — Local Pseudonymization Tool v5.0.0
+Settings & LDAP Configuration Router — Local Pseudonymization Tool v5.2.1
 
 Flussi:
-  - GET/POST /api/settings/state      → persistenza config server-side
-  - GET/POST /api/settings/ldap       → config LDAP con diagnostica
-  - POST /api/settings/ldap/test      → test connessione LDAP
-  - POST /api/settings/ldap/refresh   → refresh cache LDAP
-  - GET /api/settings/dictionaries    → status dizionari
-  - POST /api/settings/dictionaries/reload → ricarica dizionari
-  - GET /api/settings/entity-types    → lista tipi entità
-  - GET /api/settings/policies        → lista preset policy
-  - GET /api/settings/policies/{name} → dettagli policy specifiche
+  - GET/POST /api/settings/state         → persistenza config server-side
+  - GET      /api/settings/ldap          → config LDAP (campi sensibili redatti)
+  - POST     /api/settings/ldap          → salva config LDAP con validazione campi auth
+  - POST     /api/settings/ldap/test     → test connessione LDAP (detector/arricchimento)
+  - POST     /api/settings/ldap/test-auth → test autenticazione LDAP con credenziali utente
+  - POST     /api/settings/ldap/refresh  → refresh cache LDAP
+  - GET      /api/settings/dictionaries  → status dizionari
+  - POST     /api/settings/dictionaries/reload → ricarica dizionari
+  - GET      /api/settings/entity-types  → lista tipi entità
+  - GET      /api/settings/policies      → lista preset policy
+  - GET      /api/settings/policies/{name} → dettagli policy specifiche
 """
 
 import json
@@ -21,11 +23,21 @@ from app.core.config import STATE_FILE
 from app.core.policies import get_enabled_entity_types, get_policy
 from app.models.schemas import EntityType, LdapConfig, PresetName
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
 
 _STATE_FILE = STATE_FILE
+
+# Campi sensibili che non devono essere restituiti nel GET
+_LDAP_SENSITIVE_FIELDS = {"bind_password"}
+
+# Campi auth che vengono parzialmente oscurati nel GET (mostrati come "***" se configurati)
+_LDAP_AUTH_PARTIAL_REDACT = {"auth_admin_group_dn", "auth_operator_group_dn"}
+
+# Ruoli validi per auth_default_role
+_VALID_ROLES = {"admin", "operator"}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -40,6 +52,59 @@ def _resolve_preset(raw_value: str) -> PresetName:
         if preset.value.lower() == value.lower():
             return preset
     raise HTTPException(status_code=400, detail=f"Preset non valido: '{raw_value}'.")
+
+
+def _redact_ldap_response(cfg: LdapConfig) -> dict:
+    """
+    Prepara la risposta GET per la configurazione LDAP.
+
+    - Rimuove completamente i campi sensibili (bind_password).
+    - Oscura parzialmente i group DN se configurati (mostra solo se presenti,
+      non il valore completo, per evitare information disclosure).
+    """
+    d = cfg.model_dump()
+    # Rimuovi completamente la password
+    for field in _LDAP_SENSITIVE_FIELDS:
+        d.pop(field, None)
+    # I group DN sono configurati ma non esposti in chiaro: sostituisci con indicatore
+    for field in _LDAP_AUTH_PARTIAL_REDACT:
+        if d.get(field):
+            d[field] = "***configured***"
+    return d
+
+
+def _validate_ldap_auth_fields(config: LdapConfig) -> None:
+    """
+    Valida i campi di autenticazione LDAP quando auth_enabled è True.
+
+    Raises:
+        HTTPException 422: Se i campi obbligatori per l'auth non sono configurati.
+    """
+    if not config.auth_enabled:
+        return
+
+    errors = []
+
+    # Se auth è abilitato, serve almeno un base DN per la ricerca utenti
+    if not config.auth_user_base_dn and not config.base_dn:
+        errors.append("auth_user_base_dn o base_dn devono essere configurati quando auth_enabled è True.")
+
+    # Se auth è abilitato, serve il bind di servizio per cercare gli utenti
+    if not config.bind_dn:
+        errors.append("bind_dn è obbligatorio per l'autenticazione LDAP (necessario per la ricerca utenti).")
+
+    # Valida auth_default_role
+    if config.auth_default_role and config.auth_default_role not in _VALID_ROLES:
+        errors.append(
+            f"auth_default_role deve essere uno tra: {', '.join(_VALID_ROLES)}. "
+            f"Ricevuto: '{config.auth_default_role}'."
+        )
+
+    if errors:
+        raise HTTPException(
+            status_code=422,
+            detail={"message": "Configurazione autenticazione LDAP non valida.", "errors": errors},
+        )
 
 
 # Helper functions moved to app.core.audit module
@@ -57,8 +122,8 @@ async def get_server_state():
         try:
             data = json.loads(_STATE_FILE.read_text(encoding="utf-8"))
             return data
-        except Exception:
-            pass
+        except Exception as exc:  # nosec B110
+            logger.debug("get_server_state: impossibile leggere il file di stato: %s", exc)
     return {"mode": "light", "ldap": None, "sessions_metadata": []}
 
 
@@ -104,7 +169,13 @@ async def reload_dictionaries():
 
 @router.get("/settings/ldap")
 async def get_ldap_config():
-    """Get current LDAP configuration (password redacted)."""
+    """
+    Restituisce la configurazione LDAP corrente con campi sensibili redatti.
+
+    - bind_password: rimosso completamente dalla risposta.
+    - auth_admin_group_dn, auth_operator_group_dn: sostituiti con '***configured***'
+      se configurati, per indicarne la presenza senza esporre il valore.
+    """
     from app.detectors.ldap_detector import get_ldap_cache
     from app.detectors.ldap_detector import get_ldap_config as _get
 
@@ -113,8 +184,7 @@ async def get_ldap_config():
     diag = cache.get_diagnostics()
     if not cfg:
         return {"enabled": False, "configured": False, "diagnostics": diag}
-    d = cfg.model_dump()
-    d.pop("bind_password", None)
+    d = _redact_ldap_response(cfg)
     d["configured"] = True
     d["diagnostics"] = diag
     return d
@@ -122,7 +192,15 @@ async def get_ldap_config():
 
 @router.post("/settings/ldap")
 async def set_ldap_config(config: LdapConfig):
-    """Configure LDAP settings."""
+    """
+    Salva la configurazione LDAP.
+
+    Esegue la validazione dei campi di autenticazione se auth_enabled è True:
+    - Verifica che auth_user_base_dn o base_dn siano configurati.
+    - Verifica che bind_dn sia presente (necessario per la ricerca utenti al login).
+    - Verifica che auth_default_role sia un valore valido ('admin' o 'operator').
+    """
+    _validate_ldap_auth_fields(config)
     from app.detectors.ldap_detector import configure_ldap
 
     configure_ldap(config)
@@ -132,7 +210,8 @@ async def set_ldap_config(config: LdapConfig):
 @router.post("/settings/ldap/test")
 async def test_ldap():
     """
-    Test LDAP connection and return diagnostics.
+    Testa la connessione LDAP per l'arricchimento dati (detector).
+    Verifica che il bind di servizio funzioni e che la ricerca utenti restituisca risultati.
     """
     from app.detectors.ldap_detector import get_ldap_cache
 
@@ -146,10 +225,79 @@ async def test_ldap():
     }
 
 
+class LdapAuthTestRequest(BaseModel):
+    """Corpo della richiesta per il test di autenticazione LDAP."""
+
+    username: str
+    password: str
+
+
+@router.post("/settings/ldap/test-auth")
+async def test_ldap_auth(request: LdapAuthTestRequest):
+    """
+    Testa l'autenticazione LDAP con le credenziali di un utente reale.
+
+    Questo endpoint è distinto da /test (che verifica il detector).
+    Esegue l'intero flusso di autenticazione:
+    1. Ricerca dell'utente per cn nell'objectClass inetOrgPerson.
+    2. Bind con le credenziali dell'utente.
+    3. Verifica dell'appartenenza ai gruppi configurati.
+    4. Restituzione del ruolo determinato.
+
+    Utile per verificare che la configurazione auth LDAP sia corretta prima
+    di abilitarla in produzione.
+
+    Nota: Richiede che auth_enabled sia True nella configurazione LDAP.
+    """
+    from app.core.ldap_auth import authenticate_ldap
+    from app.detectors.ldap_detector import get_ldap_config as _get
+
+    cfg = _get()
+    if not cfg:
+        raise HTTPException(
+            status_code=400,
+            detail="LDAP non configurato. Configurare prima le impostazioni LDAP.",
+        )
+    if not cfg.auth_enabled:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Autenticazione LDAP non abilitata. "
+                "Abilitare 'auth_enabled' nella configurazione LDAP prima di eseguire il test."
+            ),
+        )
+    if not request.username or not request.password:
+        raise HTTPException(
+            status_code=422,
+            detail="username e password sono obbligatori per il test di autenticazione.",
+        )
+
+    role = authenticate_ldap(request.username, request.password)
+    if role is not None:
+        return {
+            "ok": True,
+            "authenticated": True,
+            "role": role,
+            "message": (
+                f"Autenticazione LDAP riuscita per l'utente '{request.username}'. " f"Ruolo assegnato: '{role}'."
+            ),
+        }
+    else:
+        return {
+            "ok": False,
+            "authenticated": False,
+            "role": None,
+            "message": (
+                f"Autenticazione LDAP fallita per l'utente '{request.username}'. "
+                "Verificare le credenziali, la configurazione LDAP e i log del server."
+            ),
+        }
+
+
 @router.post("/settings/ldap/refresh")
 async def refresh_ldap():
     """
-    Force LDAP cache refresh and return diagnostics.
+    Forza il refresh della cache LDAP per l'arricchimento dati (detector).
     """
     from app.detectors.ldap_detector import get_ldap_cache
 
