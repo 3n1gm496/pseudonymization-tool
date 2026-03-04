@@ -679,7 +679,7 @@ def mock_redis_for_tests():
 - `auth.py`: 95.10% coverage → Session management + JWT
 - `crypto.py`: 94.92% coverage → AES-256-GCM encryption
 - `schemas.py`: 96.48% coverage → Request validation
-- `batch_manager.py`: 64.67% coverage → Lifecycle + TOCTOU fixes
+- `batch_manager.py` + `batch_redis.py` + `batch_persistence.py`: Lifecycle + TOCTOU fixes (refactored in PR #55 — layer Redis e filesystem estratti in moduli separati)
 - `pipeline.py`: 70%+ coverage (CI threshold)
 
 **Test Infrastructure:**
