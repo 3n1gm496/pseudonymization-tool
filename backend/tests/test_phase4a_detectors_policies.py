@@ -53,7 +53,7 @@ def test_regex_partita_iva_context_capture_group():
 
 
 def test_regex_validators_for_cf_and_piva():
-    assert _validate_codice_fiscale("RSSMRA85M01H501Z") is True
+    assert _validate_codice_fiscale("RSSMRA85M01H501Q") is True
     assert _validate_codice_fiscale("RSSMRA85M01H501") is False
 
     assert _validate_partita_iva("01114601006") is True
