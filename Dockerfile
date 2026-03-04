@@ -40,7 +40,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/app/backend
 
 LABEL maintainer="Pseudonymization Tool" \
-      version="5.0.0" \
+      version="5.2.1" \
       description="Self-contained pseudonymization service with React UI"
 
 # Install system dependencies (Tesseract OCR, curl for healthcheck)

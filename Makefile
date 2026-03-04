@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════════════════════════
-# Pseudonymization Tool v5.0.0 — Makefile
+# Pseudonymization Tool v5.2.1 — Makefile
 # ═══════════════════════════════════════════════════════════════════════════════
 
 .PHONY: help start stop restart logs dev test clean install-dev
@@ -11,7 +11,7 @@
 help: ## Show this help message
 	@echo ""
 	@echo "╔══════════════════════════════════════════════════════════════════╗"
-	@echo "║      Pseudonymization Tool v5.0.0 — Quick Commands               ║"
+	@echo "║      Pseudonymization Tool v5.2.1 — Quick Commands               ║"
 	@echo "╚══════════════════════════════════════════════════════════════════╝"
 	@echo ""
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -128,7 +128,7 @@ ready: ## Check if service is ready
 # ─── Utility ──────────────────────────────────────────────────────────────────
 
 version: ## Show tool version
-	@echo "Pseudonymization Tool v5.0.0"
+	@echo "Pseudonymization Tool v5.2.1"
 	@echo "Python: $$(python3 --version 2>&1 || echo 'Not installed')"
 	@echo "Docker: $$(docker --version 2>&1 || echo 'Not installed')"
 	@echo "Node:   $$(node --version 2>&1 || echo 'Not installed')"

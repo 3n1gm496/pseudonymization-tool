@@ -7,6 +7,7 @@ LdapClient._parse_attrs, LdapClient._parse_entry_obj, LdapClient.query_users
 get_diagnostics, refresh_now, test_connection, stop), LdapPersonDetector.detect,
 configure_ldap, get_ldap_cache, get_ldap_config.
 """
+
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -19,18 +20,12 @@ from app.detectors.ldap_client import (
     canonicalize_account,
     canonicalize_person_name,
 )
-from app.detectors.ldap_detector import (
-    LdapCache,
-    LdapPersonDetector,
-    configure_ldap,
-    get_ldap_cache,
-    get_ldap_config,
-)
+from app.detectors.ldap_detector import LdapCache, LdapPersonDetector, configure_ldap, get_ldap_cache, get_ldap_config
 from app.models.schemas import LdapConfig
 from app.parsers.base import TextChunk
 
-
 # ─── Utility functions ────────────────────────────────────────────────────────
+
 
 def test_nfkc_empty():
     assert _nfkc("") == ""
@@ -63,6 +58,7 @@ def test_parse_cn_from_dn_no_cn():
 
 # ─── LdapDiagnostics ──────────────────────────────────────────────────────────
 
+
 def test_ldap_diagnostics_to_dict():
     diag = LdapDiagnostics(
         scope_used="SUBTREE",
@@ -89,6 +85,7 @@ def test_ldap_diagnostics_to_dict():
 
 # ─── LdapEntry ────────────────────────────────────────────────────────────────
 
+
 def test_ldap_entry_fields():
     entry = LdapEntry(
         given_name="alice",
@@ -111,6 +108,7 @@ def test_ldap_entry_empty_fields():
 
 
 # ─── LdapClient._parse_attrs ──────────────────────────────────────────────────
+
 
 def _make_ldap_config(enabled=True):
     return LdapConfig(
@@ -178,6 +176,7 @@ def test_parse_attrs_cn_fallback_from_dn():
 
 # ─── LdapClient._parse_entry_obj ──────────────────────────────────────────────
 
+
 def test_parse_entry_obj_full():
     config = _make_ldap_config()
     client = LdapClient(config)
@@ -225,6 +224,7 @@ def test_parse_entry_obj_bracket_values_ignored():
 
 # ─── LdapClient.query_users — config disabilitata ─────────────────────────────
 
+
 def test_query_users_disabled_config():
     config = _make_ldap_config(enabled=False)
     client = LdapClient(config)
@@ -244,6 +244,7 @@ def test_query_users_ldap3_not_installed():
 
 
 # ─── LdapCache ────────────────────────────────────────────────────────────────
+
 
 def test_ldap_cache_get_lookup_sets_empty():
     cache = LdapCache()
@@ -289,7 +290,9 @@ def test_ldap_cache_do_refresh_with_mock_client():
     cache._config = config
 
     mock_entries = [
-        LdapEntry(given_name="alice", surname="smith", cn="asmith", full_name="alice smith", full_name_rev="smith alice"),
+        LdapEntry(
+            given_name="alice", surname="smith", cn="asmith", full_name="alice smith", full_name_rev="smith alice"
+        ),
         LdapEntry(given_name="bob", surname="jones", cn="bjones", full_name="bob jones", full_name_rev="jones bob"),
     ]
     mock_diag = LdapDiagnostics(parsed_users_count_total=2, pages_count=1, elapsed_ms=10)
@@ -338,6 +341,7 @@ def test_ldap_cache_test_connection_success():
 
 # ─── configure_ldap / get_ldap_cache / get_ldap_config ───────────────────────
 
+
 def test_configure_ldap_and_getters():
     config = _make_ldap_config(enabled=False)
     configure_ldap(config)
@@ -346,6 +350,7 @@ def test_configure_ldap_and_getters():
 
 
 # ─── LdapPersonDetector ───────────────────────────────────────────────────────
+
 
 def _make_chunk(text: str) -> TextChunk:
     return TextChunk(text=text, source_ref="riga 1", line_number=1)
@@ -445,6 +450,7 @@ def test_ldap_person_detector_formula_chunk_skipped():
 
 
 # ─── LdapClient.query_users — con ldap3 mockato ──────────────────────────────
+
 
 def _make_ldap_entry_dict(given="Alice", sn="Smith", account="asmith", dn="CN=Alice Smith,DC=example,DC=com"):
     """Helper: crea una entry LDAP simulata come dizionario (formato paged_search)."""
@@ -566,6 +572,7 @@ def test_query_users_with_mock_ldap3_paged_search_fallback():
 
     # Simula 1 entry nel fallback usando SimpleNamespace (non MagicMock)
     from types import SimpleNamespace
+
     mock_entry_obj = SimpleNamespace(
         entry_dn="CN=Bob Jones,DC=example,DC=com",
         givenName="Bob",
@@ -706,11 +713,7 @@ def test_query_users_with_mock_ldap3_paging_cookie():
         "type": "searchResEntry",
         "dn": "CN=Alice,DC=example,DC=com",
         "attributes": {"givenName": "Alice", "sn": "Smith", "sAMAccountName": "asmith"},
-        "controls": {
-            "1.2.840.113556.1.4.319": {
-                "value": {"cookie": b"nextpage"}
-            }
-        },
+        "controls": {"1.2.840.113556.1.4.319": {"value": {"cookie": b"nextpage"}}},
     }
     mock_conn = MagicMock()
     mock_conn.__enter__ = lambda s: s
@@ -729,9 +732,11 @@ def test_query_users_with_mock_ldap3_paging_cookie():
 
 # ─── LdapCache._start_refresh_loop e configure ───────────────────────────────
 
+
 def test_ldap_cache_configure_enabled_starts_thread():
     """Testa che configure() con enabled=True avvii il refresh thread."""
     import time
+
     config = _make_ldap_config(enabled=True)
     cache = LdapCache()
 

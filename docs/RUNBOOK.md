@@ -158,9 +158,11 @@ Per aggiornare l'applicazione a una nuova versione:
 
 Docker Compose si occuperà di ricreare solo i container che sono cambiati.
 
-## 6. Gestione Utenti
+## 6. Gestione Utenti e Autenticazione
 
-### Bootstrap al primo avvio
+### 6.1. Sistema Multi-Utente (Locale)
+
+#### Bootstrap al primo avvio
 
 Al primo avvio, se `STATE_DIR/users.db` non esiste, il sistema crea automaticamente un utente `admin` con una **password generata casualmente**. La password è visibile nel log di avvio:
 
@@ -170,14 +172,14 @@ Al primo avvio, se `STATE_DIR/users.db` non esiste, il sistema crea automaticame
 
 **Azione richiesta:** Accedere con questa password e cambiarla immediatamente da **Impostazioni → Utenti → Modifica password**.
 
-### Ruoli disponibili
+#### Ruoli disponibili
 
 | Ruolo | Permessi |
 |-------|----------|
 | `admin` | Accesso completo: scan, apply, download, impostazioni, gestione utenti |
 | `operator` | Accesso operativo: scan, review, apply, download. Non può accedere alle impostazioni di sistema né gestire utenti |
 
-### Operazioni via UI
+#### Operazioni via UI
 
 Tutte le operazioni di gestione utenti sono disponibili in **Impostazioni → Utenti** (solo per utenti con ruolo `admin`):
 
@@ -186,7 +188,7 @@ Tutte le operazioni di gestione utenti sono disponibili in **Impostazioni → Ut
 - **Modifica password**: Cambiare la password di un utente
 - **Elimina utente**: Eliminare un utente (non è possibile eliminare l'ultimo admin)
 
-### Reset password admin via CLI
+#### Reset password admin via CLI
 
 Se si perde l'accesso all'account admin, è possibile resettare la password direttamente nel database SQLite:
 
@@ -209,7 +211,37 @@ print('Password aggiornata')
 "
 ```
 
-### Backup del database utenti
+### 6.2. Autenticazione LDAP
+
+L'applicazione supporta un'autenticazione ibrida, permettendo agli utenti di autenticarsi sia tramite il database locale che tramite un server LDAP (es. Active Directory, eDirectory).
+
+#### Configurazione
+
+La configurazione LDAP avviene tramite la UI in **Impostazioni → LDAP** o tramite variabili d'ambiente nel file `.env`.
+
+| Variabile | UI Label | Descrizione |
+|---|---|---|
+| `LDAP_AUTH_ENABLED` | Abilita Autenticazione LDAP | Abilita/disabilita l'opzione di login LDAP. |
+| `LDAP_HOST` | Host | Indirizzo IP o FQDN del server LDAP. |
+| `LDAP_PORT` | Porta | Porta del server LDAP (es. 389 o 636 per LDAPS). |
+| `LDAP_USE_SSL` | Usa SSL | Abilita la connessione sicura LDAPS. |
+| `LDAP_TLS_VALIDATE_CERT` | Valida Certificato TLS | Se `true`, valida il certificato del server LDAP. |
+| `LDAP_BIND_DN` | Bind DN | DN dell'utente di servizio per la connessione iniziale. |
+| `LDAP_BIND_PASSWORD` | Bind Password | Password dell'utente di servizio. |
+| `LDAP_USER_BASE_DN` | Base DN Utenti | Base DN per la ricerca degli utenti. |
+| `LDAP_ADMIN_GROUP_DN` | DN Gruppo Admin | DN del gruppo LDAP per il ruolo `admin`. |
+| `LDAP_OPERATOR_GROUP_DN` | DN Gruppo Operator | DN del gruppo LDAP per il ruolo `operator`. |
+| `LDAP_DEFAULT_ROLE` | Ruolo di Default | Ruolo assegnato se l'utente non appartiene a nessun gruppo mappato. |
+
+#### Flusso di Autenticazione
+
+1.  L'utente seleziona "Aziendale (LDAP)" nella pagina di login.
+2.  Il sistema si connette al server LDAP usando il Bind DN e la password di servizio.
+3.  Cerca l'utente inserito nel `LDAP_USER_BASE_DN` usando il filtro `(&(objectClass=inetOrgPerson)(cn=<username>))`.
+4.  Se l'utente viene trovato, il sistema tenta di eseguire un bind con il DN dell'utente e la password fornita.
+5.  Se il bind ha successo, l'utente è autenticato. Il sistema verifica l'appartenenza ai gruppi (`LDAP_ADMIN_GROUP_DN`, `LDAP_OPERATOR_GROUP_DN`) per assegnare il ruolo corretto.
+
+### 6.3. Backup del database utenti
 
 Il database utenti è incluso nel backup del volume `app_state` (vedi sezione 4). Il file è `STATE_DIR/users.db`.
 
@@ -220,3 +252,18 @@ docker run --rm \
   -v $(pwd)/backups:/backup \
   alpine cp /data/users.db /backup/users_$(date +%Y%m%d_%H%M%S).db
 ```
+
+## 7. Notifiche Real-time (SSE)
+
+L'applicazione utilizza Server-Sent Events (SSE) per notificare al frontend gli aggiornamenti di stato dei batch di pseudonimizzazione in tempo reale.
+
+### Funzionamento
+
+-   Quando un utente visualizza un batch in elaborazione, il frontend apre una connessione `EventSource` all'endpoint `/api/batches/{batch_id}/events`.
+-   Il backend tiene aperta la connessione e invia eventi (`message`) ogni volta che lo stato del batch cambia (`processing`, `done`, `error`).
+-   Questo elimina la necessità di polling continuo, riducendo il carico sul server e fornendo un'esperienza utente più reattiva.
+
+### Troubleshooting
+
+-   **Problemi di connessione:** Verificare che nessun firewall o reverse proxy intermedio blocchi le connessioni `text/event-stream` o le mantenga aperte per troppo poco tempo. La configurazione nginx fornita (`proxy_buffering off;`) è già ottimizzata per SSE.
+-   **Fallback a Polling:** Se la connessione SSE fallisce, il frontend esegue automaticamente un fallback a polling tradizionale (una richiesta `GET /api/batches/{batch_id}/status` ogni 5 secondi), garantendo la continuità operativa.

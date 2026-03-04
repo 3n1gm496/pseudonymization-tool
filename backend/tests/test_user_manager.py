@@ -13,9 +13,8 @@ import os
 import tempfile
 from pathlib import Path
 
-import pytest
-
 import app.core.user_manager as um
+import pytest
 
 
 @pytest.fixture(autouse=True)

@@ -68,41 +68,6 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 - **Correzione Dipendenze Frontend (PR #48)**
   - Sostituito `pnpm-lock.yaml` con `package-lock.json` per risolvere problemi di inconsistenza delle dipendenze nell'ambiente di CI.
 
-## [5.1.0] - 2026-03-03
-
-### Added
-
-- **Notifiche SSE per batch asincroni (PR #59)**
-  - Aggiunto endpoint `GET /api/batches/{id}/events` in `batches_routes.py` che emette eventi Server-Sent Events (`text/event-stream`) con aggiornamenti di stato in tempo reale.
-  - Il frontend (`Scanner.tsx`, `App.tsx`) si connette via `EventSource` e riceve aggiornamenti push senza polling. In caso di disconnessione, il fallback automatico al polling garantisce la continuità operativa.
-  - Aggiunto `backend/tests/test_sse_events.py` con **10 test** (7 asincroni + 3 HTTP) che coprono: evento `connected`, terminazione su `done`/`done_with_errors`/`error`, batch non trovato, deduplicazione eventi, transizioni di stato, Content-Type e Cache-Control.
-
-- **Sistema multi-utente con ruoli admin/operator (PR #58)**
-  - Aggiunto `app/core/user_manager.py`: gestione utenti locali con SQLite, hash bcrypt, bootstrap automatico al primo avvio con password generata casualmente.
-  - Aggiunto `app/api/users_routes.py`: endpoint REST per CRUD utenti (`GET/POST /api/users`, `GET /api/users/me`, `GET/PUT/DELETE /api/users/{username}`).
-  - Modificato `app/core/auth.py`: `verify_credentials` ora interroga `user_manager` (SQLite) con fallback legacy su `AUTH_PASSWORD`; `validate_session` ritorna `(username, role)` invece di solo `username`.
-  - Aggiunto `frontend/src/components/UserManagement.tsx`: pannello gestione utenti (solo admin).
-  - Aggiornato `frontend/src/components/SettingsPanel.tsx`: tab "Utenti" visibile solo agli admin.
-  - Aggiornato `frontend/src/components/Header.tsx`: badge del ruolo utente corrente.
-  - Aggiunto `backend/tests/test_user_manager.py` (51 test) e `backend/tests/test_users_routes.py` (31 test).
-  - Aggiunto `bcrypt` a `requirements.txt`; rimosso `passlib`.
-
-- **Coverage exceptions.py 100% (PR #56)**
-  - Aggiunto `tests/test_exceptions.py` con **62 test case** che coprono tutte le 35 classi di eccezione del dominio e le due funzioni helper (`exception_to_http_status`, `exception_to_detail`).
-  - La coverage di `app/core/exceptions.py` passa dal **60% al 100%**.
-
-### Changed
-
-- **Documentazione Redis AOF (PR #54)**
-  - Aggiunta sezione dedicata nel `RUNBOOK.md` (§4) che documenta la decisione architetturale consapevole di non abilitare la persistenza AOF di default, con istruzioni per abilitarla in ambienti con requisiti di durabilità elevati.
-  - Aggiornato `docs/08_Risks_and_Mitigations.md` con due nuovi rischi documentati: perdita sessioni e perdita task Celery a riavvio Redis.
-  - Aggiunto commento esplicativo in `docker-compose.yml` sulla configurazione Redis.
-
-- **Refactoring batch_manager.py (PR #55)**
-  - Estratto il layer Redis in `app/core/batch_redis.py` (client caching, chiavi, serializzazione Redis).
-  - Estratto il layer filesystem in `app/core/batch_persistence.py` (path management, atomic write, cifratura disco).
-  - `batch_manager.py` ora contiene solo la logica di business e ri-espone l'API pubblica invariata (zero breaking changes).
-
 ### Fixed
 
 - **Diagramma Mermaid README (PR #57)**
@@ -110,7 +75,7 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 
 ---
 
-## [5.1.0] - 2026-03-03
+## [5.0.0] - 2026-03-03
 
 Questa versione segna il completamento del piano di **production readiness**, rendendo il tool robusto, sicuro e pronto per il deployment in ambienti enterprise.
 

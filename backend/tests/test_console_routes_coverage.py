@@ -259,6 +259,7 @@ def test_process_stored_decisions_invalid_action(monkeypatch):
     console_routes._process_stored_decisions("batch1")
     assert len(applied) == 1
     from app.models.schemas import ReviewAction
+
     assert applied[0].action == ReviewAction.ACCEPT
 
 

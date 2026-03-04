@@ -95,7 +95,8 @@ def test_add_app_context_enriches_event_dict():
     event = {"event": "hello"}
     out = logging_config.add_app_context(None, "info", event)
     assert out["app"] == "pseudonymization-tool"
-    assert out["version"] == "5.0.0"
+    from app import __version__
+    assert out["version"] == __version__
 
 
 def test_configure_logging_json_and_console():

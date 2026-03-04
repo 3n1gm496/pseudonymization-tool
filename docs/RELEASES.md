@@ -1,5 +1,31 @@
 # Release Notes
 
+## v5.2.0 (2026-03-04)
+
+- **Added**: Autenticazione Ibrida (LDAP + Locale) (PR #61)
+- **Changed**: Versione e Test Badge Aggiornati (PR #60)
+- **Changed**: Documentazione Architetturale (PR #60)
+- **Fixed**: Correzioni CI e Test Post-Migrazione TypeScript (PR #53)
+
+## v5.1.1 (2026-03-04)
+
+- **Added**: Migrazione Completa a TypeScript (PR #52)
+- **Added**: Audit Log Persistente (PR #51)
+- **Added**: Aumento Copertura Test Autenticazione (PR #50)
+- **Changed**: Formattazione Codice (PR #49)
+- **Fixed**: Correzione Dipendenze Frontend (PR #48)
+
+## v5.1.0 (2026-03-03)
+
+- **Added**: Notifiche SSE per batch asincroni (PR #59)
+- **Added**: Sistema multi-utente con ruoli admin/operator (PR #58)
+- **Added**: Coverage exceptions.py 100% (PR #56)
+- **Changed**: Documentazione Redis AOF (PR #54)
+- **Changed**: Refactoring batch_manager.py (PR #55)
+- **Fixed**: Diagramma Mermaid README (PR #57)
+
+---
+
 ## v5.0.0 - Security Hardening, CI Hardening & Code Quality (2026-03-03)
 
 This release consolidates 14 pull requests focused on security, CI reliability, code quality, and documentation accuracy.

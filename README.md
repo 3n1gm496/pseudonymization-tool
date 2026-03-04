@@ -1,7 +1,7 @@
 # Local Pseudonymization Tool v5.2.0
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/) [![React 18.2](https://img.shields.io/badge/React-18.2-61dafb.svg)](https://react.dev) [![FastAPI 0.110](https://img.shields.io/badge/FastAPI-0.110-009688.svg)](https://fastapi.tiangolo.com) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests: 802 passing](https://img.shields.io/badge/Tests-802%20passing-brightgreen.svg)](backend/tests/) [![Coverage: 82%](https://img.shields.io/badge/Coverage-82%25-brightgreen.svg)](https://github.com/3n1gm496/pseudonymization-tool/pull/37) [![Monitoring: Prometheus](https://img.shields.io/badge/Monitoring-Prometheus-orange.svg)](#-monitoring-prometheus)
+[![Tests: 811 passing](https://img.shields.io/badge/Tests-802%20passing-brightgreen.svg)](backend/tests/) [![Coverage: 87%](https://img.shields.io/badge/Coverage-82%25-brightgreen.svg)](https://github.com/3n1gm496/pseudonymization-tool/pull/37) [![Monitoring: Prometheus](https://img.shields.io/badge/Monitoring-Prometheus-orange.svg)](#-monitoring-prometheus)
 
 Web application locale moderna per la pseudonimizzazione sicura di dati sensibili in documenti di testo, DOCX, XLSX, PDF e immagini. Interfaccia React con Tailwind CSS, darkmode supportato. Progettato per ambienti enterprise che richiedono massima sicurezza e capacità di operare completamente offline.
 
@@ -456,7 +456,7 @@ curl http://127.0.0.1:8000/api/settings/policies/SOC%20Logs
   - `test_csrf_middleware.py`: protezione CSRF globale
   - `test_api_contract.py`: contratti API (202 Accepted pattern)
   - `test_parser_limitations.py`: edge case parser
-- 📊 **Coverage: 82%** — Moduli critici:
+- 📊 **Coverage: 87%** — Moduli critici:
   - `crypto.py`: 95% (eccellente)
   - `schemas.py`: 98% (eccellente)
   - `safety.py`: 92% (eccellente)
