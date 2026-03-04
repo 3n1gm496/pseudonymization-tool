@@ -216,6 +216,7 @@ async def auth_middleware(request: Request, call_next):
         "/api/metrics",
         "/api/auth/login",
         "/api/auth/me",
+        "/api/auth/ldap-status",
         "/api/docs",
     }
 
