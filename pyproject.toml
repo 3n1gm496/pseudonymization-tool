@@ -1,6 +1,6 @@
 [project]
 name = "pseudonymization-tool"
-version = "5.0.0"
+version = "5.2.1"
 description = "Local pseudonymization tool for sensitive data in documents"
 requires-python = ">=3.11"
 

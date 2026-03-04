@@ -33,9 +33,7 @@ def test_text_export_utils_file_exists():
 
     for func_name in required_functions:
         assert (
-            f"function {func_name}" in content
-            or f"const {func_name}" in content
-            or "export" in content
+            f"function {func_name}" in content or f"const {func_name}" in content or "export" in content
         ), f"Function {func_name} not found in text-export.ts"
         print(f"  ✓ Function {func_name} present")
 
@@ -81,9 +79,7 @@ def test_download_text_file_implementation():
     content = export_utils.read_text()
 
     # Check for Blob usage
-    assert "Blob" in content or "blob" in content.lower(), (
-        "downloadTextFile should use Blob for file creation"
-    )
+    assert "Blob" in content or "blob" in content.lower(), "downloadTextFile should use Blob for file creation"
 
     # Check for download trigger
     assert "download" in content.lower(), "downloadTextFile should trigger file download"

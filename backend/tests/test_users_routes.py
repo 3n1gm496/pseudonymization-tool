@@ -16,10 +16,9 @@ import os
 import tempfile
 from pathlib import Path
 
+import app.core.user_manager as um
 import pytest
 from fastapi.testclient import TestClient
-
-import app.core.user_manager as um
 
 
 @pytest.fixture(autouse=True)

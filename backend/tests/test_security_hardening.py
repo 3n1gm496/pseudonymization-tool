@@ -8,10 +8,8 @@ Verifica:
 4. CSP differenziata tra profili con/senza Swagger UI
 """
 
-
 import pytest
 from fastapi.testclient import TestClient
-
 
 # ─── Fixture client ───────────────────────────────────────────────────────────
 

@@ -3,12 +3,11 @@ Test di coverage per batches_routes.py.
 Copre i path non testati: helper functions, validazione input, error paths,
 endpoint lifecycle (list, get, status, findings, review, apply, delete, download).
 """
+
 import io
 import zipfile
 
 import pytest
-from fastapi.testclient import TestClient
-
 from app.api.batches_routes import (
     _calculate_entropy,
     _sanitize_filename,
@@ -17,19 +16,14 @@ from app.api.batches_routes import (
 )
 from app.core.batch_manager import create_batch, get_batch_dir, store_passphrase
 from app.main import app
-from app.models.schemas import (
-    Batch,
-    BatchConfig,
-    BatchStatus,
-    FileRecord,
-    PresetName,
-    SafetyLabel,
-)
+from app.models.schemas import Batch, BatchConfig, BatchStatus, FileRecord, PresetName, SafetyLabel
+from fastapi.testclient import TestClient
 
 client = TestClient(app)
 
 
 # ─── Helper: _sanitize_filename ───────────────────────────────────────────────
+
 
 def test_sanitize_filename_normal():
     assert _sanitize_filename("report.txt") == "report.txt"
@@ -43,6 +37,7 @@ def test_sanitize_filename_path_traversal():
     assert "\\" not in result
     # The result should be a flat filename, not a path
     from pathlib import PurePosixPath
+
     assert len(PurePosixPath(result).parts) == 1
 
 
@@ -71,6 +66,7 @@ def test_sanitize_filename_special_chars():
 
 # ─── Helper: _calculate_entropy ───────────────────────────────────────────────
 
+
 def test_calculate_entropy_empty():
     assert _calculate_entropy("") == 0.0
 
@@ -88,8 +84,10 @@ def test_calculate_entropy_varied():
 
 # ─── Helper: _validate_passphrase ─────────────────────────────────────────────
 
+
 def test_validate_passphrase_too_short():
     from fastapi import HTTPException
+
     with pytest.raises(HTTPException) as exc_info:
         _validate_passphrase("short")
     assert exc_info.value.status_code == 400
@@ -98,6 +96,7 @@ def test_validate_passphrase_too_short():
 
 def test_validate_passphrase_low_entropy():
     from fastapi import HTTPException
+
     # Long but all same character → low entropy
     with pytest.raises(HTTPException) as exc_info:
         _validate_passphrase("a" * 20)
@@ -111,6 +110,7 @@ def test_validate_passphrase_valid():
 
 
 # ─── Helper: _validate_file_magic_bytes ───────────────────────────────────────
+
 
 def test_validate_magic_bytes_pdf():
     result = _validate_file_magic_bytes(b"%PDF-1.4 content", "document.pdf")
@@ -145,6 +145,7 @@ def test_validate_magic_bytes_unknown_extension():
 
 def test_validate_magic_bytes_mismatch_logs_warning(caplog):
     import logging
+
     with caplog.at_level(logging.WARNING):
         _validate_file_magic_bytes(b"%PDF-1.4", "document.txt")
     # Should log a mismatch warning (txt declared but PDF detected)
@@ -152,6 +153,7 @@ def test_validate_magic_bytes_mismatch_logs_warning(caplog):
 
 
 # ─── POST /api/batches — Validation errors ────────────────────────────────────
+
 
 def test_create_batch_invalid_mode():
     file_content = io.BytesIO(b"test content")
@@ -199,6 +201,7 @@ def test_create_batch_unsupported_file_format():
 def test_create_batch_file_too_large():
     """File exceeds MAX_FILE_SIZE_BYTES → 400 no valid files."""
     from app.api.batches_routes import MAX_FILE_SIZE_BYTES
+
     oversized = io.BytesIO(b"x" * (MAX_FILE_SIZE_BYTES + 1))
     response = client.post(
         "/api/batches",
@@ -214,6 +217,7 @@ def test_create_batch_magic_bytes_mismatch(caplog):
     The code logs a warning but does NOT reject the file (permissive by design).
     """
     import logging
+
     pdf_magic = io.BytesIO(b"%PDF-1.4 fake pdf content here")
     with caplog.at_level(logging.WARNING):
         response = client.post(
@@ -240,6 +244,7 @@ def test_create_batch_no_filename():
 
 # ─── GET /api/batches — List ──────────────────────────────────────────────────
 
+
 def test_list_batches_empty():
     response = client.get("/api/batches")
     assert response.status_code == 200
@@ -262,12 +267,14 @@ def test_list_batches_with_batch():
 
 # ─── GET /api/batches/{batch_id} — Not found ──────────────────────────────────
 
+
 def test_get_batch_not_found():
     response = client.get("/api/batches/nonexistent-batch-id-xyz")
     assert response.status_code == 404
 
 
 # ─── GET /api/batches/{batch_id}/status ───────────────────────────────────────
+
 
 def test_get_batch_status_not_found():
     response = client.get("/api/batches/nonexistent-xyz/status")
@@ -288,6 +295,7 @@ def test_get_batch_status_no_task_id():
 
 # ─── GET /api/batches/{batch_id}/findings ─────────────────────────────────────
 
+
 def test_get_findings_not_found():
     response = client.get("/api/batches/nonexistent-xyz/findings")
     assert response.status_code == 404
@@ -305,6 +313,7 @@ def test_get_findings_empty():
 
 
 # ─── POST /api/batches/{batch_id}/review ──────────────────────────────────────
+
 
 def test_submit_review_not_found():
     response = client.post(
@@ -344,6 +353,7 @@ def test_submit_review_valid():
 
 # ─── POST /api/batches/{batch_id}/apply ───────────────────────────────────────
 
+
 def test_apply_batch_not_found():
     response = client.post("/api/batches/nonexistent-xyz/apply")
     assert response.status_code == 404
@@ -371,6 +381,7 @@ def test_apply_batch_missing_passphrase():
 
 
 # ─── GET /api/batches/{batch_id}/download ─────────────────────────────────────
+
 
 def test_download_not_found():
     response = client.get("/api/batches/nonexistent-xyz/download")
@@ -459,6 +470,7 @@ def test_download_zip_success():
 
 # ─── DELETE /api/batches/{batch_id} ───────────────────────────────────────────
 
+
 def test_delete_batch_not_found():
     response = client.delete("/api/batches/nonexistent-xyz")
     assert response.status_code == 404
@@ -474,6 +486,7 @@ def test_delete_batch_success():
 
 
 # ─── POST /api/batches/{batch_id}/passphrase/regenerate ───────────────────────
+
 
 def test_regenerate_passphrase_not_found():
     response = client.post("/api/batches/nonexistent-xyz/passphrase/regenerate")
@@ -495,6 +508,7 @@ def test_regenerate_passphrase_success():
 
 # ─── GET /api/batches/{batch_id} — Full response ──────────────────────────────
 
+
 def test_get_batch_full_response():
     batch = Batch(config=BatchConfig(preset=PresetName.SOC_LOGS))
     batch.status = BatchStatus.REVIEW
@@ -510,6 +524,7 @@ def test_get_batch_full_response():
 
 
 # ─── POST /api/batches — Success with auto-generated passphrase ───────────────
+
 
 def test_create_batch_auto_passphrase():
     """When passphrase is empty, backend generates one automatically."""
@@ -527,11 +542,12 @@ def test_create_batch_auto_passphrase():
 
 # ─── POST /api/batches — Too many files ───────────────────────────────────────
 
+
 def test_create_batch_too_many_files():
     from app.api.batches_routes import MAX_UPLOAD_FILES_PER_BATCH
+
     files = [
-        ("files", (f"file{i}.txt", io.BytesIO(b"content"), "text/plain"))
-        for i in range(MAX_UPLOAD_FILES_PER_BATCH + 1)
+        ("files", (f"file{i}.txt", io.BytesIO(b"content"), "text/plain")) for i in range(MAX_UPLOAD_FILES_PER_BATCH + 1)
     ]
     response = client.post(
         "/api/batches",

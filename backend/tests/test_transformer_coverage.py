@@ -18,8 +18,8 @@ from app.pseudonymizer.transformer import (
     transform_xlsx_file,
 )
 
-
 # ─── Helpers ──────────────────────────────────────────────────────────────────
+
 
 def _make_finding(
     original: str,
@@ -42,6 +42,7 @@ def _make_finding(
 
 # ─── _build_substitution_map ──────────────────────────────────────────────────
 
+
 def test_build_substitution_map_accept():
     f = _make_finding("alice@example.com", "REDACTED_EMAIL_001")
     result = _build_substitution_map([f])
@@ -63,6 +64,7 @@ def test_build_substitution_map_first_wins_on_duplicate():
 
 # ─── _apply_substitutions_to_text ─────────────────────────────────────────────
 
+
 def test_apply_substitutions_empty_map():
     assert _apply_substitutions_to_text("hello world", {}) == "hello world"
 
@@ -80,6 +82,7 @@ def test_apply_substitutions_longer_first():
 
 
 # ─── transform_text_file ──────────────────────────────────────────────────────
+
 
 def test_transform_text_file_basic(tmp_path):
     src = tmp_path / "input.txt"
@@ -122,6 +125,7 @@ def test_transform_text_file_error_on_missing_file(tmp_path):
 
 # ─── transform_xlsx_file ──────────────────────────────────────────────────────
 
+
 def test_transform_xlsx_file_cells_and_formulas(tmp_path):
     """Testa che le celle testuali vengano sostituite e le formule preservate."""
     import openpyxl
@@ -156,6 +160,7 @@ def test_transform_xlsx_file_error(tmp_path):
 
 
 # ─── transform_image_file ─────────────────────────────────────────────────────
+
 
 def test_transform_image_file_with_bbox(tmp_path):
     """Testa la redazione visuale su un'immagine con bounding box."""
@@ -212,6 +217,7 @@ def test_transform_image_file_error(tmp_path):
 
 # ─── transform_file (dispatcher) ──────────────────────────────────────────────
 
+
 def test_transform_file_txt(tmp_path):
     src = tmp_path / "test.txt"
     src.write_text("Contact alice@example.com", encoding="utf-8")
@@ -262,6 +268,7 @@ def test_transform_file_xlsx(tmp_path):
 
 
 # ─── apply_pseudonyms_to_text ─────────────────────────────────────────────────
+
 
 def test_apply_pseudonyms_to_text_basic():
     findings = [_make_finding("alice@example.com", "REDACTED_EMAIL_001")]
