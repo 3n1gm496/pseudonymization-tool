@@ -62,6 +62,7 @@ def authenticate_ldap(username: str, password: str) -> Optional[str]:
     if not username or not password:
         return None
 
+    service_conn = None
     try:
         # Step 1: Connessione con le credenziali di servizio (bind DN) per la ricerca
         server = _build_server(ldap3, config)
@@ -91,6 +92,13 @@ def authenticate_ldap(username: str, password: str) -> Optional[str]:
         # Non si propaga l'eccezione per garantire il fallback all'autenticazione locale.
         logger.warning("ldap_auth: errore durante l'autenticazione LDAP per '%s': %s", username, type(exc).__name__)
         return None
+    finally:
+        # Chiudi sempre la connessione di servizio per evitare leak
+        if service_conn is not None:
+            try:
+                service_conn.unbind()
+            except Exception:
+                pass
 
 
 def is_ldap_auth_available() -> bool:
@@ -119,12 +127,15 @@ def _get_ldap_auth_config():
 def _build_server(ldap3, config):
     """Costruisce l'oggetto Server ldap3 in base alla configurazione."""
     tls = None
-    if config.use_tls:
-        tls = ldap3.Tls(validate=ldap3.ssl.CERT_NONE)  # In produzione, usare CERT_REQUIRED con CA bundle
+    use_ssl = getattr(config, "use_ssl", False) or getattr(config, "use_tls", False)
+    needs_tls = use_ssl or getattr(config, "starttls", False)
+    if needs_tls:
+        validate_cert = getattr(config, "tls_validate_cert", False)
+        tls = ldap3.Tls(validate=ldap3.ssl.CERT_REQUIRED if validate_cert else ldap3.ssl.CERT_NONE)
     return ldap3.Server(
         config.host,
         port=config.port,
-        use_ssl=config.use_tls,
+        use_ssl=use_ssl,
         tls=tls,
         connect_timeout=5,
         get_info=ldap3.NONE,  # Non richiedere info server per sicurezza e performance
@@ -140,17 +151,31 @@ def _bind_service(ldap3, server, config):
         logger.warning("ldap_auth: bind_dn o bind_password non configurati per la ricerca utenti.")
         return None
     try:
-        conn = ldap3.Connection(
-            server,
-            user=config.bind_dn,
-            password=config.bind_password,
-            auto_bind=ldap3.AUTO_BIND_TLS_BEFORE_BIND if config.starttls else ldap3.AUTO_BIND_NO_TLS,
-            raise_exceptions=True,
-        )
-        if config.starttls and not config.use_tls:
+        use_ssl = getattr(config, "use_ssl", False) or getattr(config, "use_tls", False)
+        use_starttls = getattr(config, "starttls", False) and not use_ssl
+        if use_starttls:
+            # STARTTLS: connetti senza auto_bind, poi start_tls, poi bind manuale
+            conn = ldap3.Connection(
+                server,
+                user=config.bind_dn,
+                password=config.bind_password,
+                auto_bind=ldap3.AUTO_BIND_NONE,
+                raise_exceptions=True,
+            )
+            conn.open()
             conn.start_tls()
-        if not conn.bind():
-            return None
+            if not conn.bind():
+                conn.unbind()
+                return None
+        else:
+            # SSL o plaintext: usa auto_bind per semplicità
+            conn = ldap3.Connection(
+                server,
+                user=config.bind_dn,
+                password=config.bind_password,
+                auto_bind=ldap3.AUTO_BIND_NO_TLS,
+                raise_exceptions=True,
+            )
         return conn
     except Exception as exc:
         logger.warning("ldap_auth: bind di servizio fallito: %s", type(exc).__name__)

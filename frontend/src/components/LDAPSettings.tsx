@@ -17,7 +17,7 @@ const LDAPSettings = ({ showToast }: LDAPSettingsProps): JSX.Element => {
   const [diagnostics, setDiagnostics] = useState<LDAPDiagnostics | null>(null)
   const [showForm, setShowForm] = useState(false)
 
-  // Form state
+  // Form state — Connection
   const [host, setHost] = useState('')
   const [port, setPort] = useState('389')
   const [baseDN, setBaseDN] = useState('')
@@ -25,6 +25,15 @@ const LDAPSettings = ({ showToast }: LDAPSettingsProps): JSX.Element => {
   const [bindPassword, setBindPassword] = useState('')
   const [searchFilter, setSearchFilter] = useState('(uid=*)')
   const [useSSL, setUseSSL] = useState(false)
+  const [starttls, setStarttls] = useState(false)
+  const [tlsValidateCert, setTlsValidateCert] = useState(false)
+
+  // Form state — Authentication
+  const [authEnabled, setAuthEnabled] = useState(false)
+  const [authUserBaseDN, setAuthUserBaseDN] = useState('')
+  const [authAdminGroupDN, setAuthAdminGroupDN] = useState('')
+  const [authOperatorGroupDN, setAuthOperatorGroupDN] = useState('')
+  const [authDefaultRole, setAuthDefaultRole] = useState<'admin' | 'operator'>('operator')
 
   useEffect(() => {
     void loadConfig()
@@ -41,6 +50,13 @@ const LDAPSettings = ({ showToast }: LDAPSettingsProps): JSX.Element => {
         bind_dn?: string
         search_filter?: string
         use_ssl?: boolean
+        starttls?: boolean
+        tls_validate_cert?: boolean
+        auth_enabled?: boolean
+        auth_user_base_dn?: string
+        auth_admin_group_dn?: string
+        auth_operator_group_dn?: string
+        auth_default_role?: 'admin' | 'operator'
       }>('/api/settings/ldap')
       setIsConfigured(response.data.configured ?? false)
       setDiagnostics(response.data.diagnostics ?? null)
@@ -51,7 +67,15 @@ const LDAPSettings = ({ showToast }: LDAPSettingsProps): JSX.Element => {
         setBindDN(response.data.bind_dn ?? '')
         setSearchFilter(response.data.search_filter ?? '(uid=*)')
         setUseSSL(response.data.use_ssl ?? false)
+        setStarttls(response.data.starttls ?? false)
+        setTlsValidateCert(response.data.tls_validate_cert ?? false)
       }
+      // Authentication fields
+      setAuthEnabled(response.data.auth_enabled ?? false)
+      setAuthUserBaseDN(response.data.auth_user_base_dn ?? '')
+      setAuthAdminGroupDN(response.data.auth_admin_group_dn ?? '')
+      setAuthOperatorGroupDN(response.data.auth_operator_group_dn ?? '')
+      setAuthDefaultRole(response.data.auth_default_role ?? 'operator')
     } catch {
       setDiagnostics(null)
     }
@@ -61,6 +85,10 @@ const LDAPSettings = ({ showToast }: LDAPSettingsProps): JSX.Element => {
     e.preventDefault()
     if (!host || !baseDN) {
       showToast('Host e BaseDN sono obbligatori', 'error')
+      return
+    }
+    if (authEnabled && !authUserBaseDN) {
+      showToast('Auth User Base DN e obbligatorio quando l\'autenticazione LDAP e attiva', 'error')
       return
     }
     setIsLoading(true)
@@ -73,6 +101,13 @@ const LDAPSettings = ({ showToast }: LDAPSettingsProps): JSX.Element => {
         bind_password: bindPassword,
         search_filter: searchFilter,
         use_ssl: useSSL,
+        starttls,
+        tls_validate_cert: tlsValidateCert,
+        auth_enabled: authEnabled,
+        auth_user_base_dn: authUserBaseDN,
+        auth_admin_group_dn: authAdminGroupDN,
+        auth_operator_group_dn: authOperatorGroupDN,
+        auth_default_role: authDefaultRole,
       })
       showToast('Configurazione LDAP salvata', 'success')
       setShowForm(false)
@@ -134,7 +169,7 @@ const LDAPSettings = ({ showToast }: LDAPSettingsProps): JSX.Element => {
           <h3 className="text-lg font-semibold">Integrazione LDAP</h3>
           {isConfigured && (
             <span className="text-xs font-bold bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 px-3 py-1 rounded-full">
-              ✓ Configurato
+              Configurato
             </span>
           )}
         </div>
@@ -155,6 +190,24 @@ const LDAPSettings = ({ showToast }: LDAPSettingsProps): JSX.Element => {
               <div>
                 <span className="font-medium">Filter:</span> {searchFilter}
               </div>
+              <div>
+                <span className="font-medium">TLS:</span>{' '}
+                {useSSL ? 'SSL' : starttls ? 'STARTTLS' : 'Nessuno'}
+                {tlsValidateCert ? ' (certificato validato)' : ''}
+              </div>
+              <div>
+                <span className="font-medium">Autenticazione LDAP:</span>{' '}
+                {authEnabled ? (
+                  <span className="text-green-600 dark:text-green-400 font-semibold">Attiva</span>
+                ) : (
+                  <span className="text-slate-500">Disattiva</span>
+                )}
+              </div>
+              {authEnabled && authUserBaseDN && (
+                <div>
+                  <span className="font-medium">User Base DN:</span> {authUserBaseDN}
+                </div>
+              )}
             </div>
             <div className="flex gap-3 flex-wrap mb-4">
               <button
@@ -162,27 +215,31 @@ const LDAPSettings = ({ showToast }: LDAPSettingsProps): JSX.Element => {
                 disabled={isLoading}
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 text-sm"
               >
-                🔗 Test connessione
+                Test connessione
               </button>
               <button
                 onClick={() => void handleRefresh()}
                 disabled={isLoading}
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg disabled:opacity-50 text-sm"
               >
-                🔄 Aggiorna cache
+                Aggiorna cache
               </button>
               <button
                 onClick={() => setShowForm(true)}
                 disabled={isLoading}
                 className="px-4 py-2 bg-slate-400 hover:bg-slate-500 text-white rounded-lg disabled:opacity-50 text-sm"
               >
-                ⚙️ Modifica
+                Modifica
               </button>
             </div>
           </>
         )}
         {showForm && (
-          <form onSubmit={(e) => void handleSave(e)} className="space-y-3">
+          <form onSubmit={(e) => void handleSave(e)} className="space-y-4">
+            {/* ── Connection Settings ────────────────────────────────────── */}
+            <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-600 pb-1">
+              Connessione
+            </h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium mb-1">Host LDAP *</label>
@@ -224,7 +281,7 @@ const LDAPSettings = ({ showToast }: LDAPSettingsProps): JSX.Element => {
                   type="text"
                   value={bindDN}
                   onChange={(e: ChangeEvent<HTMLInputElement>) => setBindDN(e.target.value)}
-                  placeholder="es: uid=admin,ou=people,dc=ente,dc=it"
+                  placeholder="es: cn=admin,ou=people,dc=ente,dc=it"
                   className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm"
                   disabled={isLoading}
                 />
@@ -254,26 +311,130 @@ const LDAPSettings = ({ showToast }: LDAPSettingsProps): JSX.Element => {
                 Es: (uid=*), (|(uid=*)(cn=*))
               </p>
             </div>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="useSSL"
+                  checked={useSSL}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                    setUseSSL(e.target.checked)
+                    if (e.target.checked) setStarttls(false)
+                  }}
+                  disabled={isLoading}
+                  className="rounded"
+                />
+                <label htmlFor="useSSL" className="text-sm font-medium">SSL</label>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="starttls"
+                  checked={starttls}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                    setStarttls(e.target.checked)
+                    if (e.target.checked) setUseSSL(false)
+                  }}
+                  disabled={isLoading}
+                  className="rounded"
+                />
+                <label htmlFor="starttls" className="text-sm font-medium">STARTTLS</label>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="tlsValidateCert"
+                  checked={tlsValidateCert}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setTlsValidateCert(e.target.checked)}
+                  disabled={isLoading}
+                  className="rounded"
+                />
+                <label htmlFor="tlsValidateCert" className="text-sm font-medium">Valida certificato TLS</label>
+              </div>
+            </div>
+
+            {/* ── Authentication Settings ────────────────────────────────── */}
+            <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-600 pb-1 mt-6">
+              Autenticazione LDAP (eDirectory)
+            </h4>
             <div className="flex items-center gap-2">
               <input
                 type="checkbox"
-                id="useSSL"
-                checked={useSSL}
-                onChange={(e: ChangeEvent<HTMLInputElement>) => setUseSSL(e.target.checked)}
+                id="authEnabled"
+                checked={authEnabled}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setAuthEnabled(e.target.checked)}
                 disabled={isLoading}
                 className="rounded"
               />
-              <label htmlFor="useSSL" className="text-sm font-medium">
-                Usa SSL/TLS
+              <label htmlFor="authEnabled" className="text-sm font-medium">
+                Abilita autenticazione tramite LDAP
               </label>
             </div>
+            {authEnabled && (
+              <div className="space-y-3 pl-4 border-l-2 border-blue-300 dark:border-blue-700">
+                <div>
+                  <label className="block text-sm font-medium mb-1">User Base DN *</label>
+                  <input
+                    type="text"
+                    value={authUserBaseDN}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => setAuthUserBaseDN(e.target.value)}
+                    placeholder="es: ou=users,o=ente"
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm"
+                    disabled={isLoading}
+                  />
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    Base DN per la ricerca utenti. L&apos;autenticazione usa l&apos;attributo cn di inetOrgPerson.
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Admin Group DN (opzionale)</label>
+                  <input
+                    type="text"
+                    value={authAdminGroupDN}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => setAuthAdminGroupDN(e.target.value)}
+                    placeholder="es: cn=pseudonymizer-admins,ou=groups,o=ente"
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm"
+                    disabled={isLoading}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Operator Group DN (opzionale)</label>
+                  <input
+                    type="text"
+                    value={authOperatorGroupDN}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => setAuthOperatorGroupDN(e.target.value)}
+                    placeholder="es: cn=pseudonymizer-operators,ou=groups,o=ente"
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm"
+                    disabled={isLoading}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Ruolo di default</label>
+                  <select
+                    value={authDefaultRole}
+                    onChange={(e: ChangeEvent<HTMLSelectElement>) =>
+                      setAuthDefaultRole(e.target.value as 'admin' | 'operator')
+                    }
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm"
+                    disabled={isLoading}
+                  >
+                    <option value="operator">Operator</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    Ruolo assegnato agli utenti LDAP che non appartengono a nessun gruppo configurato.
+                  </p>
+                </div>
+              </div>
+            )}
+
             <div className="flex gap-3 pt-4">
               <button
                 type="submit"
                 disabled={isLoading}
                 className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-50 text-sm"
               >
-                {isLoading ? 'Salvataggio...' : '✓ Salva'}
+                {isLoading ? 'Salvataggio...' : 'Salva'}
               </button>
               <button
                 type="button"
@@ -290,13 +451,13 @@ const LDAPSettings = ({ showToast }: LDAPSettingsProps): JSX.Element => {
           <div>
             <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
               Configura un server LDAP per rilevare automaticamente account utenti durante la
-              scansione.
+              scansione e per abilitare l&apos;autenticazione aziendale.
             </p>
             <button
               onClick={() => setShowForm(true)}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm"
             >
-              ⚙️ Configura LDAP
+              Configura LDAP
             </button>
           </div>
         )}
@@ -310,8 +471,8 @@ const LDAPSettings = ({ showToast }: LDAPSettingsProps): JSX.Element => {
             className={`text-sm ${testResult.ok ? 'text-green-800 dark:text-green-200' : 'text-red-800 dark:text-red-200'}`}
           >
             {testResult.ok
-              ? `✓ Connessione riuscita - ${testResult.user_count ?? 0} utenti trovati`
-              : `✗ ${testResult.error ?? 'Errore sconosciuto'}`}
+              ? `Connessione riuscita - ${testResult.user_count ?? 0} utenti trovati`
+              : `${testResult.error ?? 'Errore sconosciuto'}`}
           </p>
         </div>
       )}
