@@ -1,8 +1,8 @@
 # Rischi e Mitigazioni
 
 **Autore:** Manus AI
-**Versione:** 5.0.0
-**Data:** 2026-03-02
+**Versione:** 5.1.0
+**Data:** 2026-03-04
 
 ---
 
@@ -12,7 +12,7 @@ Questo documento identifica i potenziali rischi tecnici, di progetto e di sicure
 
 ## 2. Tabella dei Rischi
 
-I rischi sono classificati per categoria e valutati in termini di probabilità e impatto (Altro, Medio, Basso).
+I rischi sono classificati per categoria e valutati in termini di probabilità e impatto (Alto, Medio, Basso).
 
 ### Categoria: Rischi Tecnici
 
@@ -29,6 +29,13 @@ I rischi sono classificati per categoria e valutati in termini di probabilità e
 | **Dati sensibili lasciati su disco** | Bassa | Alto | Bug nel processo di pulizia o un crash imprevisto potrebbero lasciare file originali o intermedi non cifrati nella directory temporanea. | 1. **Cleanup Robusto:** Implementare la logica di pulizia in un blocco `finally` per garantirne l'esecuzione anche in caso di eccezioni. 2. **Directory Dedicata:** Usare una directory temporanea specifica per ogni batch, rendendo più semplice la sua identificazione e rimozione. 3. **Raccomandazioni Operative:** Suggerire nel README l'uso del tool su macchine con crittografia del disco (es. BitLocker). |
 | **Vulnerabilità in una dipendenza** | Media | Alto | Una delle librerie di terze parti utilizzate (es. FastAPI, `pypdf`) potrebbe avere una vulnerabilità di sicurezza non nota. | 1. **Minimizzare le Dipendenze:** Usare solo le librerie strettamente necessarie. 2. **Pinning delle Versioni:** Fissare le versioni delle dipendenze nel file `requirements.txt` a versioni note e stabili. 3. **Nessuna Esposizione di Rete:** Il binding del server solo su `127.0.0.1` riduce drasticamente la superficie di attacco, impedendo lo sfruttamento di eventuali vulnerabilità di rete da parte di attori esterni. |
 | **Passphrase debole** | Alta | Medio | L'utente potrebbe scegliere una passphrase debole, rendendo il file di mapping vulnerabile ad attacchi di forza bruta offline. | 1. **Indicatore di Robustezza:** Implementare un semplice indicatore visivo della robustezza della passphrase nell'interfaccia utente. 2. **Raccomandazioni:** Mostrare un avviso che incoraggia l'uso di passphrase lunghe e complesse. 3. **Algoritmo Robusto:** Usare un algoritmo di cifratura standard e robusto (AES-GCM) con una funzione di derivazione della chiave (KDF) come PBKDF2. |
+
+### Categoria: Rischi Infrastrutturali
+
+| Rischio | Probabilità | Impatto | Descrizione | Strategia di Mitigazione |
+|---|---|---|---|---|
+| **Perdita sessioni a riavvio Redis** | Media | Basso | Redis non ha la persistenza AOF abilitata per scelta consapevole (vedere `RUNBOOK.md` §4). Un riavvio del container Redis causa la perdita di tutte le sessioni attive. I dati applicativi (batch, mappings, chiavi di cifratura) sono su filesystem e non vengono persi. | 1. **Decisione documentata:** La volatilità è accettabile perché i dati critici sono su filesystem (`STATE_DIR`). 2. **Re-login trasparente:** Gli utenti vengono reindirizzati al login; nessun dato applicativo viene perso. 3. **Abilitare AOF** se il deployment richiede sessioni di lunga durata: aggiungere `--appendonly yes --appendfsync everysec` al comando Redis in `docker-compose.yml`. |
+| **Perdita task Celery a riavvio Redis** | Bassa | Medio | Task Celery accodati ma non ancora avviati vengono persi se Redis si riavvia durante l'elaborazione. | 1. **Idempotenza:** I task di scan/apply sono idempotenti; possono essere rilanciati senza effetti collaterali. 2. **Feedback UI:** Il frontend mostra lo stato del batch; un batch bloccato in `SCANNING` può essere rilevato e rilasciato dall'operatore. 3. **Abilitare AOF** per garantire la durabilità della coda Celery in ambienti critici. |
 
 ### Categoria: Rischi di Progetto e Adozione
 
