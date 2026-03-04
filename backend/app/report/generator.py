@@ -26,10 +26,16 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         header {{ background: #1a1a2e; color: white; padding: 2rem; border-radius: 8px 8px 0 0; }}
         header h1 {{ font-size: 1.5rem; margin-bottom: 0.5rem; }}
         header .meta {{ font-size: 0.85rem; opacity: 0.7; }}
-        .card {{ background: white; border-radius: 0 0 8px 8px; padding: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 1.5rem; }}
+        .card {{ background: white; border-radius: 0 0 8px 8px;
+            padding: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            margin-bottom: 1.5rem; }}
         .card + .card {{ border-radius: 8px; }}
-        h2 {{ font-size: 1.1rem; color: #1a1a2e; border-bottom: 2px solid #e0e0e0; padding-bottom: 0.5rem; margin-bottom: 1rem; }}
-        .stats-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 1rem; }}
+        h2 {{ font-size: 1.1rem; color: #1a1a2e;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 0.5rem; margin-bottom: 1rem; }}
+        .stats-grid {{ display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem; margin-bottom: 1rem; }}
         .stat-box {{ background: #f8f9fa; border-radius: 6px; padding: 1rem; text-align: center; }}
         .stat-box .value {{ font-size: 2rem; font-weight: 700; color: #2563eb; }}
         .stat-box .label {{ font-size: 0.8rem; color: #666; margin-top: 0.25rem; }}
@@ -37,13 +43,21 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         th {{ background: #f0f2f5; text-align: left; padding: 0.6rem 0.8rem; font-weight: 600; }}
         td {{ padding: 0.6rem 0.8rem; border-bottom: 1px solid #f0f2f5; }}
         tr:last-child td {{ border-bottom: none; }}
-        .badge {{ display: inline-block; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }}
+        .badge {{ display: inline-block; padding: 0.2rem 0.6rem;
+            border-radius: 12px; font-size: 0.75rem;
+            font-weight: 600; }}
         .badge-ok {{ background: #d1fae5; color: #065f46; }}
         .badge-warn {{ background: #fef3c7; color: #92400e; }}
         .badge-err {{ background: #fee2e2; color: #991b1b; }}
         .badge-skip {{ background: #e0e7ff; color: #3730a3; }}
-        .warning-box {{ background: #fef3c7; border-left: 4px solid #f59e0b; padding: 0.8rem 1rem; border-radius: 0 6px 6px 0; margin-bottom: 0.5rem; font-size: 0.9rem; }}
-        .risk-box {{ border-left: 4px solid #dc2626; background: #fee2e2; padding: 0.8rem 1rem; border-radius: 0 6px 6px 0; margin-bottom: 0.5rem; font-size: 0.9rem; }}
+        .warning-box {{ background: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            padding: 0.8rem 1rem; border-radius: 0 6px 6px 0;
+            margin-bottom: 0.5rem; font-size: 0.9rem; }}
+        .risk-box {{ border-left: 4px solid #dc2626;
+            background: #fee2e2; padding: 0.8rem 1rem;
+            border-radius: 0 6px 6px 0;
+            margin-bottom: 0.5rem; font-size: 0.9rem; }}
         .risk-safe {{ border-left-color: #16a34a; background: #dcfce7; }}
         .risk-warn {{ border-left-color: #d97706; background: #fef3c7; }}
         .type-bar {{ display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; }}
@@ -51,7 +65,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         .type-bar .type-name {{ font-size: 0.85rem; min-width: 160px; }}
         .type-bar .count {{ font-size: 0.85rem; color: #666; }}
         footer {{ text-align: center; font-size: 0.8rem; color: #999; padding: 1rem; }}
-        .dry-run-banner {{ background: #e0e7ff; border: 2px solid #6366f1; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem; color: #3730a3; font-weight: 600; text-align: center; }}
+        .dry-run-banner {{ background: #e0e7ff;
+            border: 2px solid #6366f1; border-radius: 8px;
+            padding: 1rem; margin-bottom: 1.5rem;
+            color: #3730a3; font-weight: 600;
+            text-align: center; }}
     </style>
 </head>
 <body>
@@ -73,8 +91,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             <div class="stat-box"><div class="value">{total_files}</div><div class="label">File Totali</div></div>
             <div class="stat-box"><div class="value">{files_processed}</div><div class="label">Processati</div></div>
             <div class="stat-box"><div class="value">{files_failed}</div><div class="label">Falliti</div></div>
-            <div class="stat-box"><div class="value">{total_findings}</div><div class="label">Entità Rilevate</div></div>
-            <div class="stat-box"><div class="value">{entities_applied}</div><div class="label">Sostituzioni Applicate</div></div>
+            <div class="stat-box"><div class="value">{total_findings}</div>
+                <div class="label">Entità Rilevate</div></div>
+            <div class="stat-box"><div class="value">{entities_applied}</div>
+                <div class="label">Sostituzioni Applicate</div></div>
         </div>
     </div>
 
@@ -196,7 +216,11 @@ def generate_html_report(report_data: Dict[str, Any], output_path: Path) -> None
     # Dry-run banner
     dry_run_banner = ""
     if config.get("is_dry_run"):
-        dry_run_banner = '<div class="dry-run-banner">⚠ MODALITÀ DRY-RUN: Nessuna modifica è stata applicata ai file originali.</div>'
+        dry_run_banner = (
+            '<div class="dry-run-banner">'
+            "⚠ MODALITÀ DRY-RUN: Nessuna modifica è stata "
+            "applicata ai file originali.</div>"
+        )
 
     # Barre per tipo di entità
     findings_by_type = report_data.get("findings_by_type", {})

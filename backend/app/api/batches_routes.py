@@ -133,8 +133,11 @@ def _validate_passphrase(passphrase: str) -> None:
     if entropy < MIN_PASSPHRASE_ENTROPY:
         raise HTTPException(
             status_code=400,
-            detail=f"La passphrase è troppo debole (entropia: {entropy:.2f} bits/char, minimo: {MIN_PASSPHRASE_ENTROPY}). "
-            "Usa caratteri variati e non ripetitivi.",
+            detail=(
+                f"La passphrase è troppo debole "
+                f"(entropia: {entropy:.2f} bits/char, minimo: {MIN_PASSPHRASE_ENTROPY}). "
+                f"Usa caratteri variati e non ripetitivi."
+            ),
         )
 
 
