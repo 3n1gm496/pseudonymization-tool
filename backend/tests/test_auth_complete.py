@@ -596,11 +596,13 @@ class TestIntegrationWithAuthEndpoints:
 
 # ─── Rate Limiting sul Login ──────────────────────────────────────────────────
 
+
 class TestLoginRateLimit:
     """Verifica che /api/auth/login sia protetto da rate limiting brute-force."""
 
     def _reset_buckets(self):
         import app.core.rate_limit as rl_module
+
         with rl_module._rate_limiter._lock:
             rl_module._rate_limiter._buckets.clear()
 
@@ -634,7 +636,7 @@ class TestLoginRateLimit:
 
     def test_login_rate_limit_independent_per_ip(self):
         """IP diversi hanno bucket separati: un IP bloccato non blocca gli altri.
-        
+
         TestClient usa request.client.host (non X-Forwarded-For) come IP.
         Usiamo il rate limiter direttamente con mock request per testare
         l'isolamento tra bucket di IP diversi.
@@ -659,6 +661,7 @@ class TestLoginRateLimit:
 
         # IP A deve essere bloccato all'11° tentativo
         from fastapi import HTTPException
+
         with pytest.raises(HTTPException) as exc_info:
             limiter.check_limit(make_req("10.2.0.1"), scope="auth_login", limit=10, window_seconds=60)
         assert exc_info.value.status_code == 429
@@ -715,6 +718,7 @@ class TestDestroyAllSessions:
     def test_logout_all_endpoint_authenticated(self):
         """POST /api/auth/logout-all con sessione valida → 200 con sessions_destroyed."""
         import os
+
         client = TestClient(app)
         password = os.environ.get("AUTH_PASSWORD", "T3st-0nly-N0t-Pr0d!#2026")
 
@@ -753,3 +757,175 @@ class TestDestroyAllSessions:
         with _lock:
             assert len(_sessions) == 0
             assert len(_csrf_tokens) == 0
+
+
+# ---------------------------------------------------------------------------
+# Additional coverage tests for auth.py (CI coverage regression fix)
+# Covers: _load_or_create_secret edge cases, Redis paths for _store_session,
+#         _get_session_expires, destroy_all_sessions Redis path,
+#         cleanup_csrf_token Redis path, validate_csrf_dependency edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestLoadOrCreateSecretEdgeCases:
+    """Test edge cases in _load_or_create_secret (lines 94-117)."""
+
+    def test_secret_file_too_short_triggers_regeneration(self, tmp_path, monkeypatch):
+        """If persisted secret is too short, a new one is generated."""
+        import app.core.auth as auth_module
+
+        short_secret_file = tmp_path / "short_secret.txt"
+        short_secret_file.write_text("tooshort")  # < 32 chars
+
+        monkeypatch.setattr(auth_module, "_get_secret_file_path", lambda: str(short_secret_file))
+        monkeypatch.delenv("AUTH_SECRET", raising=False)
+
+        secret, from_env = auth_module._load_or_create_secret()
+        assert len(secret) >= 32
+        # When file is too short, a new secret is generated and persisted
+        # (from_env=True means it was persisted successfully to the file)
+        assert secret != "tooshort"
+
+    def test_secret_file_os_error_triggers_regeneration(self, tmp_path, monkeypatch):
+        """If secret file cannot be read (OSError), a new secret is generated."""
+        import app.core.auth as auth_module
+
+        # Point to a directory (reading a directory raises IsADirectoryError / OSError)
+        monkeypatch.setattr(auth_module, "_get_secret_file_path", lambda: str(tmp_path))
+        monkeypatch.delenv("AUTH_SECRET", raising=False)
+
+        secret, from_env = auth_module._load_or_create_secret()
+        assert len(secret) >= 32
+        assert from_env is False
+
+    def test_secret_file_write_os_error_returns_ephemeral(self, tmp_path, monkeypatch):
+        """If secret file cannot be written, an ephemeral secret is returned."""
+        import app.core.auth as auth_module
+
+        no_write_dir = tmp_path / "no_write"
+        no_write_dir.mkdir()
+        no_write_dir.chmod(0o444)
+        non_writable = no_write_dir / "secret.txt"
+
+        monkeypatch.setattr(auth_module, "_get_secret_file_path", lambda: str(non_writable))
+        monkeypatch.delenv("AUTH_SECRET", raising=False)
+
+        try:
+            secret, from_env = auth_module._load_or_create_secret()
+            assert len(secret) >= 32
+            assert from_env is False
+        finally:
+            no_write_dir.chmod(0o755)
+
+
+class TestRedisSessionPaths:
+    """Test Redis-backed session paths (lines 180-216)."""
+
+    def test_store_session_redis_path(self):
+        """_store_session uses Redis when available."""
+        import app.core.auth as auth_module
+
+        mock_redis = MagicMock()
+        with patch.object(auth_module, "_get_redis_client", return_value=mock_redis):
+            auth_module._store_session("sid123", "admin", int(time.time()) + 3600, "csrf_tok")
+        mock_redis.setex.assert_called()
+
+    def test_get_session_expires_redis_path(self):
+        """_get_session_expires reads from Redis when available."""
+        import app.core.auth as auth_module
+        import json as _json
+
+        mock_redis = MagicMock()
+        exp = int(time.time()) + 3600
+        mock_redis.get.return_value = _json.dumps({"username": "admin", "expires_at": exp}).encode()
+        with patch.object(auth_module, "_get_redis_client", return_value=mock_redis):
+            result = auth_module._get_session_expires("sid123")
+        assert result == exp
+
+    def test_get_session_expires_redis_malformed(self):
+        """_get_session_expires returns None on malformed Redis payload."""
+        import app.core.auth as auth_module
+
+        mock_redis = MagicMock()
+        mock_redis.get.return_value = b"not-json"
+        with patch.object(auth_module, "_get_redis_client", return_value=mock_redis):
+            result = auth_module._get_session_expires("sid123")
+        assert result is None
+
+    def test_get_session_expires_redis_missing(self):
+        """_get_session_expires returns None when key not in Redis."""
+        import app.core.auth as auth_module
+
+        mock_redis = MagicMock()
+        mock_redis.get.return_value = None
+        with patch.object(auth_module, "_get_redis_client", return_value=mock_redis):
+            result = auth_module._get_session_expires("sid123")
+        assert result is None
+
+    def test_destroy_all_sessions_redis_path(self):
+        """destroy_all_sessions deletes all session keys from Redis."""
+        import app.core.auth as auth_module
+
+        mock_redis = MagicMock()
+        mock_redis.keys.side_effect = [
+            [b"auth:session:abc", b"auth:session:def"],
+            [b"auth:csrf:abc", b"auth:csrf:def"],
+        ]
+        with patch.object(auth_module, "_get_redis_client", return_value=mock_redis):
+            count = auth_module.destroy_all_sessions()
+        assert count == 2
+        mock_redis.delete.assert_called()
+
+    def test_destroy_all_sessions_redis_error(self):
+        """destroy_all_sessions returns 0 on Redis error."""
+        import app.core.auth as auth_module
+
+        mock_redis = MagicMock()
+        mock_redis.keys.side_effect = Exception("Redis down")
+        with patch.object(auth_module, "_get_redis_client", return_value=mock_redis):
+            count = auth_module.destroy_all_sessions()
+        assert count == 0
+
+    def test_cleanup_csrf_token_redis_path(self):
+        """cleanup_csrf_token deletes CSRF key from Redis."""
+        import app.core.auth as auth_module
+
+        mock_redis = MagicMock()
+        with patch.object(auth_module, "_get_redis_client", return_value=mock_redis):
+            auth_module.cleanup_csrf_token("sid123")
+        mock_redis.delete.assert_called_once_with("auth:csrf:sid123")
+
+
+class TestValidateCsrfDependencyEdgeCases:
+    """Test edge cases in validate_csrf_dependency (lines 433-480)."""
+
+    @patch("app.core.auth.AUTH_ENABLED", True)
+    def test_csrf_invalid_session_token_format(self):
+        """validate_csrf_dependency raises 401 when session token has no dot."""
+        mock_request = MagicMock(spec=Request)
+        mock_request.headers = {"X-CSRF-Token": "some-token"}
+        mock_request.query_params = {}
+        mock_request.cookies = {SESSION_COOKIE_NAME: "nodot"}
+
+        with pytest.raises(HTTPException) as exc_info:
+            validate_csrf_dependency(mock_request)
+        assert exc_info.value.status_code == 401
+
+    @patch("app.core.auth.AUTH_ENABLED", True)
+    def test_csrf_no_session_cookie(self):
+        """validate_csrf_dependency raises 401 when no session cookie."""
+        mock_request = MagicMock(spec=Request)
+        mock_request.headers = {}
+        mock_request.query_params = {}
+        mock_request.cookies = {}
+
+        with pytest.raises(HTTPException) as exc_info:
+            validate_csrf_dependency(mock_request)
+        assert exc_info.value.status_code == 401
+
+    @patch("app.core.auth.AUTH_ENABLED", False)
+    def test_csrf_dependency_skipped_when_auth_disabled(self):
+        """validate_csrf_dependency returns None immediately when AUTH_ENABLED=False."""
+        mock_request = MagicMock(spec=Request)
+        result = validate_csrf_dependency(mock_request)
+        assert result is None
