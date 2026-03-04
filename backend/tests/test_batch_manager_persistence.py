@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 from app.core import batch_manager as bm
+from app.core import batch_persistence as bp
+from app.core import batch_redis as br
 from app.models.schemas import Batch, BatchConfig, BatchMode, PresetName
 
 
@@ -17,12 +19,12 @@ def isolated_batch_store(tmp_path, monkeypatch):
         bm._decisions.clear()
         bm._last_activity.clear()
         bm._batch_start_times.clear()
-        bm._redis_client_cached = None
-        bm._redis_last_check = 0.0
-
+        br._redis_client_cached = None
+        br._redis_last_check = 0.0
     store_dir = tmp_path / "batch-store"
     store_dir.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(bm, "TEMP_BASE_DIR", store_dir)
+    monkeypatch.setattr(bp, "TEMP_BASE_DIR", store_dir)
     yield store_dir
 
     with bm._global_lock:
@@ -32,8 +34,8 @@ def isolated_batch_store(tmp_path, monkeypatch):
         bm._decisions.clear()
         bm._last_activity.clear()
         bm._batch_start_times.clear()
-        bm._redis_client_cached = None
-        bm._redis_last_check = 0.0
+        br._redis_client_cached = None
+        br._redis_last_check = 0.0
 
 
 def test_batch_state_visible_across_processes(isolated_batch_store):
@@ -53,7 +55,9 @@ def test_batch_state_visible_across_processes(isolated_batch_store):
             "from pathlib import Path",
             "sys.path.insert(0, sys.argv[1])",
             "from app.core import batch_manager as bm",
+            "from app.core import batch_persistence as bp",
             "bm.TEMP_BASE_DIR = Path(sys.argv[2])",
+            "bp.TEMP_BASE_DIR = Path(sys.argv[2])",
             "batch_id = sys.argv[3]",
             "batch = bm.get_batch(batch_id)",
             "decisions = bm.get_decisions(batch_id)",
@@ -90,6 +94,7 @@ def test_batch_state_visible_across_processes(isolated_batch_store):
 def test_list_batches_does_not_fail_if_store_missing(monkeypatch, tmp_path):
     missing_store = tmp_path / "does-not-exist"
     monkeypatch.setattr(bm, "TEMP_BASE_DIR", missing_store)
+    monkeypatch.setattr(bp, "TEMP_BASE_DIR", missing_store)
 
     with bm._global_lock:
         bm._batches.clear()
@@ -126,7 +131,8 @@ def test_batch_state_can_be_loaded_from_redis(monkeypatch, isolated_batch_store)
             self._sets.setdefault(key, set()).discard(value)
 
     fake_redis = FakeRedis()
-    monkeypatch.setattr(bm, "_get_redis_client", lambda: fake_redis)
+    # _get_redis_client è ora in batch_redis, non in batch_manager
+    monkeypatch.setattr(br, "_get_redis_client", lambda: fake_redis)
 
     batch = Batch(config=BatchConfig(mode=BatchMode.STRICT, preset=PresetName.SOC_LOGS))
     created = bm.create_batch(batch)

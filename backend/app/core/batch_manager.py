@@ -1,17 +1,21 @@
 """
-Gestore dei batch in memoria v5.0.0.
+Gestore dei batch in memoria v5.1.0.
+
 Mantiene lo stato di tutti i batch attivi durante la sessione del server.
 - PseudonymEngine persistente per batch
 - Passphrase generata automaticamente (persistita su storage condiviso per worker)
 - Decisions persistite per batch (accept/reject/modify) su storage condiviso
 - Timeout/cleanup automatico per inattività
+
+Architettura interna (refactoring v5.1.0):
+  batch_redis.py       — layer Redis (connessione, CRUD su Redis)
+  batch_persistence.py — layer filesystem (scrittura atomica, cifratura passphrase)
+  batch_manager.py     — logica di business (CRUD batch, cleanup, scheduler)
 """
 
-import json
 import logging
 import os
 import shutil
-import tempfile
 import threading
 import time
 from contextlib import contextmanager
@@ -20,6 +24,19 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from app.core.batch_persistence import (
+    batch_start_time_path,
+    get_batch_dir,
+    load_batch_from_disk,
+    load_decisions_from_disk,
+    load_passphrase_from_disk,
+    load_start_time_from_disk,
+    save_batch_to_disk,
+    save_decisions_to_disk,
+    save_passphrase_to_disk,
+    save_start_time_to_disk,
+)
+from app.core.batch_redis import delete_batch_from_redis, list_batch_ids_from_redis, load_batch_from_redis
 from app.core.config import TEMP_BASE_DIR
 from app.models.schemas import Batch, BatchMode
 
@@ -39,320 +56,6 @@ BATCH_INACTIVITY_TIMEOUT_SECONDS = int(os.environ.get("BATCH_INACTIVITY_TIMEOUT_
 # CRITICAL FIX #1: Reentrant lock for thread-safe access to all shared state
 _global_lock = threading.RLock()
 _cleanup_lock = threading.Lock()
-_redis_client_cached = None
-_redis_last_check = 0.0
-_REDIS_RETRY_INTERVAL_SECONDS = 5.0
-
-
-def _get_redis_client():
-    global _redis_client_cached, _redis_last_check
-
-    now = time.time()
-    if _redis_client_cached is not None:
-        return _redis_client_cached
-    if now - _redis_last_check < _REDIS_RETRY_INTERVAL_SECONDS:
-        return None
-
-    _redis_last_check = now
-    redis_url = os.environ.get("REDIS_URL", "redis://redis:6379/0")
-    try:
-        from redis import Redis
-
-        client = Redis.from_url(
-            redis_url,
-            decode_responses=True,
-            socket_timeout=0.3,
-            socket_connect_timeout=0.3,
-            retry_on_timeout=False,
-        )
-        client.ping()
-        _redis_client_cached = client
-        return client
-    except Exception as e:
-        logger.debug("Redis non disponibile (fallback in-memory attivo): %s", e)
-        _redis_client_cached = None
-        return None
-
-
-def _redis_key(batch_id: str, suffix: str) -> str:
-    return f"batch:{batch_id}:{suffix}"
-
-
-def _redis_batch_ids_key() -> str:
-    return "batch:ids"
-
-
-def _save_batch_to_redis(batch: Batch) -> None:
-    redis_client = _get_redis_client()
-    if not redis_client:
-        return
-    payload = batch.model_dump_json() if hasattr(batch, "model_dump_json") else batch.json()
-    redis_client.set(_redis_key(batch.batch_id, "meta"), payload)
-    redis_client.sadd(_redis_batch_ids_key(), batch.batch_id)
-
-
-def _load_batch_from_redis(batch_id: str) -> Optional[Batch]:
-    redis_client = _get_redis_client()
-    if not redis_client:
-        return None
-    payload = redis_client.get(_redis_key(batch_id, "meta"))
-    if not payload:
-        return None
-    try:
-        if hasattr(Batch, "model_validate_json"):
-            return Batch.model_validate_json(payload)
-        return Batch.parse_raw(payload)
-    except Exception as e:
-        logger.warning("Impossibile caricare batch %s da redis: %s", batch_id, e)
-        return None
-
-
-def _save_decisions_to_redis(batch_id: str, decisions: Dict[str, Any]) -> None:
-    redis_client = _get_redis_client()
-    if not redis_client:
-        return
-    redis_client.set(_redis_key(batch_id, "decisions"), json.dumps(decisions, ensure_ascii=False))
-    redis_client.sadd(_redis_batch_ids_key(), batch_id)
-
-
-def _load_decisions_from_redis(batch_id: str) -> Optional[Dict[str, Any]]:
-    redis_client = _get_redis_client()
-    if not redis_client:
-        return None
-    raw = redis_client.get(_redis_key(batch_id, "decisions"))
-    if not raw:
-        return None
-    try:
-        return json.loads(raw)
-    except Exception as e:
-        logger.warning("Impossibile caricare decisions per batch %s da redis: %s", batch_id, e)
-        return None
-
-
-def _save_passphrase_to_redis(batch_id: str, passphrase: str) -> None:
-    redis_client = _get_redis_client()
-    if not redis_client:
-        return
-    redis_client.set(_redis_key(batch_id, "passphrase"), passphrase)
-    redis_client.sadd(_redis_batch_ids_key(), batch_id)
-
-
-def _load_passphrase_from_redis(batch_id: str) -> Optional[str]:
-    redis_client = _get_redis_client()
-    if not redis_client:
-        return None
-    return redis_client.get(_redis_key(batch_id, "passphrase"))
-
-
-def _save_start_time_to_redis(batch_id: str, started_at: str) -> None:
-    redis_client = _get_redis_client()
-    if not redis_client:
-        return
-    redis_client.set(_redis_key(batch_id, "started_at"), started_at)
-    redis_client.sadd(_redis_batch_ids_key(), batch_id)
-
-
-def _load_start_time_from_redis(batch_id: str) -> Optional[str]:
-    redis_client = _get_redis_client()
-    if not redis_client:
-        return None
-    return redis_client.get(_redis_key(batch_id, "started_at"))
-
-
-def _delete_batch_from_redis(batch_id: str) -> None:
-    redis_client = _get_redis_client()
-    if not redis_client:
-        return
-    redis_client.delete(
-        _redis_key(batch_id, "meta"),
-        _redis_key(batch_id, "decisions"),
-        _redis_key(batch_id, "passphrase"),
-        _redis_key(batch_id, "started_at"),
-    )
-    redis_client.srem(_redis_batch_ids_key(), batch_id)
-
-
-def _batch_meta_path(batch_id: str) -> Path:
-    return get_batch_dir(batch_id) / "batch.json"
-
-
-def _batch_decisions_path(batch_id: str) -> Path:
-    return get_batch_dir(batch_id) / "decisions.json"
-
-
-def _batch_passphrase_path(batch_id: str) -> Path:
-    return get_batch_dir(batch_id) / "passphrase.txt"
-
-
-def _batch_start_time_path(batch_id: str) -> Path:
-    return get_batch_dir(batch_id) / "started_at.txt"
-
-
-def _atomic_write_text(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path: Optional[Path] = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=str(path.parent),
-            prefix=f".{path.name}.",
-            suffix=".tmp",
-            delete=False,
-        ) as handle:
-            handle.write(content)
-            handle.flush()
-            os.fsync(handle.fileno())
-            tmp_path = Path(handle.name)
-        tmp_path.replace(path)
-    finally:
-        if tmp_path and tmp_path.exists():
-            try:
-                tmp_path.unlink()
-            except Exception as e:
-                logger.warning("Impossibile rimuovere il file temporaneo %s: %s", tmp_path, e)
-
-
-def _save_batch_to_disk(batch: Batch) -> None:
-    payload = batch.model_dump_json() if hasattr(batch, "model_dump_json") else batch.json()
-    _atomic_write_text(_batch_meta_path(batch.batch_id), payload)
-    _save_batch_to_redis(batch)
-
-
-def _load_batch_from_disk(batch_id: str) -> Optional[Batch]:
-    redis_loaded = _load_batch_from_redis(batch_id)
-    if redis_loaded is not None:
-        return redis_loaded
-    meta_path = _batch_meta_path(batch_id)
-    if not meta_path.exists():
-        return None
-    try:
-        payload = meta_path.read_text(encoding="utf-8")
-        if hasattr(Batch, "model_validate_json"):
-            return Batch.model_validate_json(payload)
-        return Batch.parse_raw(payload)
-    except Exception as e:
-        logger.warning("Impossibile caricare batch %s da disco: %s", batch_id, e)
-        return None
-
-
-def _save_decisions_to_disk(batch_id: str, decisions: Dict[str, Any]) -> None:
-    _atomic_write_text(_batch_decisions_path(batch_id), json.dumps(decisions, ensure_ascii=False))
-    _save_decisions_to_redis(batch_id, decisions)
-
-
-def _load_decisions_from_disk(batch_id: str) -> Dict[str, Any]:
-    redis_loaded = _load_decisions_from_redis(batch_id)
-    if redis_loaded is not None:
-        return redis_loaded
-    decisions_path = _batch_decisions_path(batch_id)
-    if not decisions_path.exists():
-        return {}
-    try:
-        return json.loads(decisions_path.read_text(encoding="utf-8"))
-    except Exception as e:
-        logger.warning("Impossibile caricare decisions per batch %s: %s", batch_id, e)
-        return {}
-
-
-def _encrypt_passphrase_for_disk(passphrase: str) -> str:
-    """
-    Cifra la passphrase con AES-256-GCM usando l'AUTH_SECRET come chiave.
-    La passphrase su disco è inutilizzabile senza l'AUTH_SECRET del server.
-    Restituisce una stringa base64url-safe.
-    """
-    import base64
-    import hashlib
-
-    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-
-    auth_secret = os.environ.get("AUTH_SECRET", "")
-    if not auth_secret:
-        # Se AUTH_SECRET non è configurato, non salvare su disco
-        raise ValueError("AUTH_SECRET non configurato: impossibile cifrare la passphrase per il disco")
-    # Deriva una chiave AES-256 dall'AUTH_SECRET con SHA-256 (è già un segreto ad alta entropia)
-    key = hashlib.sha256(auth_secret.encode("utf-8")).digest()
-    nonce = os.urandom(12)
-    aesgcm = AESGCM(key)
-    ciphertext = aesgcm.encrypt(nonce, passphrase.encode("utf-8"), None)
-    # Formato: nonce (12 bytes) + ciphertext — codificato in base64
-    return base64.urlsafe_b64encode(nonce + ciphertext).decode("ascii")
-
-
-def _decrypt_passphrase_from_disk(encrypted: str) -> Optional[str]:
-    """
-    Decifra la passphrase letta dal disco.
-    Restituisce None se AUTH_SECRET non è configurato o la decifratura fallisce.
-    """
-    import base64
-    import hashlib
-
-    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-
-    auth_secret = os.environ.get("AUTH_SECRET", "")
-    if not auth_secret:
-        logger.warning("AUTH_SECRET non configurato: impossibile decifrare la passphrase dal disco")
-        return None
-    try:
-        raw = base64.urlsafe_b64decode(encrypted.encode("ascii"))
-        key = hashlib.sha256(auth_secret.encode("utf-8")).digest()
-        nonce, ciphertext = raw[:12], raw[12:]
-        aesgcm = AESGCM(key)
-        return aesgcm.decrypt(nonce, ciphertext, None).decode("utf-8")
-    except Exception as e:
-        logger.warning("Impossibile decifrare passphrase dal disco: %s", e)
-        return None
-
-
-def _save_passphrase_to_disk(batch_id: str, passphrase: str) -> None:
-    _save_passphrase_to_redis(batch_id, passphrase)
-    try:
-        encrypted = _encrypt_passphrase_for_disk(passphrase)
-    except ValueError as e:
-        # AUTH_SECRET non configurato: skip disco, solo Redis e memoria
-        logger.warning("Passphrase non salvata su disco per batch %s: %s", batch_id, e)
-        return
-    passphrase_path = _batch_passphrase_path(batch_id)
-    _atomic_write_text(passphrase_path, encrypted)
-    try:
-        passphrase_path.chmod(0o600)
-    except Exception as e:
-        # Su alcuni filesystem (es. FAT32, Windows dev) chmod non è supportato
-        logger.warning("Impossibile impostare permessi 0o600 su %s: %s", passphrase_path, e)
-
-
-def _load_passphrase_from_disk(batch_id: str) -> Optional[str]:
-    redis_loaded = _load_passphrase_from_redis(batch_id)
-    if redis_loaded is not None:
-        return redis_loaded
-    passphrase_path = _batch_passphrase_path(batch_id)
-    if not passphrase_path.exists():
-        return None
-    try:
-        encrypted = passphrase_path.read_text(encoding="utf-8").strip()
-        return _decrypt_passphrase_from_disk(encrypted)
-    except Exception as e:
-        logger.warning("Impossibile leggere passphrase per batch %s: %s", batch_id, e)
-        return None
-
-
-def _save_start_time_to_disk(batch_id: str, started_at: str) -> None:
-    _atomic_write_text(_batch_start_time_path(batch_id), started_at)
-    _save_start_time_to_redis(batch_id, started_at)
-
-
-def _load_start_time_from_disk(batch_id: str) -> Optional[str]:
-    redis_loaded = _load_start_time_from_redis(batch_id)
-    if redis_loaded is not None:
-        return redis_loaded
-    start_path = _batch_start_time_path(batch_id)
-    if not start_path.exists():
-        return None
-    try:
-        return start_path.read_text(encoding="utf-8").strip() or None
-    except Exception as e:
-        logger.warning("Impossibile leggere start time per batch %s: %s", batch_id, e)
-        return None
 
 
 # ─── Generazione passphrase ───────────────────────────────────────────────────
@@ -378,7 +81,7 @@ def set_batch_start_time(batch_id: str) -> None:
     with _global_lock:
         started_at = datetime.fromisoformat(datetime.now(timezone.utc).isoformat()).isoformat()
         _batch_start_times[batch_id] = started_at
-        _save_start_time_to_disk(batch_id, started_at)
+        save_start_time_to_disk(batch_id, started_at)
 
 
 def get_batch_start_time(batch_id: str) -> Optional[str]:
@@ -387,7 +90,7 @@ def get_batch_start_time(batch_id: str) -> Optional[str]:
         cached = _batch_start_times.get(batch_id)
         if cached:
             return cached
-        loaded = _load_start_time_from_disk(batch_id)
+        loaded = load_start_time_from_disk(batch_id)
         if loaded:
             _batch_start_times[batch_id] = loaded
         return loaded
@@ -397,7 +100,7 @@ def clear_batch_start_time(batch_id: str) -> Optional[str]:
     """Remove and return batch start time (thread-safe)."""
     with _global_lock:
         value = _batch_start_times.pop(batch_id, None)
-        start_path = _batch_start_time_path(batch_id)
+        start_path = batch_start_time_path(batch_id)
         if start_path.exists():
             try:
                 start_path.unlink()
@@ -475,8 +178,8 @@ def create_batch(batch: Batch) -> Batch:
         _batches[batch.batch_id] = batch
         _decisions[batch.batch_id] = {}
         _last_activity[batch.batch_id] = time.time()
-        _save_batch_to_disk(batch)
-        _save_decisions_to_disk(batch.batch_id, {})
+        save_batch_to_disk(batch)
+        save_decisions_to_disk(batch.batch_id, {})
 
     logger.info("Batch creato: id=%s", batch.batch_id)
     return batch
@@ -487,7 +190,7 @@ def get_batch(batch_id: str) -> Optional[Batch]:
     with _global_lock:
         batch = _batches.get(batch_id)
         if not batch:
-            batch = _load_batch_from_disk(batch_id)
+            batch = load_batch_from_disk(batch_id)
             if batch:
                 _batches[batch_id] = batch
         if batch:
@@ -500,30 +203,20 @@ def update_batch(batch: Batch) -> Batch:
     with _global_lock:
         _batches[batch.batch_id] = batch
         _last_activity[batch.batch_id] = time.time()
-        _save_batch_to_disk(batch)
+        save_batch_to_disk(batch)
     return batch
-
-
-def get_batch_dir(batch_id: str) -> Path:
-    """Restituisce la directory temporanea del batch."""
-    return TEMP_BASE_DIR / batch_id
 
 
 def list_batches() -> List[Batch]:
     """Restituisce tutti i batch attivi."""
     with _global_lock:
-        redis_client = _get_redis_client()
-        if redis_client:
-            try:
-                for batch_id in redis_client.smembers(_redis_batch_ids_key()):
-                    if batch_id in _batches:
-                        continue
-                    loaded = _load_batch_from_redis(batch_id)
-                    if loaded:
-                        _batches[batch_id] = loaded
-                        _last_activity.setdefault(batch_id, time.time())
-            except Exception as e:
-                logger.warning("Errore durante list_batches da redis: %s", e)
+        for batch_id in list_batch_ids_from_redis():
+            if batch_id in _batches:
+                continue
+            loaded = load_batch_from_redis(batch_id)
+            if loaded:
+                _batches[batch_id] = loaded
+                _last_activity.setdefault(batch_id, time.time())
 
         if not TEMP_BASE_DIR.exists():
             return list(_batches.values())
@@ -533,7 +226,7 @@ def list_batches() -> List[Batch]:
             batch_id = child.name
             if batch_id in _batches:
                 continue
-            loaded = _load_batch_from_disk(batch_id)
+            loaded = load_batch_from_disk(batch_id)
             if loaded:
                 _batches[batch_id] = loaded
                 _last_activity.setdefault(batch_id, time.time())
@@ -547,7 +240,7 @@ def store_passphrase(batch_id: str, passphrase: str) -> None:
     """Memorizza la passphrase in memoria e su storage condiviso per Celery worker."""
     with _global_lock:
         _passphrases[batch_id] = passphrase
-        _save_passphrase_to_disk(batch_id, passphrase)
+        save_passphrase_to_disk(batch_id, passphrase)
 
 
 def get_passphrase(batch_id: str) -> Optional[str]:
@@ -556,7 +249,7 @@ def get_passphrase(batch_id: str) -> Optional[str]:
         cached = _passphrases.get(batch_id)
         if cached:
             return cached
-        loaded = _load_passphrase_from_disk(batch_id)
+        loaded = load_passphrase_from_disk(batch_id)
         if loaded is not None:
             _passphrases[batch_id] = loaded
         return loaded
@@ -569,13 +262,13 @@ def regenerate_passphrase(batch_id: str) -> Optional[str]:
     """
     with _global_lock:
         if batch_id not in _batches:
-            loaded_batch = _load_batch_from_disk(batch_id)
+            loaded_batch = load_batch_from_disk(batch_id)
             if not loaded_batch:
                 return None
             _batches[batch_id] = loaded_batch
         new_pp = generate_passphrase()
         _passphrases[batch_id] = new_pp
-        _save_passphrase_to_disk(batch_id, new_pp)
+        save_passphrase_to_disk(batch_id, new_pp)
     logger.info("Passphrase rigenerata per batch %s (log sanitizzato)", batch_id)
     return new_pp
 
@@ -611,7 +304,7 @@ def store_decisions(batch_id: str, decisions: List[Dict[str, Any]]) -> Dict[str,
                 counts["accepted"] += 1
 
         _last_activity[batch_id] = time.time()
-        _save_decisions_to_disk(batch_id, _decisions[batch_id])
+        save_decisions_to_disk(batch_id, _decisions[batch_id])
     return counts
 
 
@@ -621,7 +314,7 @@ def get_decisions(batch_id: str) -> Dict[str, Any]:
         cached = _decisions.get(batch_id)
         if cached is not None:
             return cached
-        loaded = _load_decisions_from_disk(batch_id)
+        loaded = load_decisions_from_disk(batch_id)
         _decisions[batch_id] = loaded
         return loaded
 
@@ -630,7 +323,7 @@ def clear_decisions(batch_id: str) -> None:
     """Cancella le decisioni di un batch (es. dopo apply)."""
     with _global_lock:
         _decisions[batch_id] = {}
-        _save_decisions_to_disk(batch_id, {})
+        save_decisions_to_disk(batch_id, {})
 
 
 # ─── PseudonymEngine persistente ─────────────────────────────────────────────
@@ -691,7 +384,7 @@ def cleanup_batch(batch_id: str) -> None:
         _batches.pop(batch_id, None)
         _last_activity.pop(batch_id, None)
         _batch_start_times.pop(batch_id, None)  # Also cleanup timing info
-        _delete_batch_from_redis(batch_id)
+        delete_batch_from_redis(batch_id)
 
 
 def cleanup_inactive_batches() -> int:
@@ -736,7 +429,7 @@ def cleanup_inactive_batches() -> int:
                 _batches.pop(bid, None)
                 _last_activity.pop(bid, None)
                 _batch_start_times.pop(bid, None)
-                _delete_batch_from_redis(bid)
+                delete_batch_from_redis(bid)
                 cleaned_count += 1
 
     return cleaned_count
