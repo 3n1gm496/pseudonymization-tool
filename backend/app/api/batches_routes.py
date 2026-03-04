@@ -3,11 +3,13 @@ Router API per i flussi batches (upload file e gestione ciclo di vita).
 Separato dal router monolitico per ridurre blast radius e accoppiamento.
 """
 
+import asyncio
+import json
 import logging
 import math
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Tuple
+from typing import AsyncGenerator, List, Tuple
 
 from app.core.audit import audit_event
 from app.core.batch_manager import (
@@ -43,7 +45,7 @@ from app.models.schemas import (
     SubmitReviewRequest,
 )
 from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
@@ -664,3 +666,108 @@ async def regenerate_batch_passphrase(batch_id: str):
     if not new_pp:
         raise HTTPException(status_code=500, detail="Impossibile rigenerare la passphrase")
     return {"batch_id": batch_id, "passphrase": new_pp}
+
+
+# ─── SSE: Batch Status Events ─────────────────────────────────────────────────
+
+
+async def _sse_batch_event_generator(
+    batch_id: str,
+    timeout_seconds: int = 1800,
+    poll_interval: float = 1.0,
+) -> AsyncGenerator[str, None]:
+    """
+    Genera eventi SSE per lo stato di un batch.
+
+    Invia un evento ogni poll_interval secondi finché il batch non raggiunge
+    uno stato terminale (done, done_with_errors, error) o scade il timeout.
+    Il formato SSE è: 'data: <json>\\n\\n'
+    """
+    TERMINAL_STATUSES = {"done", "done_with_errors", "error"}
+    started_at = asyncio.get_event_loop().time()
+    last_status: str | None = None
+    task_info: dict = {}
+
+    # Heartbeat iniziale
+    yield "data: " + json.dumps({"type": "connected", "batch_id": batch_id}) + "\n\n"
+
+    while True:
+        elapsed = asyncio.get_event_loop().time() - started_at
+        if elapsed > timeout_seconds:
+            yield "data: " + json.dumps({"type": "timeout", "batch_id": batch_id}) + "\n\n"
+            break
+
+        batch = get_batch(batch_id)
+        if not batch:
+            yield (
+                "data: " + json.dumps({"type": "error", "batch_id": batch_id, "message": "Batch non trovato"}) + "\n\n"
+            )
+            break
+
+        # Recupera stato task Celery se disponibile
+        task_state = "NOT_QUEUED"
+        if batch.task_id:
+            task_info = get_task_status(batch.task_id)
+            task_state = str(task_info.get("status", "UNKNOWN")).upper()
+
+        # Mappa task_state → status leggibile
+        if task_state == "FAILURE":
+            current_status = "error"
+        elif task_state in {"PENDING", "RECEIVED"}:
+            current_status = "pending"
+        elif task_state in {"STARTED", "RETRY"}:
+            current_status = "running"
+        else:
+            current_status = batch.status.value
+
+        # Invia evento solo se lo stato è cambiato (o al primo giro)
+        if current_status != last_status:
+            event_data = {
+                "type": "status",
+                "batch_id": batch_id,
+                "status": current_status,
+                "task_state": task_state,
+                "error_message": batch.error_message or (task_info.get("error") if batch.task_id else None),
+            }
+            yield "data: " + json.dumps(event_data) + "\n\n"
+            last_status = current_status
+
+        # Stato terminale: chiudi lo stream
+        if current_status in TERMINAL_STATUSES:
+            break
+
+        # Heartbeat ogni 15 secondi per mantenere la connessione aperta
+        if int(elapsed) % 15 == 0 and int(elapsed) > 0:
+            yield ": heartbeat\n\n"
+
+        await asyncio.sleep(poll_interval)
+
+
+@router.get("/batches/{batch_id}/events")
+async def batch_status_events(batch_id: str):
+    """
+    Endpoint SSE (Server-Sent Events) per ricevere aggiornamenti real-time
+    sullo stato di un batch.
+
+    Il client si connette con EventSource e riceve eventi JSON finché
+    il batch non raggiunge uno stato terminale.
+
+    Formato eventi:
+    - {type: 'connected', batch_id} — connessione stabilita
+    - {type: 'status', batch_id, status, task_state, error_message} — cambio stato
+    - {type: 'timeout', batch_id} — timeout (30 min)
+    - {type: 'error', batch_id, message} — batch non trovato
+    """
+    batch = get_batch(batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail=f"Batch non trovato: {batch_id}")
+
+    return StreamingResponse(
+        _sse_batch_event_generator(batch_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # Disabilita buffering nginx
+            "Connection": "keep-alive",
+        },
+    )

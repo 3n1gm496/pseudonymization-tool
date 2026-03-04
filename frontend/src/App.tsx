@@ -55,8 +55,9 @@ const App = (): JSX.Element => {
   const [defaultPasswordWarning, setDefaultPasswordWarning] = useState(false)
   const { showToast, ToastContainer } = useToast()
 
-  // Ref to cancel ongoing polling when user resets/logs out
+  // Ref to cancel ongoing SSE/polling when user resets/logs out
   const pollingCancelledRef = useRef(false)
+  const sseAbortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     const bootstrapAuth = async (): Promise<void> => {
@@ -88,15 +89,93 @@ const App = (): JSX.Element => {
   }, [])
 
   /**
-   * Poll batch until applied (status 'done' or 'done_with_errors').
+   * Attende il completamento del batch tramite SSE.
+   * Fallback automatico al polling se SSE non è supportato o fallisce.
    */
-  const pollBatchUntilApplied = async (
+  const waitForBatchCompletion = async (
     batchId: string,
     timeoutMs = 25 * 60 * 1000,
-    intervalMs = 1500,
+    pollIntervalMs = 1500,
   ): Promise<Batch> => {
-    const startedAt = Date.now()
     pollingCancelledRef.current = false
+
+    // Tenta SSE prima
+    if (typeof EventSource !== 'undefined') {
+      try {
+        const result = await new Promise<Batch>((resolve, reject) => {
+          const abortCtrl = new AbortController()
+          sseAbortRef.current = abortCtrl
+          const timeoutId = setTimeout(() => {
+            abortCtrl.abort()
+            reject(new Error('Timeout SSE attesa completamento batch'))
+          }, timeoutMs)
+
+          const es = new EventSource(`/api/batches/${batchId}/events`)
+
+          es.onmessage = (event: MessageEvent<string>) => {
+            if (pollingCancelledRef.current) {
+              clearTimeout(timeoutId)
+              es.close()
+              reject(new Error("SSE cancellato dall'utente"))
+              return
+            }
+            try {
+              const data = JSON.parse(event.data) as {
+                type: string
+                status?: string
+                error_message?: string
+                message?: string
+              }
+              if (data.type === 'status') {
+                const status = (data.status ?? '').toLowerCase()
+                if (status === 'done' || status === 'done_with_errors') {
+                  clearTimeout(timeoutId)
+                  es.close()
+                  // Fetch batch completo con findings
+                  axios
+                    .get<Batch>(`/api/batches/${batchId}`)
+                    .then((r) => resolve(r.data))
+                    .catch(reject)
+                } else if (status === 'error') {
+                  clearTimeout(timeoutId)
+                  es.close()
+                  reject(new Error(data.error_message ?? 'Errore durante apply del batch'))
+                }
+              } else if (data.type === 'timeout') {
+                clearTimeout(timeoutId)
+                es.close()
+                reject(new Error('Timeout SSE lato server'))
+              } else if (data.type === 'error') {
+                clearTimeout(timeoutId)
+                es.close()
+                reject(new Error(data.message ?? 'Errore SSE'))
+              }
+            } catch {
+              // JSON parse error — ignora
+            }
+          }
+
+          es.onerror = () => {
+            clearTimeout(timeoutId)
+            es.close()
+            // Fallback al polling
+            reject(new Error('SSE_FALLBACK'))
+          }
+        })
+        sseAbortRef.current = null
+        return result
+      } catch (err: unknown) {
+        sseAbortRef.current = null
+        const msg = err instanceof Error ? err.message : ''
+        if (msg !== 'SSE_FALLBACK') {
+          throw err
+        }
+        // Continua con il polling come fallback
+      }
+    }
+
+    // Fallback: polling classico
+    const startedAt = Date.now()
     while (Date.now() - startedAt < timeoutMs) {
       if (pollingCancelledRef.current) {
         throw new Error("Polling cancellato dall'utente")
@@ -113,7 +192,7 @@ const App = (): JSX.Element => {
         throw new Error(batchWithError.error_message ?? 'Errore durante apply del batch')
       }
       await new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(resolve, intervalMs)
+        const timer = setTimeout(resolve, pollIntervalMs)
         const cancelCheck = setInterval(() => {
           if (pollingCancelledRef.current) {
             clearTimeout(timer)
@@ -121,7 +200,7 @@ const App = (): JSX.Element => {
             reject(new Error("Polling cancellato dall'utente"))
           }
         }, 100)
-        setTimeout(() => clearInterval(cancelCheck), intervalMs)
+        setTimeout(() => clearInterval(cancelCheck), pollIntervalMs)
       })
     }
     throw new Error('Timeout attesa completamento apply batch')
@@ -161,6 +240,8 @@ const App = (): JSX.Element => {
 
   const handleLogout = async (): Promise<void> => {
     pollingCancelledRef.current = true
+    sseAbortRef.current?.abort()
+    sseAbortRef.current = null
     try {
       await axios.post('/api/auth/logout')
     } catch {
@@ -197,7 +278,7 @@ const App = (): JSX.Element => {
         const applyResponse = await axios.post<Batch>(`/api/batches/${batchId}/apply`)
         if (applyResponse.status === 202) {
           showToast('Apply accodato, attendo completamento...', 'info')
-          const completedBatch = await pollBatchUntilApplied(batchId)
+          const completedBatch = await waitForBatchCompletion(batchId)
           setBatch((prev) => ({
             ...completedBatch,
             passphrase: (prev as (Batch & { passphrase?: string }) | null)?.passphrase,
@@ -224,6 +305,8 @@ const App = (): JSX.Element => {
 
   const handleReset = (): void => {
     pollingCancelledRef.current = true
+    sseAbortRef.current?.abort()
+    sseAbortRef.current = null
     setBatch(null)
     setPseudonymizedText(null)
     setCurrentStep('scanner')

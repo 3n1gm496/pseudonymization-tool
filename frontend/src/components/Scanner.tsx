@@ -17,11 +17,73 @@ const Scanner = ({ onScan, isLoading }: ScannerProps): JSX.Element => {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { showToast } = useToast()
 
-  const pollBatchUntilReview = async (
+  const waitForScanCompletion = async (
     batchId: string,
     timeoutMs = 20 * 60 * 1000,
-    intervalMs = 1500,
+    pollIntervalMs = 1500,
   ): Promise<Batch> => {
+    const SCAN_TERMINAL = new Set(['review', 'done', 'done_with_errors', 'error'])
+
+    // Tenta SSE prima
+    if (typeof EventSource !== 'undefined') {
+      try {
+        const result = await new Promise<Batch>((resolve, reject) => {
+          const timeoutId = setTimeout(() => {
+            es.close()
+            reject(new Error('Timeout SSE attesa scansione batch'))
+          }, timeoutMs)
+
+          const es = new EventSource(`/api/batches/${batchId}/events`)
+
+          es.onmessage = (event: MessageEvent<string>) => {
+            try {
+              const data = JSON.parse(event.data) as {
+                type: string
+                status?: string
+                error_message?: string
+                message?: string
+              }
+              if (data.type === 'status') {
+                const status = (data.status ?? '').toLowerCase()
+                if (SCAN_TERMINAL.has(status)) {
+                  clearTimeout(timeoutId)
+                  es.close()
+                  if (status === 'error') {
+                    reject(new Error(data.error_message ?? 'Errore durante la scansione del batch'))
+                  } else {
+                    axios
+                      .get<Batch>(`/api/batches/${batchId}`)
+                      .then((r) => resolve(r.data))
+                      .catch(reject)
+                  }
+                }
+              } else if (data.type === 'timeout' || data.type === 'error') {
+                clearTimeout(timeoutId)
+                es.close()
+                reject(new Error(data.message ?? 'Errore SSE scansione'))
+              }
+            } catch {
+              // JSON parse error — ignora
+            }
+          }
+
+          es.onerror = () => {
+            clearTimeout(timeoutId)
+            es.close()
+            reject(new Error('SSE_FALLBACK'))
+          }
+        })
+        return result
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : ''
+        if (msg !== 'SSE_FALLBACK') {
+          throw err
+        }
+        // Continua con il polling come fallback
+      }
+    }
+
+    // Fallback: polling classico
     const startedAt = Date.now()
     while (Date.now() - startedAt < timeoutMs) {
       const statusResponse = await axios.get<Batch>(`/api/batches/${batchId}/status`)
@@ -35,7 +97,7 @@ const Scanner = ({ onScan, isLoading }: ScannerProps): JSX.Element => {
         const batchWithError = currentBatch as Batch & { error_message?: string }
         throw new Error(batchWithError.error_message ?? 'Errore durante la scansione del batch')
       }
-      await new Promise<void>((resolve) => setTimeout(resolve, intervalMs))
+      await new Promise<void>((resolve) => setTimeout(resolve, pollIntervalMs))
     }
     throw new Error('Timeout attesa completamento scansione batch')
   }
@@ -95,7 +157,7 @@ const Scanner = ({ onScan, isLoading }: ScannerProps): JSX.Element => {
       let batchPayload: Batch = { ...response.data }
       if (response.status === 202 && response.data?.batch_id) {
         showToast('Scansione accodata, attendo completamento...', 'info')
-        const completedBatch = await pollBatchUntilReview(response.data.batch_id)
+        const completedBatch = await waitForScanCompletion(response.data.batch_id)
         batchPayload = {
           ...completedBatch,
           ...(response.data.passphrase ? { passphrase: response.data.passphrase } : {}),
