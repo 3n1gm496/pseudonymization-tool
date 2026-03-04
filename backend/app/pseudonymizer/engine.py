@@ -41,9 +41,10 @@ class PseudonymEngine:
         Restituisce lo pseudonimo per un valore, creandolo se non esiste ancora.
         Normalizza gli email a lowercase per garantire consistenza.
         """
-        # Normalize email to lowercase for consistency
+        # Normalize email: lowercase only the domain part (local part is case-sensitive per RFC 5321)
         if entity_type == EntityType.EMAIL:
-            original_value = original_value.lower()
+            local, _, domain = original_value.partition("@")
+            original_value = f"{local}@{domain.lower()}" if domain else original_value.lower()
 
         key = (entity_type, original_value)
         if key not in self._mapping:
