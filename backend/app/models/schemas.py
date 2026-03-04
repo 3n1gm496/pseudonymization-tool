@@ -272,7 +272,9 @@ class LdapConfig(BaseModel):
     host: str = "localhost"
     port: int = 389
     use_tls: bool = False
+    use_ssl: bool = False  # Alias per use_tls, per coerenza con il frontend
     starttls: bool = False
+    tls_validate_cert: bool = False  # Se True, valida il certificato TLS (CERT_REQUIRED)
     bind_dn: str = ""
     bind_password: str = ""  # Gestita in memoria, non salvata in chiaro
     base_dn: str = "ou=utenti,o=camera"

@@ -154,7 +154,15 @@ export interface LDAPConfig {
   bind_dn?: string
   search_filter?: string
   use_ssl?: boolean
+  starttls?: boolean
+  tls_validate_cert?: boolean
   diagnostics?: Record<string, unknown> | null
+  /** Authentication via LDAP (eDirectory) */
+  auth_enabled?: boolean
+  auth_user_base_dn?: string
+  auth_admin_group_dn?: string
+  auth_operator_group_dn?: string
+  auth_default_role?: 'admin' | 'operator'
 }
 
 /** LDAP test result. */

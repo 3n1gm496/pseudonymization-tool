@@ -16,7 +16,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ─── Fixtures ────────────────────────────────────────────────────────────────
 
 
@@ -25,7 +24,9 @@ def make_ldap_config(
     host="ldap.example.com",
     port=389,
     use_tls=False,
+    use_ssl=False,
     starttls=False,
+    tls_validate_cert=False,
     bind_dn="cn=readonly,ou=users,dc=example,dc=com",
     bind_password="secret",
     base_dn="ou=people,dc=example,dc=com",
@@ -40,7 +41,9 @@ def make_ldap_config(
     config.host = host
     config.port = port
     config.use_tls = use_tls
+    config.use_ssl = use_ssl
     config.starttls = starttls
+    config.tls_validate_cert = tls_validate_cert
     config.bind_dn = bind_dn
     config.bind_password = bind_password
     config.base_dn = base_dn
@@ -81,8 +84,10 @@ class TestAuthenticateLdap:
         """Se la configurazione LDAP non è disponibile, ritorna None."""
         from app.core.ldap_auth import authenticate_ldap
 
-        with patch("app.core.ldap_auth._get_ldap3", return_value=MagicMock()), \
-             patch("app.core.ldap_auth._get_ldap_auth_config", return_value=None):
+        with (
+            patch("app.core.ldap_auth._get_ldap3", return_value=MagicMock()),
+            patch("app.core.ldap_auth._get_ldap_auth_config", return_value=None),
+        ):
             result = authenticate_ldap("mario", "password")
         assert result is None
 
@@ -91,8 +96,10 @@ class TestAuthenticateLdap:
         from app.core.ldap_auth import authenticate_ldap
 
         config = make_ldap_config(auth_enabled=False)
-        with patch("app.core.ldap_auth._get_ldap3", return_value=MagicMock()), \
-             patch("app.core.ldap_auth._get_ldap_auth_config", return_value=config):
+        with (
+            patch("app.core.ldap_auth._get_ldap3", return_value=MagicMock()),
+            patch("app.core.ldap_auth._get_ldap_auth_config", return_value=config),
+        ):
             result = authenticate_ldap("mario", "password")
         assert result is None
 
@@ -101,9 +108,11 @@ class TestAuthenticateLdap:
         from app.core.ldap_auth import authenticate_ldap
 
         config = make_ldap_config()
-        with patch("app.core.ldap_auth._get_ldap3", return_value=MagicMock()), \
-             patch("app.core.ldap_auth._get_ldap_auth_config", return_value=config), \
-             patch("app.core.ldap_auth._bind_service") as mock_bind:
+        with (
+            patch("app.core.ldap_auth._get_ldap3", return_value=MagicMock()),
+            patch("app.core.ldap_auth._get_ldap_auth_config", return_value=config),
+            patch("app.core.ldap_auth._bind_service") as mock_bind,
+        ):
             result_empty_user = authenticate_ldap("", "password")
             result_empty_pass = authenticate_ldap("mario", "")
         assert result_empty_user is None
@@ -115,9 +124,11 @@ class TestAuthenticateLdap:
         from app.core.ldap_auth import authenticate_ldap
 
         config = make_ldap_config()
-        with patch("app.core.ldap_auth._get_ldap3", return_value=make_ldap3_mock()), \
-             patch("app.core.ldap_auth._get_ldap_auth_config", return_value=config), \
-             patch("app.core.ldap_auth._bind_service", return_value=None):
+        with (
+            patch("app.core.ldap_auth._get_ldap3", return_value=make_ldap3_mock()),
+            patch("app.core.ldap_auth._get_ldap_auth_config", return_value=config),
+            patch("app.core.ldap_auth._bind_service", return_value=None),
+        ):
             result = authenticate_ldap("mario", "password")
         assert result is None
 
@@ -127,10 +138,12 @@ class TestAuthenticateLdap:
 
         config = make_ldap_config()
         mock_conn = MagicMock()
-        with patch("app.core.ldap_auth._get_ldap3", return_value=make_ldap3_mock()), \
-             patch("app.core.ldap_auth._get_ldap_auth_config", return_value=config), \
-             patch("app.core.ldap_auth._bind_service", return_value=mock_conn), \
-             patch("app.core.ldap_auth._search_user_dn", return_value=None):
+        with (
+            patch("app.core.ldap_auth._get_ldap3", return_value=make_ldap3_mock()),
+            patch("app.core.ldap_auth._get_ldap_auth_config", return_value=config),
+            patch("app.core.ldap_auth._bind_service", return_value=mock_conn),
+            patch("app.core.ldap_auth._search_user_dn", return_value=None),
+        ):
             result = authenticate_ldap("nonexistent", "password")
         assert result is None
 
@@ -141,11 +154,13 @@ class TestAuthenticateLdap:
         config = make_ldap_config()
         mock_conn = MagicMock()
         user_dn = "cn=mario,ou=people,dc=example,dc=com"
-        with patch("app.core.ldap_auth._get_ldap3", return_value=make_ldap3_mock()), \
-             patch("app.core.ldap_auth._get_ldap_auth_config", return_value=config), \
-             patch("app.core.ldap_auth._bind_service", return_value=mock_conn), \
-             patch("app.core.ldap_auth._search_user_dn", return_value=user_dn), \
-             patch("app.core.ldap_auth._bind_as_user", return_value=False):
+        with (
+            patch("app.core.ldap_auth._get_ldap3", return_value=make_ldap3_mock()),
+            patch("app.core.ldap_auth._get_ldap_auth_config", return_value=config),
+            patch("app.core.ldap_auth._bind_service", return_value=mock_conn),
+            patch("app.core.ldap_auth._search_user_dn", return_value=user_dn),
+            patch("app.core.ldap_auth._bind_as_user", return_value=False),
+        ):
             result = authenticate_ldap("mario", "wrong_password")
         assert result is None
 
@@ -156,12 +171,14 @@ class TestAuthenticateLdap:
         config = make_ldap_config()
         mock_conn = MagicMock()
         user_dn = "cn=mario,ou=people,dc=example,dc=com"
-        with patch("app.core.ldap_auth._get_ldap3", return_value=make_ldap3_mock()), \
-             patch("app.core.ldap_auth._get_ldap_auth_config", return_value=config), \
-             patch("app.core.ldap_auth._bind_service", return_value=mock_conn), \
-             patch("app.core.ldap_auth._search_user_dn", return_value=user_dn), \
-             patch("app.core.ldap_auth._bind_as_user", return_value=True), \
-             patch("app.core.ldap_auth._get_role_from_groups", return_value="admin"):
+        with (
+            patch("app.core.ldap_auth._get_ldap3", return_value=make_ldap3_mock()),
+            patch("app.core.ldap_auth._get_ldap_auth_config", return_value=config),
+            patch("app.core.ldap_auth._bind_service", return_value=mock_conn),
+            patch("app.core.ldap_auth._search_user_dn", return_value=user_dn),
+            patch("app.core.ldap_auth._bind_as_user", return_value=True),
+            patch("app.core.ldap_auth._get_role_from_groups", return_value="admin"),
+        ):
             result = authenticate_ldap("mario", "correct_password")
         assert result == "admin"
 
@@ -172,12 +189,14 @@ class TestAuthenticateLdap:
         config = make_ldap_config()
         mock_conn = MagicMock()
         user_dn = "cn=luigi,ou=people,dc=example,dc=com"
-        with patch("app.core.ldap_auth._get_ldap3", return_value=make_ldap3_mock()), \
-             patch("app.core.ldap_auth._get_ldap_auth_config", return_value=config), \
-             patch("app.core.ldap_auth._bind_service", return_value=mock_conn), \
-             patch("app.core.ldap_auth._search_user_dn", return_value=user_dn), \
-             patch("app.core.ldap_auth._bind_as_user", return_value=True), \
-             patch("app.core.ldap_auth._get_role_from_groups", return_value="operator"):
+        with (
+            patch("app.core.ldap_auth._get_ldap3", return_value=make_ldap3_mock()),
+            patch("app.core.ldap_auth._get_ldap_auth_config", return_value=config),
+            patch("app.core.ldap_auth._bind_service", return_value=mock_conn),
+            patch("app.core.ldap_auth._search_user_dn", return_value=user_dn),
+            patch("app.core.ldap_auth._bind_as_user", return_value=True),
+            patch("app.core.ldap_auth._get_role_from_groups", return_value="operator"),
+        ):
             result = authenticate_ldap("luigi", "correct_password")
         assert result == "operator"
 
@@ -186,9 +205,11 @@ class TestAuthenticateLdap:
         from app.core.ldap_auth import authenticate_ldap
 
         config = make_ldap_config()
-        with patch("app.core.ldap_auth._get_ldap3", return_value=make_ldap3_mock()), \
-             patch("app.core.ldap_auth._get_ldap_auth_config", return_value=config), \
-             patch("app.core.ldap_auth._bind_service", side_effect=RuntimeError("Connessione rifiutata")):
+        with (
+            patch("app.core.ldap_auth._get_ldap3", return_value=make_ldap3_mock()),
+            patch("app.core.ldap_auth._get_ldap_auth_config", return_value=config),
+            patch("app.core.ldap_auth._bind_service", side_effect=RuntimeError("Connessione rifiutata")),
+        ):
             result = authenticate_ldap("mario", "password")
         assert result is None
 
@@ -446,31 +467,46 @@ class TestBindService:
         result = _bind_service(ldap3, MagicMock(), config)
         assert result is None
 
-    def test_returns_connection_on_success(self):
-        """Ritorna la connessione se il bind di servizio ha successo."""
+    def test_returns_connection_on_success_no_tls(self):
+        """Ritorna la connessione se il bind di servizio ha successo (no TLS)."""
         from app.core.ldap_auth import _bind_service
 
         ldap3 = make_ldap3_mock()
         config = make_ldap_config()
+        mock_conn_instance = MagicMock()
+        ldap3.Connection.return_value = mock_conn_instance
+
+        result = _bind_service(ldap3, MagicMock(), config)
+        assert result is mock_conn_instance
+
+    def test_returns_connection_on_success_starttls(self):
+        """Ritorna la connessione se il bind di servizio ha successo con STARTTLS."""
+        from app.core.ldap_auth import _bind_service
+
+        ldap3 = make_ldap3_mock()
+        config = make_ldap_config(starttls=True)
         mock_conn_instance = MagicMock()
         mock_conn_instance.bind.return_value = True
         ldap3.Connection.return_value = mock_conn_instance
 
         result = _bind_service(ldap3, MagicMock(), config)
         assert result is mock_conn_instance
+        mock_conn_instance.open.assert_called_once()
+        mock_conn_instance.start_tls.assert_called_once()
 
-    def test_returns_none_if_bind_fails(self):
-        """Ritorna None se il bind di servizio fallisce."""
+    def test_returns_none_if_bind_fails_starttls(self):
+        """Ritorna None se il bind di servizio fallisce con STARTTLS."""
         from app.core.ldap_auth import _bind_service
 
         ldap3 = make_ldap3_mock()
-        config = make_ldap_config()
+        config = make_ldap_config(starttls=True)
         mock_conn_instance = MagicMock()
         mock_conn_instance.bind.return_value = False
         ldap3.Connection.return_value = mock_conn_instance
 
         result = _bind_service(ldap3, MagicMock(), config)
         assert result is None
+        mock_conn_instance.unbind.assert_called_once()
 
     def test_returns_none_on_exception(self):
         """Ritorna None se viene sollevata un'eccezione durante il bind di servizio."""
@@ -499,9 +535,7 @@ class TestIsMemberOf:
         conn.entries = [MagicMock()]  # Un entry trovato = è membro
 
         result = _is_member_of(
-            ldap3, conn,
-            "cn=mario,ou=people,dc=example,dc=com",
-            "cn=admins,ou=groups,dc=example,dc=com"
+            ldap3, conn, "cn=mario,ou=people,dc=example,dc=com", "cn=admins,ou=groups,dc=example,dc=com"
         )
         assert result is True
 
@@ -514,9 +548,7 @@ class TestIsMemberOf:
         conn.entries = []  # Nessun entry = non è membro
 
         result = _is_member_of(
-            ldap3, conn,
-            "cn=luigi,ou=people,dc=example,dc=com",
-            "cn=admins,ou=groups,dc=example,dc=com"
+            ldap3, conn, "cn=luigi,ou=people,dc=example,dc=com", "cn=admins,ou=groups,dc=example,dc=com"
         )
         assert result is False
 
@@ -529,9 +561,7 @@ class TestIsMemberOf:
         conn.search.side_effect = Exception("Connessione persa")
 
         result = _is_member_of(
-            ldap3, conn,
-            "cn=mario,ou=people,dc=example,dc=com",
-            "cn=admins,ou=groups,dc=example,dc=com"
+            ldap3, conn, "cn=mario,ou=people,dc=example,dc=com", "cn=admins,ou=groups,dc=example,dc=com"
         )
         assert result is False
 
@@ -549,14 +579,19 @@ class TestAuthVerifyCredentialsLdapIntegration:
     def test_ldap_method_calls_authenticate_ldap(self):
         """Con auth_method='ldap', viene chiamato authenticate_ldap."""
         import os
+
         os.environ["AUTH_ENABLED"] = "true"
         from app.core import auth as auth_module
+
         auth_module.AUTH_ENABLED = True
 
-        with patch("app.core.auth.AUTH_ENABLED", True), \
-             patch("app.core.ldap_auth.authenticate_ldap", return_value="admin") as mock_ldap_auth:
+        with (
+            patch("app.core.auth.AUTH_ENABLED", True),
+            patch("app.core.ldap_auth.authenticate_ldap", return_value="admin") as mock_ldap_auth,
+        ):
             # Importa dopo il patch per evitare problemi di caching
             from app.core.auth import verify_credentials
+
             role = verify_credentials("mario", "password", auth_method="ldap")
 
         assert role == "admin"
@@ -564,9 +599,12 @@ class TestAuthVerifyCredentialsLdapIntegration:
     def test_ldap_method_does_not_fallback_to_local(self):
         """Con auth_method='ldap', se LDAP fallisce NON si tenta il login locale."""
         with patch("app.core.auth.AUTH_ENABLED", True):
-            with patch("app.core.ldap_auth.authenticate_ldap", return_value=None) as mock_ldap, \
-                 patch("app.core.user_manager.verify_credentials") as mock_local:
+            with (
+                patch("app.core.ldap_auth.authenticate_ldap", return_value=None) as mock_ldap,
+                patch("app.core.user_manager.verify_credentials") as mock_local,
+            ):
                 from app.core.auth import verify_credentials
+
                 role = verify_credentials("mario", "password", auth_method="ldap")
 
         assert role is None
@@ -575,9 +613,12 @@ class TestAuthVerifyCredentialsLdapIntegration:
     def test_local_method_does_not_call_ldap(self):
         """Con auth_method='local', non viene mai chiamato authenticate_ldap."""
         with patch("app.core.auth.AUTH_ENABLED", True):
-            with patch("app.core.ldap_auth.authenticate_ldap") as mock_ldap, \
-                 patch("app.core.user_manager.verify_credentials", return_value="operator"):
+            with (
+                patch("app.core.ldap_auth.authenticate_ldap") as mock_ldap,
+                patch("app.core.user_manager.verify_credentials", return_value="operator"),
+            ):
                 from app.core.auth import verify_credentials
+
                 role = verify_credentials("luigi", "password", auth_method="local")
 
         mock_ldap.assert_not_called()
@@ -588,6 +629,7 @@ class TestAuthVerifyCredentialsLdapIntegration:
         # Questo test verifica il comportamento dell'endpoint auth_routes.py
         # che normalizza valori non validi a 'local' prima di chiamare verify_credentials
         from app.api.auth_routes import auth_login
+
         # Il test è implicito: l'endpoint normalizza 'invalid' -> 'local'
         # La logica è: if auth_method not in ("local", "ldap"): auth_method = "local"
         auth_method_raw = "invalid_value"
