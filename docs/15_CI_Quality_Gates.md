@@ -28,7 +28,7 @@ These modules have higher standards due to security/reliability impact:
 | `app.core.auth` | **75%** | Authentication must be well-tested |
 | `app.core.pipeline` | **65%** | Pipeline orchestration is critical path |
 | `app.pseudonymizer.transformer` | **50%** | Transformation correctness |
-| `app.core.exceptions` | **55%** | Exception taxonomy must be well-tested |
+| `app.core.exceptions` | **100%** | Exception taxonomy fully covered — 62 dedicated tests added in PR #56 |
 
 ### CI Workflow (actual `.github/workflows/ci.yml`)
 
@@ -49,7 +49,7 @@ These modules have higher standards due to security/reliability impact:
     pytest tests/ -m "not integration" --cov=app.core.pipeline   --cov-fail-under=65 -q
     pytest tests/ -m "not integration" --cov=app.pseudonymizer.engine --cov-fail-under=90 -q
     pytest tests/ -m "not integration" --cov=app.pseudonymizer.transformer --cov-fail-under=50 -q
-    pytest tests/ -m "not integration" --cov=app.core.exceptions --cov-fail-under=55 -q
+    pytest tests/ -m "not integration" --cov=app.core.exceptions --cov-fail-under=100 -q
 ```
 
 ---
@@ -145,7 +145,7 @@ grep -rn "except Exception" <critical_file.py> | grep -v "#" | grep -v "except E
     pytest tests/ -m "not integration" --cov=app.core.pipeline   --cov-fail-under=65 -q
     pytest tests/ -m "not integration" --cov=app.pseudonymizer.engine --cov-fail-under=90 -q
     pytest tests/ -m "not integration" --cov=app.pseudonymizer.transformer --cov-fail-under=50 -q
-    pytest tests/ -m "not integration" --cov=app.core.exceptions --cov-fail-under=55 -q
+    pytest tests/ -m "not integration" --cov=app.core.exceptions --cov-fail-under=100 -q
 
 - name: Security scan (Bandit)
   run: bandit -r app/ -ll -q
@@ -214,7 +214,7 @@ Proposed metrics:
 - **90% crypto/safety/engine:** Core security modules must be thoroughly tested
 - **75% auth:** Authentication is a critical security boundary
 - **65% pipeline:** Main orchestration path, gradually increasing
-- **55% exceptions:** Exception taxonomy must be exercised
+- **100% exceptions:** Exception taxonomy fully covered — 62 dedicated tests added in PR #56
 
 ### Why Not Higher?
 
