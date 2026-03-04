@@ -1,7 +1,7 @@
-# Local Pseudonymization Tool v5.1.0
+# Local Pseudonymization Tool v5.2.0
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/) [![React 18.2](https://img.shields.io/badge/React-18.2-61dafb.svg)](https://react.dev) [![FastAPI 0.110](https://img.shields.io/badge/FastAPI-0.110-009688.svg)](https://fastapi.tiangolo.com) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests: 763 passing](https://img.shields.io/badge/Tests-763%20passing-brightgreen.svg)](backend/tests/) [![Coverage: 82%](https://img.shields.io/badge/Coverage-82%25-brightgreen.svg)](https://github.com/3n1gm496/pseudonymization-tool/pull/37) [![Monitoring: Prometheus](https://img.shields.io/badge/Monitoring-Prometheus-orange.svg)](#-monitoring-prometheus)
+[![Tests: 774 passing](https://img.shields.io/badge/Tests-774%20passing-brightgreen.svg)](backend/tests/) [![Coverage: 82%](https://img.shields.io/badge/Coverage-82%25-brightgreen.svg)](https://github.com/3n1gm496/pseudonymization-tool/pull/37) [![Monitoring: Prometheus](https://img.shields.io/badge/Monitoring-Prometheus-orange.svg)](#-monitoring-prometheus)
 
 Web application locale moderna per la pseudonimizzazione sicura di dati sensibili in documenti di testo, DOCX, XLSX, PDF e immagini. Interfaccia React con Tailwind CSS, darkmode supportato. Progettato per ambienti enterprise che richiedono massima sicurezza e capacità di operare completamente offline.
 
@@ -12,7 +12,7 @@ Web application locale moderna per la pseudonimizzazione sicura di dati sensibil
 - **🔒 100% Offline** — Nessuna chiamata di rete esterna, tutti i dati rimangono sulla macchina locale
 - **📄 Multi-formato** — Supporto per TXT, CSV, MD, DOCX, XLSX, PDF (testuali), JPG, PNG
 - **🔐 Sicurezza Avanzata** — Mapping cifrato con passphrase AES-256-GCM, zero logging di dati sensibili
-- **👥 Multi-utente** — Gestione utenti locali con ruoli `admin` e `operator`, database SQLite, password bcrypt
+- **👥 Autenticazione Ibrida** — Supporto per login locale (SQLite + bcrypt) e aziendale (LDAP), con ruoli `admin` e `operator` mappabili da gruppi LDAP.
 - **⚡ Notifiche Real-time** — Aggiornamenti di stato in tempo reale via Server-Sent Events (SSE) con fallback a polling.
 - **🚀 Architettura Asincrona** — Elaborazione con Celery + Redis, scalabile e resiliente
 - **⚙️ Modalità Flessibili** — `light` (solo entità di rete) e `strict` (tutte le entità PII)
@@ -22,6 +22,7 @@ Web application locale moderna per la pseudonimizzazione sicura di dati sensibil
 - **📊 Report Dettagliati** — HTML navigabile e JSON strutturato per audit trail
 - **✅ Readiness API** — endpoint `/api/ready` per distinguere processo attivo da servizio pronto
 - **🎯 Deterministico** — Stesso input = stesso output con la stessa passphrase
+- **🔍 Arricchimento Dati LDAP** — Aumenta l'accuratezza del rilevamento PII usando un server LDAP come fonte dati contestuale per nomi e email.
 
 ---
 
@@ -130,6 +131,16 @@ echo "AUTH_SECRET=$(openssl rand -base64 48)" >> .env
 echo "FLOWER_USER=admin" >> .env
 echo "FLOWER_PASSWORD=$(openssl rand -base64 24)" >> .env
 
+# Esempio configurazione LDAP (opzionale)
+# echo "LDAP_ENABLED=true" >> .env
+# echo "LDAP_HOST=ldap.example.com" >> .env
+# echo "LDAP_PORT=636" >> .env
+# echo "LDAP_BIND_DN=cn=readonly,ou=users,dc=example,dc=com" >> .env
+# echo "LDAP_BIND_PASSWORD=secret" >> .env
+# echo "LDAP_SEARCH_BASE=ou=people,dc=example,dc=com" >> .env
+# echo "LDAP_ADMIN_GROUP_DN=cn=pseudonymizer-admins,ou=groups,dc=example,dc=com" >> .env
+# echo "LDAP_OPERATOR_GROUP_DN=cn=pseudonymizer-users,ou=groups,dc=example,dc=com" >> .env
+
 # 3. Avvio con Docker
 make start
 ```
@@ -232,6 +243,15 @@ La configurazione avviene tramite **variabili d'ambiente**, definite nel file `.
 | `REDIS_PASSWORD` | Password per l'accesso a Redis. | **Obbligatoria** |
 | `WEB_CONCURRENCY` | Numero di worker Uvicorn. Aumentare solo con Redis abilitato. | `1` |
 | `PROD_FRONTEND_URL` | URL pubblico del frontend (per CORS in produzione). | `""` |
+| `LDAP_ENABLED` | Abilita l'autenticazione e l'arricchimento dati via LDAP. | `false` |
+| `LDAP_HOST` | Indirizzo del server LDAP. | `""` |
+| `LDAP_PORT` | Porta del server LDAP (es. 389 o 636 per LDAPS). | `389` |
+| `LDAP_USE_TLS` | Usa TLS per la connessione LDAP. | `false` |
+| `LDAP_BIND_DN` | Distinguished Name (DN) per l'utente di servizio che esegue le query. | `""` |
+| `LDAP_BIND_PASSWORD` | Password per l'utente di servizio. | `""` |
+| `LDAP_SEARCH_BASE` | Base DN da cui iniziare la ricerca degli utenti. | `""` |
+| `LDAP_ADMIN_GROUP_DN` | DN del gruppo LDAP i cui membri avranno il ruolo `admin`. | `""` |
+| `LDAP_OPERATOR_GROUP_DN`| DN del gruppo LDAP i cui membri avranno il ruolo `operator`. | `""` |
 
 ---
 

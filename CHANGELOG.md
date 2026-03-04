@@ -9,7 +9,60 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 
 ---
 
-## [Unreleased]
+## [5.2.0] - 2026-03-04
+
+### Added
+
+- **Autenticazione Ibrida (LDAP + Locale) (PR #61)**
+  - Aggiunta la possibilità di autenticarsi tramite un server LDAP (eDirectory, Active Directory) come alternativa al database locale.
+  - Nella pagina di login, l'utente può scegliere esplicitamente il metodo di autenticazione.
+  - I ruoli (`admin`, `operator`) vengono mappati dinamicamente in base all'appartenenza dell'utente a specifici gruppi LDAP.
+  - In caso di irraggiungibilità del server LDAP, il sistema garantisce il login per gli utenti locali (fallback).
+
+### Changed
+
+- **Versione e Test Badge Aggiornati (PR #60)**
+  - Versione del progetto aggiornata a `v5.2.0`.
+  - Badge dei test nel `README.md` aggiornato per riflettere il numero corretto di test (774).
+
+- **Documentazione Architetturale (PR #60)**
+  - Aggiunte al file `02_Technical_Architecture.md` tre nuove sezioni:
+    - `2.5. Multi-User Authentication`: descrive l'architettura del sistema di autenticazione locale con SQLite e bcrypt.
+    - `2.6. Real-time Notifications (SSE)`: illustra il funzionamento delle notifiche push per gli aggiornamenti di stato dei batch.
+    - `2.7. Contextual Data Enrichment (LDAP)`: chiarisce l'uso di LDAP come fonte dati per migliorare il rilevamento delle entità, distinguendolo dall'autenticazione.
+
+### Fixed
+
+- **Correzioni CI e Test Post-Migrazione TypeScript (PR #53)**
+  - Corretta la configurazione di ESLint per gestire correttamente i file TypeScript.
+  - Aggiornati i test Python che interagivano con il frontend per allinearli alla nuova struttura del codice TypeScript.
+
+## [5.1.1] - 2026-03-04
+
+### Added
+
+- **Migrazione Completa a TypeScript (PR #52)**
+  - Tutti i file sorgente del frontend (componenti React, utility) sono stati migrati da JavaScript a TypeScript (`.tsx`, `.ts`).
+  - Abilitato lo `strict mode` di TypeScript per garantire massima type safety.
+
+- **Audit Log Persistente (PR #51)**
+  - Introdotto un sistema di audit log che traccia tutte le azioni critiche (login, scan, apply, download) su un database SQLite (`audit.db`).
+  - Aggiunta una nuova interfaccia utente in sola lettura per permettere agli amministratori di consultare e filtrare i log di audit.
+
+- **Aumento Copertura Test Autenticazione (PR #50)**
+  - Aumentata la copertura dei test per il sistema di autenticazione, con un focus specifico sui percorsi che coinvolgono Redis e la gestione delle sessioni in scenari di edge case.
+
+### Changed
+
+- **Formattazione Codice (PR #49)**
+  - Applicata la formattazione automatica con `black` al file `tasks.py` per allinearlo agli standard del progetto.
+
+### Fixed
+
+- **Correzione Dipendenze Frontend (PR #48)**
+  - Sostituito `pnpm-lock.yaml` con `package-lock.json` per risolvere problemi di inconsistenza delle dipendenze nell'ambiente di CI.
+
+## [5.1.0] - 2026-03-03
 
 ### Added
 

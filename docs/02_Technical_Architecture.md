@@ -738,3 +738,82 @@ Run: `make test` or `pytest backend/tests/ -v --cov`
 
 **v5.0.0 Release Date:** 2026-03-03  
 **v5.0.0 Test Verification:** 348 tests passing ✅
+
+
+### 2.6. Real-time Notifications (SSE)
+
+Per migliorare l'esperienza utente durante le operazioni asincrone di lunga durata (come la scansione di batch di grandi dimensioni), è stato implementato un sistema di notifiche push basato su Server-Sent Events (SSE).
+
+**Architettura:**
+
+```mermaid
+graph TD
+    subgraph Browser
+        ScannerUI["Scanner.tsx"]
+    end
+
+    subgraph Backend
+        BatchRoutes["batches_routes.py<br/>GET /api/batches/{id}/events"]
+        Redis["Redis Pub/Sub"]
+        CeleryWorker["Celery Worker"]
+    end
+
+    ScannerUI -- "new EventSource()" --> BatchRoutes
+    BatchRoutes -- "Subscribe to channel" --> Redis
+    CeleryWorker -- "Publish progress" --> Redis
+    Redis -- "Push event" --> BatchRoutes
+    BatchRoutes -- "yield event" --> ScannerUI
+```
+
+**Flusso:**
+
+1.  Il frontend, dopo aver avviato una scansione, apre una connessione SSE all'endpoint `GET /api/batches/{id}/events`.
+2.  Il backend sottoscrive la connessione a un canale Redis Pub/Sub specifico per quel batch (`batch:{id}:events`).
+3.  Il Celery worker, durante l'elaborazione, pubblica aggiornamenti di stato (es. `{"status": "processing", "progress": 25}`), sul canale Redis.
+4.  Il backend riceve l'evento da Redis e lo inoltra immediatamente al frontend attraverso la connessione SSE aperta.
+5.  Il frontend aggiorna l'interfaccia utente in tempo reale senza la necessità di polling.
+
+**Fallback:**
+
+- In caso di interruzione della connessione SSE (es. per timeout di rete), il frontend implementa un meccanismo di **fallback automatico**, riprendendo a interrogare l'endpoint di stato tradizionale (`GET /api/batches/{id}/status`) a intervalli regolari per garantire che l'utente non perda gli aggiornamenti.
+
+
+### 2.7. Contextual Data Enrichment (LDAP)
+
+Per aumentare l'accuratezza del rilevamento di entità (in particolare `PERSON` e `EMAIL`), il sistema può opzionalmente connettersi a un server LDAP (come Active Directory o eDirectory) per costruire un dizionario dinamico di utenti aziendali.
+
+**Importante:** Questa integrazione è utilizzata **esclusivamente per il rilevamento dei dati (data detection)** e **non per l'autenticazione degli utenti (login)**.
+
+**Architettura:**
+
+```mermaid
+graph TD
+    subgraph LDAP Server
+        eDirectory[eDirectory / Active Directory]
+    end
+
+    subgraph Backend
+        LdapDetector["ldap_detector.py"]
+        LdapCache["LdapCache (in-memory)"]
+        DetectorPipeline["Detector Pipeline"]
+    end
+
+    eDirectory -- "LDAP Query (bind, search)" --> LdapDetector
+    LdapDetector -- "Populate" --> LdapCache
+    LdapCache -- "Provide names, emails" --> DetectorPipeline
+```
+
+**Flusso:**
+
+1.  **Configurazione:** L'amministratore abilita e configura la connessione LDAP tramite le impostazioni dell'applicazione (host, port, bind DN, password, search base).
+2.  **Refresh Automatico:** Un thread in background (`ldap-refresh`) si avvia e, a intervalli regolari (es. ogni 60 minuti), si connette al server LDAP.
+3.  **Query:** Esegue una query per scaricare gli utenti, recuperando attributi come `cn`, `mail`, `sAMAccountName`.
+4.  **Caching:** I dati degli utenti vengono processati e memorizzati in una cache in-memoria (`LdapCache`) in formati ottimizzati per la ricerca veloce (es. `Set` di nomi e account).
+5.  **Rilevamento:** Durante la fase di scansione, il `DetectorPipeline` utilizza la `LdapCache` come un dizionario ad alta priorità per identificare nomi di persone e indirizzi email presenti nei documenti, aumentando significativamente l'accuratezza rispetto ai dizionari statici.
+
+**Sicurezza e Performance:**
+
+- **Isolamento:** La connessione è solo in uscita verso l'host LDAP configurato.
+- **No Log Sensibili:** Nessun nome utente, DN o password viene mai scritto nei log.
+- **Cache in Memoria:** I dati LDAP non vengono mai scritti su disco per minimizzare i rischi.
+- **Efficienza:** Le strutture dati in memoria sono ottimizzate per lookup O(1), garantendo un impatto minimo sulle performance di scansione.
