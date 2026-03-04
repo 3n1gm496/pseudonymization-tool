@@ -8,7 +8,14 @@
 
 ## 1. Overview
 
-This guide provides comprehensive instructions for deploying the Local Pseudonymization Tool with Phase 4 async architecture (Celery + Redis) in production environments.
+This guide provides comprehensive instructions for deploying the Local Pseudonymization Tool with its async architecture (Celery + Redis) in production environments.
+
+**Architettura Redis (3 DB dedicati):**
+- **DB 0** (`REDIS_URL`): Stato batch condiviso API ↔ Worker + rate limiter sliding-window
+- **DB 1** (`CELERY_BROKER_URL`): Celery task broker (queue `pseudonymization`)
+- **DB 2** (`CELERY_RESULT_BACKEND`): Celery result backend (`celery-task-meta-*`)
+
+**Distributed Tracing:** ogni request HTTP genera un `X-Request-ID` (middleware `main.py`) propagato come header Celery task. I worker loggano `[cid:{id}]` per correlazione end-to-end.
 
 **Deployment Modes:**
 - **Docker Compose** (Recommended) — Single-host with multiple services

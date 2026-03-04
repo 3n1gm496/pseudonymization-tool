@@ -6,6 +6,7 @@ Il server è configurato per ascoltare SOLO su 127.0.0.1 (localhost).
 import base64
 import logging
 import sys
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -230,6 +231,24 @@ async def auth_middleware(request: Request, call_next):
         request.state.auth_role = role
 
     return await call_next(request)
+
+
+@app.middleware("http")
+async def correlation_id_middleware(request: Request, call_next):
+    """
+    Propagate or generate X-Request-ID for distributed tracing.
+
+    Reads the X-Request-ID header sent by the client (e.g. a load balancer or
+    the frontend). If absent, generates a new UUID. The ID is stored on
+    request.state.correlation_id so route handlers and Celery task enqueue
+    can attach it to async tasks. The ID is also echoed in the response header
+    so the client can correlate responses with its own request logs.
+    """
+    correlation_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    request.state.correlation_id = correlation_id
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = correlation_id
+    return response
 
 
 @app.middleware("http")

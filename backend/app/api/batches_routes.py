@@ -342,10 +342,16 @@ async def create_new_batch(
     set_batch_start_time(batch.batch_id)  # Update timing
 
     # Step 5: Enqueue async scan task (non-blocking)
+    # Propagate X-Request-ID as a Celery task header so worker logs are
+    # correlatable with the originating HTTP request (distributed tracing).
+    correlation_id = getattr(request.state, "correlation_id", None) or request.headers.get("X-Request-ID", "")
     batch.status = BatchStatus.SCANNING
     update_batch(batch)
     try:
-        scan_task = scan_batch_task.delay(batch.batch_id)
+        scan_task = scan_batch_task.apply_async(
+            args=[batch.batch_id],
+            headers={"X-Request-ID": correlation_id},
+        )
     except Exception as e:
         batch.status = BatchStatus.PENDING
         update_batch(batch)
@@ -368,6 +374,7 @@ async def create_new_batch(
             "batch_id": batch.batch_id,
             "status": batch.status.value,
             "task_id": scan_task.id,
+            "correlation_id": correlation_id,
             "mode": mode,
             "passphrase": pp,
             "files": [{"name": fr.original_name, "id": fr.file_id} for fr in batch.files],
@@ -571,10 +578,15 @@ async def apply_batch(batch_id: str, request: Request):
     # Use thread-safe function instead of direct dict access
     started_at = get_batch_start_time(batch_id) or datetime.now(timezone.utc).isoformat()
 
+    # Propagate X-Request-ID as a Celery task header for distributed tracing.
+    correlation_id = getattr(request.state, "correlation_id", None) or request.headers.get("X-Request-ID", "")
     batch.status = BatchStatus.APPLYING
     update_batch(batch)
     try:
-        apply_task = apply_batch_task.delay(batch_id, started_at)
+        apply_task = apply_batch_task.apply_async(
+            args=[batch_id, started_at],
+            headers={"X-Request-ID": correlation_id},
+        )
     except Exception as e:
         batch.status = BatchStatus.REVIEW
         update_batch(batch)
@@ -604,6 +616,7 @@ async def apply_batch(batch_id: str, request: Request):
             "message": "Apply accodato. Usa GET /api/batches/{batch_id} per lo stato.",
             "batch_id": batch_id,
             "task_id": apply_task.id,
+            "correlation_id": correlation_id,
             "download_ready": False,
             "decisions_received_count": decisions_count,
             "accepted_count": accepted_count,

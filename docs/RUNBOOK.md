@@ -100,17 +100,19 @@ In caso di deployment fallito, è possibile tornare alla versione precedente del
 
 ### Decisione architetturale: Redis senza persistenza AOF
 
-Redis viene usato in questo progetto come **broker Celery, session store e rate limiter**. I dati che gestisce sono **volatili per scelta consapevole**:
+Redis viene usato in questo progetto con **3 DB dedicati** (batch state + broker Celery + session/rate limiter). I dati che gestisce sono **volatili per scelta consapevole**, con fallback su disco per lo stato batch:
 
 | Dato | Dove è persistito | Impatto riavvio Redis |
 |------|-------------------|-----------------------|
-| Sessioni utente | Redis (TTL 8h) | Utenti disconnessi, re-login richiesto |
-| Task Celery in coda | Redis (broker) | Task persi se non ancora avviati |
-| Contatori rate limiter | Redis (finestra mobile) | Reset contatori (comportamento sicuro) |
+| Stato batch (API ↔ Worker) | Redis DB 0 + disco `STATE_DIR` | Worker e API rileggono da disco (fallback automatico) |
+| Sessioni utente | Redis DB 0 (TTL 8h) | Utenti disconnessi, re-login richiesto |
+| Task Celery in coda | Redis DB 1 (broker) | Task persi se non ancora avviati |
+| Risultati task Celery | Redis DB 2 (results) | Persi, ma batch state rimane su disco |
+| Contatori rate limiter | Redis DB 0 (finestra mobile) | Reset contatori (comportamento sicuro) |
 | Dati batch (file, findings) | Filesystem `STATE_DIR` | **Nessun impatto** |
 | Mappings di cifratura | Filesystem `STATE_DIR` | **Nessun impatto** |
 
-**Conclusione:** un riavvio Redis causa solo la disconnessione degli utenti attivi. I dati applicativi (batch, file pseudonimizzati, chiavi di cifratura) sono persistiti sul volume Docker `app_state` e non vengono persi.
+**Conclusione:** un riavvio Redis causa la disconnessione degli utenti attivi e la perdita dei task in coda. Lo stato batch viene ricaricato dal disco al prossimo accesso grazie al fallback automatico in `batch_manager.py`. I dati applicativi (file pseudonimizzati, chiavi di cifratura) sono persistiti sul volume Docker `app_state`.
 
 La persistenza AOF (`--appendonly yes`) **non è abilitata di default** perché:
 - Aggiunge latenza I/O su ogni scrittura.

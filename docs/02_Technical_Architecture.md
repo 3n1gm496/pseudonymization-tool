@@ -369,242 +369,205 @@ python backend/app/main.py
 
 ### 🎯 Obiettivo
 
-Garantire elaborazione asincrona e scalabile per scan di lunga durata, evitando timeout HTTP e consentendo processamento parallelo di batch multipli.
+Elaborazione asincrona per scan e apply di lunga durata, evitando timeout HTTP. Stato batch condiviso tra API e worker tramite **Redis DB 0** (con fallback disco), così il worker vede sempre lo stato aggiornato dell'API e viceversa.
 
 ### 🏗️ Architettura Componenti
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                         Frontend (React)                            │
-│   POST /api/batches → 202 Accepted + task_id                       │
-│   GET /api/batches/{id}/status → {status, progress, result}        │
+│                    Frontend (React)                                 │
+│   POST /api/batches → 202 Accepted + {task_id, correlation_id}     │
+│   GET /api/batches/{id}/events → SSE stream (push)                 │
+│   GET /api/batches/{id}/status → {status} (polling fallback)       │
 └────────────────────────┬────────────────────────────────────────────┘
-                         │ HTTP REST
+                         │ HTTP + X-Request-ID header
 ┌────────────────────────▼────────────────────────────────────────────┐
 │                      FastAPI Backend                                │
 │  ┌──────────────────────────────────────────────────────────────┐   │
-│  │  API Routes (batches_routes.py)                             │   │
-│  │  - POST /api/batches → create_batch_api()                   │   │
-│  │    ├─ Create batch metadata                                 │   │
-│  │    ├─ Enqueue task: run_scan_pipeline.delay(batch_id)       │   │
-│  │    └─ Return 202 + task_id                                  │   │
-│  │                                                              │   │
-│  │  - GET /api/batches/{id}/status → get_batch_status_api()    │   │
-│  │    ├─ Check Celery task state (PENDING/STARTED/SUCCESS)     │   │
-│  │    ├─ Get progress from Redis (if available)                │   │
-│  │    └─ Return {status, progress, result}                     │   │
+│  │  Middleware Stack (LIFO execution order)                    │   │
+│  │  4. correlation_id_middleware  ← eseguito PRIMO             │   │
+│  │     - Legge X-Request-ID dal client, genera UUID se assente  │   │
+│  │     - Scrive in request.state.correlation_id                 │   │
+│  │     - Propaga X-Request-ID nella response                    │   │
+│  │  3. csrf_middleware                                          │   │
+│  │  2. auth_middleware                                          │   │
+│  │  1. security_headers_middleware  ← eseguito ULTIMO          │   │
 │  └──────────────────────────────────────────────────────────────┘   │
-│                         │                                           │
-│                         │ enqueue/query                             │
-│                         ▼                                           │
+│                                                                     │
 │  ┌──────────────────────────────────────────────────────────────┐   │
-│  │         Celery Task Module (task.py)                        │   │
-│  │  @celery_app.task(bind=True, name="run_scan_pipeline")      │   │
+│  │  batches_routes.py                                          │   │
+│  │  POST /api/batches:                                          │   │
+│  │    1. Crea batch + salva su Redis DB 0 + disco               │   │
+│  │    2. Enqueue: scan_batch_task.apply_async(                  │   │
+│  │         args=[batch_id],                                     │   │
+│  │         headers={"X-Request-ID": correlation_id}  ← tracing │   │
+│  │       )                                                      │   │
+│  │    3. Return 202 + {task_id, correlation_id}                 │   │
 │  │                                                              │   │
-│  │  - Task execution:                                           │   │
-│  │    1. Update state: STARTED                                  │   │
-│  │    2. Execute scan_pipeline()                                │   │
-│  │    3. Update progress (Redis: batch:{id}:progress)           │   │
-│  │    4. Return result / raise error                            │   │
-│  │                                                              │   │
-│  │  - Error handling: Automatic retries (3x with exp backoff)  │   │
-│  │  - Timeouts: Soft limit 55min, Hard limit 60min             │   │
+│  │  POST /api/batches/{id}/apply:                               │   │
+│  │    1. apply_batch_task.apply_async(                          │   │
+│  │         args=[batch_id, started_at],                         │   │
+│  │         headers={"X-Request-ID": correlation_id}  ← tracing │   │
+│  │       )                                                      │   │
+│  │    2. Return 202 + {task_id, correlation_id}                 │   │
 │  └──────────────────────────────────────────────────────────────┘   │
 └────────────────────────┬────────────────────────────────────────────┘
-                         │ publish/consume
+                         │ publish (DB 1)  /  read-write stato (DB 0)
 ┌────────────────────────▼────────────────────────────────────────────┐
-│                       Redis (Broker + Backend)                      │
-│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐  │
-│  │ Task Queue       │  │ Task Results      │  │ Progress Cache   │  │
-│  │ (celery)         │  │ (celery-task-     │  │ (batch:{id}:*)   │  │
-│  │                  │  │  meta-{task_id})  │  │                  │  │
-│  │ - Pending tasks  │  │ - State: PENDING  │  │ - Progress: 45%  │  │
-│  │ - Priority queue │  │ - Result payload  │  │ - Error details  │  │
-│  │ - Routing keys   │  │ - Exception info  │  │ - Timestamps     │  │
-│  └──────────────────┘  └──────────────────┘  └──────────────────┘  │
+│                  Redis (3 DB dedicati)                              │
+│  ┌──────────────────────┐  ┌────────────────────┐  ┌────────────┐  │
+│  │ DB 0: Batch State    │  │ DB 1: Celery Broker │  │ DB 2:      │  │
+│  │ + Rate Limiter       │  │ Queue:              │  │ Celery     │  │
+│  │                      │  │  pseudonymization   │  │ Results    │  │
+│  │ batch:{id}:data      │  │                     │  │ celery-    │  │
+│  │ batch:{id}:decisions │  │ - Pending tasks     │  │ task-meta- │  │
+│  │ batch:{id}:passphrase│  │ - Routing keys      │  │ {task_id}  │  │
+│  │ rate_limit:*         │  │                     │  │            │  │
+│  └──────────────────────┘  └────────────────────┘  └────────────┘  │
 └─────────────────────────────────────────────────────────────────────┘
-                         │ consume
+                         │ consume (DB 1) / read-write stato (DB 0)
 ┌────────────────────────▼────────────────────────────────────────────┐
 │               Celery Worker (celery-worker container)               │
 │  ┌──────────────────────────────────────────────────────────────┐   │
-│  │  Worker Pool (--concurrency=4)                              │   │
-│  │  ├─ Worker 1: Processing batch_abc123                       │   │
-│  │  ├─ Worker 2: Idle                                           │   │
-│  │  ├─ Worker 3: Processing batch_def456                       │   │
-│  │  └─ Worker 4: Idle                                           │   │
+│  │  scan_batch_task / apply_batch_task                         │   │
 │  │                                                              │   │
-│  │  Features:                                                   │   │
-│  │  - Autoscaling: min=2, max=8 workers                        │   │
-│  │  - Graceful shutdown: SIGTERM handling                      │   │
-│  │  - Task prefetch: 1 task per worker (fair distribution)     │   │
-│  │  - Max tasks per child: 100 (memory leak prevention)        │   │
+│  │  - Estrae correlation_id da self.request.headers             │   │
+│  │  - Logga [cid:{correlation_id}] in ogni riga di log          │   │
+│  │  - Legge/scrive stato batch su Redis DB 0 (via batch_manager)│   │
+│  │  - Fallback disco su /tmp/pseudonymizer_batches/{batch_id}/  │   │
+│  │                                                              │   │
+│  │  Retry policy:                                               │   │
+│  │  - RecoverableError / IOError / OSError: max 3x, exp backoff │   │
+│  │  - CriticalError / ValueError / TypeError: no retry          │   │
+│  │  - Soft limit: 20min / Hard limit: 25min                     │   │
 │  └──────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### 📋 Task Lifecycle
+### 🔗 Distributed Tracing (X-Request-ID)
+
+Ogni richiesta HTTP genera un correlation ID che viene propagato fino ai log del Celery worker, permettendo di correlare log API + log worker per la stessa operazione.
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  1. PENDING                                                     │
-│     Task created, waiting in queue                              │
-│     Frontend: "Scan in coda..."                                 │
-└──────────────────────┬──────────────────────────────────────────┘
-                       │ Worker picks up task
-┌──────────────────────▼──────────────────────────────────────────┐
-│  2. STARTED                                                     │
-│     Worker executing run_scan_pipeline()                        │
-│     Frontend: "Scansione in corso... 0%"                        │
-└──────────────────────┬──────────────────────────────────────────┘
-                       │ Progress updates (optional)
-┌──────────────────────▼──────────────────────────────────────────┐
-│  3. PROGRESS (optional, via Redis)                             │
-│     self.update_state(..., meta={'progress': 45})               │
-│     Frontend: Polling /status → "Scansione in corso... 45%"    │
-└──────────────────────┬──────────────────────────────────────────┘
-                       │ Task completes successfully
-┌──────────────────────▼──────────────────────────────────────────┐
-│  4. SUCCESS                                                     │
-│     Result stored in Redis: celery-task-meta-{task_id}          │
-│     Frontend: "Scansione completata!" + Show findings           │
-│     Data: {status: "success", findings_count: 42, ...}          │
-└─────────────────────────────────────────────────────────────────┘
-                       OR (error case)
-┌─────────────────────────────────────────────────────────────────┐
-│  4. FAILURE                                                     │
-│     Exception stored in Redis with traceback                    │
-│     Frontend: "Errore durante la scansione: {error_msg}"       │
-│     Data: {status: "failure", error: "FileNotFoundError..."} │
-└─────────────────────────────────────────────────────────────────┘
+Browser/Client          FastAPI (main.py)          Celery Worker (tasks.py)
+     │                       │                            │
+     │─ POST /api/batches ──>│                            │
+     │  X-Request-ID: abc123  │                            │
+     │                        │                            │
+     │                  [correlation_id_middleware]        │
+     │                  correlation_id = "abc123"          │
+     │                  request.state.correlation_id       │
+     │                        │                            │
+     │                  scan_batch_task.apply_async(       │
+     │                    headers={"X-Request-ID":"abc123"}│
+     │                  )      │                           │
+     │                        │──── Celery task ─────────>│
+     │                        │                     correlation_id = headers["X-Request-ID"]
+     │                        │                     cid = "[cid:abc123] "
+     │                        │                     logger.info("[cid:abc123] Scan starting...")
+     │                        │                     logger.info("[cid:abc123] Scan completed...")
+     │<─ 202 Accepted ────────│                            │
+     │  X-Request-ID: abc123  │                            │
+     │  correlation_id: abc123│                            │
 ```
 
-### 🔌 API Patterns (202 Accepted)
+Per correlare i log: `grep "cid:abc123" <(docker compose logs celery-worker)`
 
-**Endpoint Asincrono:**
+### 📋 Batch State Lifecycle
+
+```
+PENDING → SCANNING → REVIEW → APPLYING → DONE
+                                        ↘ DONE_WITH_ERRORS
+(any state) → ERROR  (su eccezione non recuperabile nel task)
+```
+
+Stato persistito su Redis DB 0 + disco. Il worker aggiorna lo stato direttamente su Redis, visibile immediatamente dall'API senza polling Celery.
+
+### 🔌 API Patterns (202 Accepted + SSE)
+
+**Enqueue con Distributed Tracing:**
 ```python
-# POST /api/batches
-@router.post("/batches", status_code=202)
-async def create_batch_api(request: BatchCreateRequest):
-    # 1. Create batch metadata
-    batch = batch_manager.create_batch(...)
-    
-    # 2. Enqueue async task
-    task = run_scan_pipeline.delay(batch.id)
-    
-    # 3. Store task_id in batch record
-    batch.task_id = task.id
-    batch_manager.update_batch(batch)
-    
-    # 4. Return 202 Accepted
-    return {
-        "batch_id": batch.id,
-        "task_id": task.id,
-        "status": "pending",
-        "message": "Scan enqueued, poll /api/batches/{id}/status"
-    }
+# POST /api/batches (batches_routes.py)
+correlation_id = getattr(request.state, "correlation_id", "") or str(uuid.uuid4())
+
+scan_task = scan_batch_task.apply_async(
+    args=[batch.batch_id],
+    headers={"X-Request-ID": correlation_id},  # Distributed tracing
+)
+
+return JSONResponse(status_code=202, content={
+    "batch_id": batch.batch_id,
+    "task_id": scan_task.id,
+    "correlation_id": correlation_id,   # Client può correlare i propri log
+    "status": "scanning",
+})
 ```
 
-**Polling Endpoint:**
-```python
-# GET /api/batches/{batch_id}/status
-@router.get("/batches/{batch_id}/status")
-async def get_batch_status_api(batch_id: str):
-    batch = batch_manager.get_batch(batch_id)
-    task_result = AsyncResult(batch.task_id, app=celery_app)
-    
-    # Check task state
-    if task_result.state == "PENDING":
-        return {"status": "pending", "progress": 0}
-    elif task_result.state == "STARTED":
-        return {"status": "running", "progress": task_result.info.get("progress", 0)}
-    elif task_result.state == "SUCCESS":
-        return {"status": "completed", "result": task_result.result}
-    elif task_result.state == "FAILURE":
-        return {"status": "failed", "error": str(task_result.info)}
+**SSE Stream (push, preferito):**
+```
+GET /api/batches/{id}/events → text/event-stream
+  data: {"type":"connected","batch_id":"..."}
+  data: {"type":"status","status":"scanning","task_state":"STARTED"}
+  data: {"type":"status","status":"review","task_state":"SUCCESS"}
+```
+
+**Status Polling (fallback lightweight):**
+```
+GET /api/batches/{id}/status → {"status":"review","files_count":3,...}
 ```
 
 ### 🚀 Deployment Modes
 
-#### Mode 1: Docker Compose (Production)
+#### Mode 1: Docker Compose (Raccomandato)
 
-```yaml
-# docker-compose.yml
-services:
-  backend:
-    build: ./backend
-    environment:
-      CELERY_BROKER_URL: redis://redis:6379/0
-      REDIS_URL: redis://redis:6379/0
-    depends_on:
-      - redis
-  
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
-  
-  celery-worker:
-    build: ./backend
-    command: celery -A app.core.tasks worker --loglevel=info --concurrency=4
-    environment:
-      CELERY_BROKER_URL: redis://redis:6379/0
-      REDIS_URL: redis://redis:6379/0
-    depends_on:
-      - redis
+```bash
+# Avvio standard (API + Redis + Celery worker)
+make start           # oppure: docker compose up -d --build
+
+# Con Flower (dashboard Celery)
+make monitoring      # oppure: docker compose --profile monitoring up -d
 ```
 
-**Scaling Workers:**
-```bash
-docker compose up -d --scale celery-worker=4
+```yaml
+# Configurazione Redis (docker-compose.yml)
+# DB 0: REDIS_URL → batch state + rate limiter
+# DB 1: CELERY_BROKER_URL → task queue
+# DB 2: CELERY_RESULT_BACKEND → task results
+REDIS_URL: "redis://:${REDIS_PASSWORD}@redis:6379/0"
+CELERY_BROKER_URL: "redis://:${REDIS_PASSWORD}@redis:6379/1"
+CELERY_RESULT_BACKEND: "redis://:${REDIS_PASSWORD}@redis:6379/2"
 ```
 
 #### Mode 2: Development (Eager Mode)
 
 ```bash
-# .env
-CELERY_TASK_ALWAYS_EAGER=true
-CELERY_TASK_EAGER_PROPAGATES=true
-
-# Task runs synchronously in FastAPI process (no broker needed)
+# In conftest.py (già configurato):
+# celery_app.conf.task_always_eager = True
+# Task eseguiti sincroni nel processo FastAPI, nessun broker necessario.
+pytest backend/tests/
 ```
 
-#### Mode 3: Production (Kubernetes)
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: celery-worker
-spec:
-  replicas: 3
-  template:
-    spec:
-      containers:
-      - name: worker
-        image: pseudonymizer-backend:latest
-        command: ["celery", "-A", "app.core.tasks", "worker"]
-        resources:
-          requests:
-            memory: "512Mi"
-            cpu: "500m"
-          limits:
-            memory: "1Gi"
-            cpu: "1000m"
-```
-
-### 📊 Monitoring (Flower - Optional)
+#### Mode 3: Kubernetes
 
 ```bash
-# Start Flower web UI
-celery -A app.core.tasks flower --port=5555
+# Worker deployment separato
+kubectl apply -f k8s/worker-deployment.yaml
+# command: ["celery", "-A", "app.core.tasks", "worker",
+#           "--loglevel=info", "--concurrency=1",
+#           "-Q", "pseudonymization"]
+```
 
-# Access: http://localhost:5555
+### 📊 Monitoring (Flower - Opzionale)
+
+```bash
+# Avvia con: docker compose --profile monitoring up -d
+# Dashboard: http://localhost:5555 (protetta da basic auth in .env)
+#
 # Features:
-# - Task history and status
-# - Worker statistics
+# - Task history e status real-time
+# - Worker statistics e throughput
 # - Task retry/cancel controls
-# - Real-time metrics
+# - Correlazione con X-Request-ID nei log worker
 ```
 
 ### 🔧 Configuration Parameters
