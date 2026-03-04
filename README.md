@@ -46,15 +46,15 @@ Web application locale moderna per la pseudonimizzazione sicura di dati sensibil
 ```mermaid
 graph TD
     subgraph Browser["User Browser"]
-        Frontend["Frontend\nReact + Tailwind CSS"]
+        Frontend["Frontend<br/>React + Tailwind CSS"]
     end
 
     subgraph Server["Infrastruttura Server"]
-        Nginx["nginx Reverse Proxy\nTLS, Rate Limiting, Security Headers"]
-        Backend["Backend API\nFastAPI + Uvicorn"]
-        Worker["Celery Worker\nTask asincroni"]
-        Redis["Redis\nBroker + Cache + Rate Limiter"]
-        Prometheus["Prometheus\nScrape /api/metrics"]
+        Nginx["nginx Reverse Proxy<br/>TLS, Rate Limiting, Security Headers"]
+        Backend["Backend API<br/>FastAPI + Uvicorn"]
+        Worker["Celery Worker<br/>Task asincroni"]
+        Redis["Redis<br/>Broker + Cache + Rate Limiter"]
+        Prometheus["Prometheus<br/>Scrape /api/metrics"]
     end
 
     Frontend -- HTTPS --> Nginx
