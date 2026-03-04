@@ -282,6 +282,12 @@ class LdapConfig(BaseModel):
     cache_max_entries: int = 10000
     cache_ttl_minutes: int = 120
     match_surname_only: bool = False  # Se True, matcha anche solo cognome (low confidence)
+    # ── Autenticazione LDAP (v5.2+) ──────────────────────────────────────────
+    auth_enabled: bool = False  # Se True, abilita il login tramite LDAP (Opzione C: scelta esplicita in UI)
+    auth_user_base_dn: str = ""  # Base DN per la ricerca dell'utente al login
+    auth_admin_group_dn: str = ""  # DN del gruppo LDAP che mappa al ruolo 'admin'
+    auth_operator_group_dn: str = ""  # DN del gruppo LDAP che mappa al ruolo 'operator'
+    auth_default_role: str = "operator"  # Ruolo di default se l'utente non è in nessun gruppo configurato
 
 
 class LdapTestResult(BaseModel):

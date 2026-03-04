@@ -291,16 +291,20 @@ def _b64_decode(data: str) -> str:
     return base64.urlsafe_b64decode((data + padding).encode("utf-8")).decode("utf-8")
 
 
-def verify_credentials(username: str, password: str) -> Optional[str]:
+def verify_credentials(username: str, password: str, auth_method: str = "local") -> Optional[str]:
     """
     Verifica le credenziali dell'utente.
 
     Ritorna il ruolo ('admin' o 'operator') se le credenziali sono valide,
     None altrimenti.
 
-    Priorità:
-    1. user_manager (SQLite) — utenti locali con bcrypt
-    2. Fallback legacy: AUTH_USERNAME + AUTH_PASSWORD env vars (retrocompatibilità)
+    Priorità in base al metodo scelto dall'utente (auth_method):
+    - 'ldap':  Autentica tramite server LDAP (eDirectory/AD). Nessun fallback locale.
+    - 'local': (default) Autentica tramite database locale SQLite + bcrypt.
+               Fallback legacy su AUTH_USERNAME + AUTH_PASSWORD env vars.
+
+    In caso di irraggiungibilità del server LDAP, il metodo 'ldap' ritorna None
+    senza tentare l'autenticazione locale (fail-safe, Opzione X).
     """
     if not AUTH_ENABLED:
         return "admin"
@@ -309,6 +313,21 @@ def verify_credentials(username: str, password: str) -> Optional[str]:
     if not username_clean or not password:
         return None
 
+    # ── Ramo LDAP: autenticazione aziendale tramite eDirectory/AD ────────────────
+    if auth_method == "ldap":
+        try:
+            from app.core.ldap_auth import authenticate_ldap
+
+            role = authenticate_ldap(username_clean, password)
+            if role is not None:
+                return role
+        except Exception as exc:
+            logger.warning("auth: errore nel modulo ldap_auth: %s", exc)
+        # Opzione X: se LDAP non risponde o l'autenticazione fallisce,
+        # NON si fa fallback al login locale. Si ritorna None.
+        return None
+
+    # ── Ramo Locale: autenticazione tramite database SQLite + bcrypt ────────────
     # Priorità 1: user_manager (SQLite con bcrypt)
     try:
         from app.core.user_manager import verify_credentials as um_verify

@@ -14,10 +14,16 @@ e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0
 ### Added
 
 - **Autenticazione Ibrida (LDAP + Locale) (PR #61)**
-  - Aggiunta la possibilità di autenticarsi tramite un server LDAP (eDirectory, Active Directory) come alternativa al database locale.
-  - Nella pagina di login, l'utente può scegliere esplicitamente il metodo di autenticazione.
-  - I ruoli (`admin`, `operator`) vengono mappati dinamicamente in base all'appartenenza dell'utente a specifici gruppi LDAP.
-  - In caso di irraggiungibilità del server LDAP, il sistema garantisce il login per gli utenti locali (fallback).
+  - Creato `app/core/ldap_auth.py`: modulo dedicato all'autenticazione tramite LDAP, distinto da `ldap_detector.py` (arricchimento dati). Supporta eDirectory (NetIQ/Novell) e Active Directory tramite la libreria `ldap3`.
+  - L'autenticazione si basa sull'attributo `cn` dell'objectClass `inetOrgPerson`, come richiesto per eDirectory.
+  - Aggiunto endpoint `GET /api/auth/ldap-status`: ritorna se l'autenticazione LDAP è abilitata, usato dal frontend per mostrare/nascondere l'opzione.
+  - Aggiornato `POST /api/auth/login`: accetta il campo `auth_method` (`local` o `ldap`) per la scelta esplicita del metodo da parte dell'utente (Opzione C).
+  - Aggiornato `app/core/auth.py`: `verify_credentials` ora gestisce due rami separati (`ldap` e `local`). In caso di fallimento LDAP, non si fa fallback al login locale (Opzione X, fail-safe).
+  - Aggiornato `frontend/src/components/LoginForm.tsx`: aggiunta UI per la scelta del metodo di autenticazione (bottoni "Locale" / "Aziendale (LDAP)"), visibile solo se LDAP è configurato.
+  - Aggiornato `frontend/src/App.tsx`: `handleLogin` propaga il parametro `auth_method` all'endpoint backend.
+  - Esteso `LdapConfig` in `schemas.py` con i campi: `auth_enabled`, `auth_user_base_dn`, `auth_admin_group_dn`, `auth_operator_group_dn`, `auth_default_role`.
+  - Aggiunta `ldap3>=2.9.1` a `requirements.txt`.
+  - Aggiunto `backend/tests/test_ldap_auth.py` con **39 test** che coprono: flusso completo, password errata, utente non trovato, server non raggiungibile, mapping ruoli, appartenenza gruppi, bind di servizio.
 
 ### Changed
 
