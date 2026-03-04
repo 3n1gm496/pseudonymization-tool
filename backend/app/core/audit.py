@@ -249,12 +249,13 @@ def get_audit_events(
         conn = _get_connection()
 
         total_row = conn.execute(
-            f"SELECT COUNT(*) FROM audit_events {where_clause}", params
-        ).fetchone()  # nosec B608 - where_clause is built from safe string literals only, all user values are bound parameters
+            f"SELECT COUNT(*) FROM audit_events {where_clause}",  # nosec B608 - where_clause built from safe literals, all user values are bound params
+            params,
+        ).fetchone()
         total = total_row[0] if total_row else 0
 
-        rows = conn.execute(  # nosec B608 - where_clause is built from safe string literals only, all user values are bound parameters
-            f"SELECT id, timestamp, action, user, ip, details "
+        rows = conn.execute(
+            f"SELECT id, timestamp, action, user, ip, details "  # nosec B608 - where_clause built from safe literals, all user values are bound params
             f"FROM audit_events {where_clause} "
             f"ORDER BY timestamp DESC LIMIT ? OFFSET ?",
             params + [limit, offset],
