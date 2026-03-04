@@ -11,13 +11,14 @@ Covers:
 """
 
 import os
+import sqlite3
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from app.core.audit import (
     _ensure_schema,
     _get_connection,
+    _get_db_path,
     audit_event,
     get_audit_events,
     get_audit_stats,
@@ -252,7 +253,7 @@ class TestGetAuditEvents:
         assert result["events"][0]["user"] == "admin"
 
     def test_filter_by_since(self, isolated_db):
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timedelta, timezone
 
         req = _make_request()
         audit_event(req, "old_action")
@@ -364,3 +365,79 @@ class TestAuditEndpoints:
         # limit=501 is invalid (le=500), FastAPI returns 422
         response = _client.get("/api/audit/events?limit=501")
         assert response.status_code == 422
+
+    def test_get_events_with_until_filter(self):
+        """Covers audit.py lines 243-244: 'until' parameter in get_audit_events."""
+        _ensure_schema()
+        db_path = _get_db_path()
+        conn = sqlite3.connect(db_path)
+        conn.execute(
+            "INSERT INTO audit_events (timestamp, action, user, ip, details) VALUES (?, ?, ?, ?, ?)",
+            ("2020-01-01T00:00:00", "old_action", "admin", "127.0.0.1", "{}"),
+        )
+        conn.commit()
+        conn.close()
+
+        result = get_audit_events(until="2020-06-01T00:00:00")
+        actions = [e["action"] for e in result["events"]]
+        assert "old_action" in actions
+        # Events after the until date should not be included
+        result2 = get_audit_events(until="2019-01-01T00:00:00")
+        actions2 = [e["action"] for e in result2["events"]]
+        assert "old_action" not in actions2
+
+    def test_get_events_with_invalid_json_details(self):
+        """Covers audit.py lines 269-270: JSONDecodeError fallback to empty dict."""
+        _ensure_schema()
+        db_path = _get_db_path()
+        conn = sqlite3.connect(db_path)
+        conn.execute(
+            "INSERT INTO audit_events (timestamp, action, user, ip, details) VALUES (?, ?, ?, ?, ?)",
+            ("2025-01-01T12:00:00", "corrupt_event", "admin", "127.0.0.1", "NOT_VALID_JSON"),
+        )
+        conn.commit()
+        conn.close()
+
+        result = get_audit_events(action_filter="corrupt_event")
+        assert len(result["events"]) == 1
+        # details should fall back to empty dict on JSON parse error
+        assert result["events"][0]["details"] == {}
+
+    def test_init_db_double_checked_locking(self):
+        """Covers audit.py line 63: double-checked locking inside _DB_LOCK."""
+        import app.core.audit as audit_module
+
+        # To trigger line 63 (inner check inside the lock), we need _DB_INITIALIZED
+        # to be False when we enter the lock, but True by the time we check again.
+        # We simulate this by: setting _DB_INITIALIZED=True before calling _ensure_schema,
+        # which means the outer check (line 59) passes, but we patch the lock context
+        # so that inside the lock _DB_INITIALIZED is still True (line 62 check).
+        original = audit_module._DB_INITIALIZED
+        try:
+            # Ensure schema is initialized
+            audit_module._DB_INITIALIZED = True
+            # Calling _ensure_schema with _DB_INITIALIZED=True hits line 59 and returns
+            audit_module._ensure_schema()
+            assert audit_module._DB_INITIALIZED is True
+
+            # Now simulate the race: _DB_INITIALIZED is True when we enter the lock
+            # by patching _DB_LOCK to execute the body and then check line 62
+            audit_module._DB_INITIALIZED = False
+            # Set it True again inside a thread to simulate race condition
+            # We do this by patching: set True right before the lock body runs
+            original_lock = audit_module._DB_LOCK
+
+            class FakeLock:
+                def __enter__(self):
+                    # Simulate another thread completing init before we get the lock
+                    audit_module._DB_INITIALIZED = True
+                    return self
+
+                def __exit__(self, *args):
+                    return False
+
+            audit_module._DB_LOCK = FakeLock()
+            audit_module._ensure_schema()  # Should hit line 62 and return
+            audit_module._DB_LOCK = original_lock
+        finally:
+            audit_module._DB_INITIALIZED = original
