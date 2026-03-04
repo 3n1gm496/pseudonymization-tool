@@ -8,13 +8,7 @@ import logging
 
 import app.core.auth as _auth_module
 from app.core.audit import audit_event
-from app.core.auth import (
-    SESSION_COOKIE_NAME,
-    destroy_all_sessions,
-    extract_token_from_request,
-    validate_csrf_dependency,
-    validate_session,
-)
+from app.core.auth import destroy_all_sessions, extract_token_from_request, validate_csrf_dependency, validate_session
 from app.core.user_manager import (
     VALID_ROLES,
     create_user,

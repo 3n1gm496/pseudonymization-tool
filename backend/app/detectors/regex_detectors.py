@@ -158,7 +158,10 @@ IPV6_DETECTOR = RegexDetector(
         r"|\b(?:[0-9a-fA-F]{1,4}:){1,3}(?::[0-9a-fA-F]{1,4}){1,4}\b"
         r"|\b(?:[0-9a-fA-F]{1,4}:){1,2}(?::[0-9a-fA-F]{1,4}){1,5}\b"
         r"|\b[0-9a-fA-F]{1,4}:(?::[0-9a-fA-F]{1,4}){1,6}\b"
-        r"|\b::(?:[fF]{4}(?::0{1,4})?:)?(?:25[0-5]|(?:2[0-4]|1?[0-9])?[0-9])(?:\.(?:25[0-5]|(?:2[0-4]|1?[0-9])?[0-9])){3}\b"  # IPv4-mapped
+        # IPv4-mapped
+        r"|\b::(?:[fF]{4}(?::0{1,4})?:)?"
+        r"(?:25[0-5]|(?:2[0-4]|1?[0-9])?[0-9])"
+        r"(?:\.(?:25[0-5]|(?:2[0-4]|1?[0-9])?[0-9])){3}\b"
     ),
     confidence=0.90,
     detector_name="RegexIPv6Detector",
@@ -212,7 +215,10 @@ PHONE_DETECTOR = RegexDetector(
         # Forma B: prefisso internazionale generico (+1..+999)
         r"|\+[1-9]\d{0,2}[\s\-\.]?(?:\d[\s\-\.]?){6,13}\b"
         # Forma C: contesto testuale esplicito + numero italiano
-        r"|(?:(?:tel(?:efono)?|fax|cell(?:ulare)?|mobile|phone|numero|num|nr|n\.)\s*[:\.]?\s*)(?:0\d{1,4}[\s\-\.]?\d{4,8}|3\d{2}[\s\-\.]?\d{3,4}[\s\-\.]?\d{3,4})\b"
+        r"|(?:(?:tel(?:efono)?|fax|cell(?:ulare)?|mobile|phone"
+        r"|numero|num|nr|n\.)\s*[:\.]?\s*)"
+        r"(?:0\d{1,4}[\s\-\.]?\d{4,8}"
+        r"|3\d{2}[\s\-\.]?\d{3,4}[\s\-\.]?\d{3,4})\b"
     ),
     confidence=0.80,
     detector_name="RegexPhoneDetector",

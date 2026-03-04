@@ -18,11 +18,11 @@ SOLUTION (P2-4):
 
 USAGE:
     from app.core.profiles import get_profile, get_config, Profile
-    
+
     if get_profile() == Profile.PROD:
         # Production-only logic
         ...
-    
+
     config = get_config()
     logger.setLevel(config.log_level)
 """

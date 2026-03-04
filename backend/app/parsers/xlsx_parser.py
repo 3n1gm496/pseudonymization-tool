@@ -75,7 +75,8 @@ class XlsxParser(BaseParser):
                     f"Trovate {formula_count} celle con formule: NON sono state modificate (come da policy MVP)."
                 )
             result.warnings.append(
-                f"Processate {text_cell_count} celle testuali su {text_cell_count + formula_count} celle totali analizzate."
+                f"Processate {text_cell_count} celle testuali su "
+                f"{text_cell_count + formula_count} celle totali analizzate."
             )
 
         except XlsxParsingError as e:

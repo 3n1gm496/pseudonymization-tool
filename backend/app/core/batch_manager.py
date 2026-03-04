@@ -21,12 +21,11 @@ import time
 from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from app.core.batch_persistence import get_batch_dir  # noqa: F401
 from app.core.batch_persistence import (
     batch_start_time_path,
-    get_batch_dir,
     load_batch_from_disk,
     load_decisions_from_disk,
     load_passphrase_from_disk,

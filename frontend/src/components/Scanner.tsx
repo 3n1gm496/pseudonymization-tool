@@ -33,7 +33,7 @@ const Scanner = ({ onScan, isLoading }: ScannerProps): JSX.Element => {
             reject(new Error('Timeout SSE attesa scansione batch'))
           }, timeoutMs)
 
-          const es = new EventSource(`/api/batches/${batchId}/events`)
+          const es = new EventSource(`/api/batches/${batchId}/events`, { withCredentials: true })
 
           es.onmessage = (event: MessageEvent<string>) => {
             try {
