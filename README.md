@@ -14,7 +14,8 @@ Web application locale moderna per la pseudonimizzazione sicura di dati sensibil
 - **🔐 Sicurezza Avanzata** — Mapping cifrato con passphrase AES-256-GCM, zero logging di dati sensibili
 - **👥 Autenticazione Ibrida** — Supporto per login locale (SQLite + bcrypt) e aziendale (LDAP eDirectory), con ruoli `admin` e `operator` mappabili da gruppi LDAP. La scelta del metodo avviene esplicitamente nella pagina di login.
 - **⚡ Notifiche Real-time** — Aggiornamenti di stato in tempo reale via Server-Sent Events (SSE) con fallback automatico a polling.
-- **🚀 Architettura Asincrona** — Elaborazione con Celery + Redis, scalabile e resiliente
+- **🚀 Architettura Asincrona** — Elaborazione con Celery + Redis; stato batch condiviso su Redis DB 0 + disco, scalabile e resiliente
+- **🔗 Distributed Tracing** — `X-Request-ID` propagato da ogni request HTTP fino ai log del Celery worker per correlazione end-to-end
 - **⚙️ Modalità Flessibili** — `light` (solo entità di rete) e `strict` (tutte le entità PII)
 - **🧭 Input Unificato** — Testo inline e upload documenti disponibili nello stesso flusso
 - **🛡️ Preset Policy** — Profilo `SOC Logs` applicato automaticamente (massima copertura: rete, identità, path)
@@ -56,64 +57,84 @@ graph TD
 
     subgraph Server["Infrastruttura Server"]
         Nginx["nginx Reverse Proxy<br/>TLS, Rate Limiting, Security Headers"]
-        Backend["Backend API<br/>FastAPI + Uvicorn"]
-        Worker["Celery Worker<br/>Task asincroni"]
-        Redis["Redis<br/>Broker + Cache + Rate Limiter"]
+        Backend["Backend API<br/>FastAPI + Uvicorn<br/>(genera X-Request-ID)"]
+        Worker["Celery Worker<br/>scan_batch_task / apply_batch_task<br/>(propaga X-Request-ID nei log)"]
+        Redis["Redis<br/>DB 0: Batch state + Rate Limiter<br/>DB 1: Celery Broker<br/>DB 2: Celery Results"]
         Prometheus["Prometheus<br/>Scrape /api/metrics"]
     end
 
     subgraph Storage["Persistenza"]
         SQLite["SQLite<br/>Utenti + Audit Log"]
-        StateDir["STATE_DIR<br/>Batch files, mapping.enc"]
+        StateDir["STATE_DIR<br/>Batch files, mapping.enc<br/>(fallback disco)"]
     end
 
-    Frontend -- HTTPS --> Nginx
-    Nginx -- HTTP --> Backend
-    Backend -- Task --> Redis
-    Worker -- Task --> Redis
-    Backend -- Legge/Scrive --> Redis
-    Backend -- Legge/Scrive --> SQLite
+    Frontend -- "HTTPS + X-Request-ID" --> Nginx
+    Nginx -- "HTTP + X-Request-ID" --> Backend
+    Backend -- "apply_async(headers={'X-Request-ID': cid})" --> Redis
+    Worker -- "Consuma task da DB 1<br/>Legge/Scrive stato su DB 0" --> Redis
+    Backend -- "Legge/Scrive stato batch DB 0<br/>Rate limit DB 0" --> Redis
+    Backend -- "Legge/Scrive" --> SQLite
+    Backend -- "Fallback disco" --> StateDir
+    Worker -- "Fallback disco" --> StateDir
     Prometheus -- Scrape --> Nginx
 ```
 
 ### Architettura Asincrona (Celery + Redis)
 
-**🎯 Obiettivo:** Elaborazione asincrona per scan di lunga durata, evitando timeout HTTP.
+**🎯 Obiettivo:** Elaborazione asincrona per scan e apply di lunga durata, evitando timeout HTTP. Stato batch condiviso tra API e worker tramite Redis (DB 0) con fallback su disco.
 
 **Componenti:**
 
-1. **Celery Workers**: Processano task in background
-   - `run_scan_pipeline`: Task principale per scan completi
-   - Scalabilità orizzontale (multiple workers)
-   - Graceful shutdown e error handling
+1. **Celery Workers** — processano task in background
+   - `scan_batch_task`: parsing file + detection PII → stato `REVIEW`
+   - `apply_batch_task`: trasformazione + ZIP output → stato `DONE`
+   - Retry automatico su errori transienti (`RecoverableError`, `IOError`, `OSError`) fino a 3 volte con exponential backoff
+   - Errori critici (`CriticalError`, `ValueError`) falliscono immediatamente senza retry
 
-2. **Redis**: Message broker e result backend
-   - Queue: `celery` (task dispatch)
-   - Results: `celery-task-meta-*` (task status/results)
-   - Persistenza AOF abilitata per durabilità
+2. **Redis (3 DB separati)**
+   - **DB 0**: stato batch condiviso API ↔ worker (via `batch_manager.py`) + rate limiter sliding-window
+   - **DB 1**: Celery broker (task queue `pseudonymization`)
+   - **DB 2**: Celery result backend (`celery-task-meta-*`)
 
-3. **API Pattern (202 Accepted + SSE)**:
+3. **Distributed Tracing (X-Request-ID)**
    ```
-   POST /api/batches → 202 Accepted + task_id
+   Browser/client                FastAPI                   Celery Worker
+       │                            │                           │
+       │── POST /api/batches ──────>│                           │
+       │   X-Request-ID: abc-123    │                           │
+       │                            │── apply_async( ──────────>│
+       │                            │   headers={               │ log: [cid:abc-123] Scan starting...
+       │                            │   'X-Request-ID':'abc-123'│ log: [cid:abc-123] Scan completed
+       │<── 202 Accepted ──────────│   })                      │
+       │   X-Request-ID: abc-123    │                           │
+       │   correlation_id: abc-123  │                           │
+   ```
+   - Il middleware in `main.py` genera un UUID se il client non invia `X-Request-ID`
+   - L'ID è propagato come Celery task header (`apply_async(headers=...)`)
+   - Il worker lo estrae da `self.request.headers` e lo prefissa ai log: `[cid:abc-123]`
+   - La risposta 202 include `correlation_id` per permettere al client di correlare i propri log
+
+4. **API Pattern (202 Accepted + SSE)**:
+   ```
+   POST /api/batches → 202 Accepted + {task_id, correlation_id}
    GET /api/batches/{id}/events → text/event-stream (SSE, aggiornamenti push)
-   GET /api/batches/{id}/status → {status, progress, result} (polling fallback)
+   GET /api/batches/{id}/status → {status, progress} (polling fallback lightweight)
    ```
-   Il frontend si connette all'endpoint SSE (`EventSource`) per ricevere aggiornamenti
-   in tempo reale senza polling. In caso di disconnessione, il fallback automatico al
-   polling garantisce la continuità operativa.
+   Il frontend si connette all'endpoint SSE (`EventSource`) per aggiornamenti in tempo reale.
+   In caso di disconnessione, il fallback automatico al polling garantisce continuità.
 
-4. **Task Lifecycle**:
+5. **Batch State Lifecycle**:
    ```
-   PENDING → STARTED → SUCCESS/FAILURE
-              ↓
-          PROGRESS updates (via SSE)
+   PENDING → SCANNING → REVIEW → APPLYING → DONE
+                                           ↘ DONE_WITH_ERRORS
+   (qualsiasi stato) → ERROR (su eccezione non recuperabile)
    ```
 
 **🔧 Deployment Modes:**
 
 - **Docker Compose** (raccomandato): All-in-one con Redis + Celery worker
 - **Local Dev**: Celery EAGER mode (task sincroni, no Redis)
-- **Production**: Multiple workers, Redis cluster, monitoring con Flower
+- **Production**: Multiple workers, Redis cluster, monitoring con Flower (`--profile monitoring`)
 
 Vedi [docs/02_Technical_Architecture.md](docs/02_Technical_Architecture.md) per dettagli completi.
 

@@ -128,6 +128,10 @@ def scan_batch_task(self, batch_id: str) -> dict:
     """
     Async scan task: Parse files, detect entities, populate findings.
 
+    The X-Request-ID passed via Celery task headers is extracted and included
+    in every log line so that the full trace FastAPI request → Celery task →
+    worker output can be correlated by grep or a log aggregator.
+
     Args:
         batch_id: Unique batch identifier
 
@@ -144,8 +148,12 @@ def scan_batch_task(self, batch_id: str) -> dict:
         CriticalError: If batch is in an invalid state (non-transient, not retried)
         RecoverableError: Transient parsing/detection errors (auto-retried up to 3x)
     """
+    # Extract correlation ID from Celery task headers (set by the FastAPI endpoint)
+    correlation_id = (self.request.headers or {}).get("X-Request-ID", "")
+    cid = f"[cid:{correlation_id}] " if correlation_id else ""
+
     try:
-        logger.info("Scan task starting for batch: %s", batch_id)
+        logger.info("%sScan task starting for batch: %s", cid, batch_id)
 
         # Verify batch exists — ValueError is non-transient, will not be retried
         batch = get_batch(batch_id)
@@ -164,7 +172,8 @@ def scan_batch_task(self, batch_id: str) -> dict:
         update_batch(batch)
 
         logger.info(
-            "Scan task completed for batch %s: %d findings in %d files",
+            "%sScan task completed for batch %s: %d findings in %d files",
+            cid,
             batch_id,
             len(batch.findings),
             len(batch.files),
@@ -179,7 +188,7 @@ def scan_batch_task(self, batch_id: str) -> dict:
         }
 
     except Exception as exc:
-        logger.error("Scan task failed for batch %s: %s", batch_id, exc, exc_info=True)
+        logger.error("%sScan task failed for batch %s: %s", cid, batch_id, exc, exc_info=True)
 
         # Mark batch as error (best-effort — do not raise if batch is gone)
         batch = get_batch(batch_id)
@@ -202,6 +211,10 @@ def apply_batch_task(self, batch_id: str, started_at: str) -> dict:
     """
     Async apply task: Transform files, generate mapping, create output ZIP.
 
+    The X-Request-ID passed via Celery task headers is extracted and included
+    in every log line so that the full trace FastAPI request → Celery task →
+    worker output can be correlated by grep or a log aggregator.
+
     Prerequisites:
     - Batch must be in REVIEW status
     - User decisions must be stored in batch state
@@ -223,8 +236,12 @@ def apply_batch_task(self, batch_id: str, started_at: str) -> dict:
         CriticalError: If batch is in an invalid state (non-transient, not retried)
         TransformError: Transient file processing errors (auto-retried up to 3x)
     """
+    # Extract correlation ID from Celery task headers (set by the FastAPI endpoint)
+    correlation_id = (self.request.headers or {}).get("X-Request-ID", "")
+    cid = f"[cid:{correlation_id}] " if correlation_id else ""
+
     try:
-        logger.info("Apply task starting for batch: %s", batch_id)
+        logger.info("%sApply task starting for batch: %s", cid, batch_id)
 
         # Verify batch exists — ValueError is non-transient, will not be retried
         batch = get_batch(batch_id)
@@ -242,7 +259,8 @@ def apply_batch_task(self, batch_id: str, started_at: str) -> dict:
         batch = get_batch(batch_id)
 
         logger.info(
-            "Apply task completed for batch %s: output at %s",
+            "%sApply task completed for batch %s: output at %s",
+            cid,
             batch_id,
             zip_path,
         )
@@ -254,7 +272,7 @@ def apply_batch_task(self, batch_id: str, started_at: str) -> dict:
         }
 
     except Exception as exc:
-        logger.error("Apply task failed for batch %s: %s", batch_id, exc, exc_info=True)
+        logger.error("%sApply task failed for batch %s: %s", cid, batch_id, exc, exc_info=True)
 
         # Mark batch as error (best-effort — do not raise if batch is gone)
         batch = get_batch(batch_id)
