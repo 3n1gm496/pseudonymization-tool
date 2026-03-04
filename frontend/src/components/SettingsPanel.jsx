@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import AuditLog from './AuditLog'
 import LDAPSettings from './LDAPSettings'
 
 const SettingsPanel = ({ isOpen, onClose, showToast }) => {
@@ -8,7 +9,7 @@ const SettingsPanel = ({ isOpen, onClose, showToast }) => {
 
   return (
     <div className="fixed inset-0 bg-black/50 dark:bg-black/70 z-50 flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-slate-800 rounded-lg shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-white dark:bg-slate-800 rounded-lg shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="sticky top-0 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold">⚙️ Impostazioni</h2>
@@ -34,6 +35,16 @@ const SettingsPanel = ({ isOpen, onClose, showToast }) => {
             🔗 LDAP
           </button>
           <button
+            onClick={() => setActiveTab('audit')}
+            className={`flex-1 px-4 py-3 font-medium text-sm transition-colors ${
+              activeTab === 'audit'
+                ? 'border-b-2 border-blue-600 text-blue-600 dark:text-blue-400'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+            }`}
+          >
+            📋 Audit Log
+          </button>
+          <button
             onClick={() => setActiveTab('info')}
             className={`flex-1 px-4 py-3 font-medium text-sm transition-colors ${
               activeTab === 'info'
@@ -48,6 +59,8 @@ const SettingsPanel = ({ isOpen, onClose, showToast }) => {
         {/* Content */}
         <div className="p-6">
           {activeTab === 'ldap' && <LDAPSettings showToast={showToast} />}
+
+          {activeTab === 'audit' && <AuditLog />}
 
           {activeTab === 'info' && (
             <div className="space-y-4">
@@ -80,9 +93,9 @@ const SettingsPanel = ({ isOpen, onClose, showToast }) => {
 
               <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg p-3">
                 <p className="text-xs text-blue-800 dark:text-blue-200">
-                  <b>Data:</b> 28 febbraio 2026<br />
-                  <b>Version:</b> 4.0.0<br />
-                  <b>Security:</b> AES-256-GCM, PBKDF2, Session auth, Rate limiting
+                  <b>Data:</b> 4 marzo 2026<br />
+                  <b>Version:</b> 5.0.0<br />
+                  <b>Security:</b> AES-256-GCM, PBKDF2, Session auth, Rate limiting, Audit log SQLite
                 </p>
               </div>
             </div>

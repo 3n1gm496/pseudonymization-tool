@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from app import __version__
+from app.api.audit_routes import router as audit_router
 from app.api.auth_routes import router as auth_router
 from app.api.batches_routes import router as batches_router
 from app.api.console_routes import router as console_router
@@ -337,6 +338,7 @@ app.include_router(console_router)
 app.include_router(revert_router)
 app.include_router(batches_router)
 app.include_router(settings_router)
+app.include_router(audit_router)
 app.include_router(api_router)
 
 # Serve i file statici del frontend React (production build o fallback)
