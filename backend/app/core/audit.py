@@ -38,7 +38,7 @@ _DB_INITIALIZED = False
 
 def _get_db_path() -> str:
     """Return the path to the audit SQLite database."""
-    state_dir = os.environ.get("PSEUDONYMIZER_STATE_DIR", "/tmp/pseudonymizer_state")
+    state_dir = os.environ.get("PSEUDONYMIZER_STATE_DIR", "/app/state")
     return os.path.join(state_dir, "audit.db")
 
 
@@ -248,10 +248,12 @@ def get_audit_events(
     try:
         conn = _get_connection()
 
-        total_row = conn.execute(f"SELECT COUNT(*) FROM audit_events {where_clause}", params).fetchone()
+        total_row = conn.execute(
+            f"SELECT COUNT(*) FROM audit_events {where_clause}", params
+        ).fetchone()  # nosec B608 - where_clause is built from safe string literals only, all user values are bound parameters
         total = total_row[0] if total_row else 0
 
-        rows = conn.execute(
+        rows = conn.execute(  # nosec B608 - where_clause is built from safe string literals only, all user values are bound parameters
             f"SELECT id, timestamp, action, user, ip, details "
             f"FROM audit_events {where_clause} "
             f"ORDER BY timestamp DESC LIMIT ? OFFSET ?",
