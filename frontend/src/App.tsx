@@ -8,18 +8,20 @@ import RevertPanel from './components/RevertPanel'
 import SettingsPanel from './components/SettingsPanel'
 import { useToast } from './hooks/useToast'
 import LoginForm from './components/LoginForm'
-import type { Batch } from './types'
+import type { Batch, CurrentUser, UserRole } from './types'
 
 type ToolMode = 'pseudonymize' | 'revert'
 type CurrentStep = 'scanner' | 'findings' | 'results'
 
 interface AuthMeResponse {
   username: string
+  role?: UserRole
   default_password?: boolean
 }
 
 interface LoginResponse {
   username: string
+  role?: UserRole
   default_password?: boolean
 }
 
@@ -47,7 +49,7 @@ const App = (): JSX.Element => {
   const [batch, setBatch] = useState<Batch | null>(null)
   const [pseudonymizedText, setPseudonymizedText] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [authUser, setAuthUser] = useState<string | null>(null)
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [defaultPasswordWarning, setDefaultPasswordWarning] = useState(false)
@@ -60,12 +62,24 @@ const App = (): JSX.Element => {
     const bootstrapAuth = async (): Promise<void> => {
       try {
         const response = await axios.get<AuthMeResponse>('/api/auth/me')
-        setAuthUser(response.data.username)
+        setCurrentUser({
+          username: response.data.username,
+          role: response.data.role ?? 'operator',
+        })
         if (response.data.default_password) {
           setDefaultPasswordWarning(true)
         }
+        // Fetch role from /api/users/me if not returned by /api/auth/me
+        if (!response.data.role) {
+          try {
+            const meRes = await axios.get<CurrentUser>('/api/users/me')
+            setCurrentUser({ username: meRes.data.username, role: meRes.data.role })
+          } catch {
+            // ignore — role defaults to 'operator' (safe default)
+          }
+        }
       } catch {
-        setAuthUser(null)
+        setCurrentUser(null)
       } finally {
         setAuthLoading(false)
       }
@@ -117,13 +131,23 @@ const App = (): JSX.Element => {
     setIsLoading(true)
     try {
       const response = await axios.post<LoginResponse>('/api/auth/login', { username, password })
-      setAuthUser(response.data.username)
-      if (response.data.default_password) {
-        setDefaultPasswordWarning(true)
-      }
       const csrfTokenFromResponse = response.headers['x-csrf-token'] as string | undefined
       if (csrfTokenFromResponse) {
         setCsrfToken(csrfTokenFromResponse)
+      }
+      if (response.data.default_password) {
+        setDefaultPasswordWarning(true)
+      }
+      // Fetch full user info (including role) from /api/users/me
+      try {
+        const meRes = await axios.get<CurrentUser>('/api/users/me')
+        setCurrentUser({ username: meRes.data.username, role: meRes.data.role })
+      } catch {
+        // Fallback: use data from login response
+        setCurrentUser({
+          username: response.data.username,
+          role: response.data.role ?? 'operator',
+        })
       }
       showToast('Login effettuato', 'success')
     } catch (error: unknown) {
@@ -142,7 +166,7 @@ const App = (): JSX.Element => {
     } catch {
       // ignore
     }
-    setAuthUser(null)
+    setCurrentUser(null)
     setBatch(null)
     setPseudonymizedText(null)
     setCurrentStep('scanner')
@@ -216,7 +240,7 @@ const App = (): JSX.Element => {
     return <div className="min-h-screen bg-slate-50 dark:bg-slate-950" />
   }
 
-  if (!authUser) {
+  if (!currentUser) {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
         <Header user={null} onLogout={null} onSettingsClick={() => setIsSettingsOpen(true)} />
@@ -236,7 +260,8 @@ const App = (): JSX.Element => {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       <Header
-        user={authUser}
+        user={currentUser.username}
+        userRole={currentUser.role}
         onLogout={() => void handleLogout()}
         onSettingsClick={() => setIsSettingsOpen(true)}
       />
@@ -366,6 +391,8 @@ const App = (): JSX.Element => {
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         showToast={showToast}
+        currentUsername={currentUser.username}
+        currentRole={currentUser.role}
       />
       <ToastContainer />
     </div>

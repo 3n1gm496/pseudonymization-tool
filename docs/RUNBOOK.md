@@ -157,3 +157,66 @@ Per aggiornare l'applicazione a una nuova versione:
     ```
 
 Docker Compose si occuperà di ricreare solo i container che sono cambiati.
+
+## 6. Gestione Utenti
+
+### Bootstrap al primo avvio
+
+Al primo avvio, se `STATE_DIR/users.db` non esiste, il sistema crea automaticamente un utente `admin` con una **password generata casualmente**. La password è visibile nel log di avvio:
+
+```
+[WARNING] user_manager: ⚠️  BOOTSTRAP — admin creato con password generata: 'XXXX' — CAMBIARE IMMEDIATAMENTE
+```
+
+**Azione richiesta:** Accedere con questa password e cambiarla immediatamente da **Impostazioni → Utenti → Modifica password**.
+
+### Ruoli disponibili
+
+| Ruolo | Permessi |
+|-------|----------|
+| `admin` | Accesso completo: scan, apply, download, impostazioni, gestione utenti |
+| `operator` | Accesso operativo: scan, review, apply, download. Non può accedere alle impostazioni di sistema né gestire utenti |
+
+### Operazioni via UI
+
+Tutte le operazioni di gestione utenti sono disponibili in **Impostazioni → Utenti** (solo per utenti con ruolo `admin`):
+
+- **Crea utente**: Inserire username, password (min 8 caratteri) e ruolo
+- **Modifica ruolo**: Cambiare il ruolo di un utente esistente
+- **Modifica password**: Cambiare la password di un utente
+- **Elimina utente**: Eliminare un utente (non è possibile eliminare l'ultimo admin)
+
+### Reset password admin via CLI
+
+Se si perde l'accesso all'account admin, è possibile resettare la password direttamente nel database SQLite:
+
+```bash
+# Accedere al container backend
+docker exec -it pseudonymization-tool-backend-1 bash
+
+# Generare un hash bcrypt per la nuova password
+python3 -c "import bcrypt; print(bcrypt.hashpw(b'NuovaPassword123!', bcrypt.gensalt()).decode())"
+
+# Aggiornare il database (sostituire HASH_QUI con l'hash generato sopra)
+python3 -c "
+import sqlite3, os
+db = os.path.join(os.environ.get('PSEUDONYMIZER_STATE_DIR', '/app/state'), 'users.db')
+conn = sqlite3.connect(db)
+conn.execute(\"UPDATE users SET password_hash=? WHERE username='admin'\", ('HASH_QUI',))
+conn.commit()
+conn.close()
+print('Password aggiornata')
+"
+```
+
+### Backup del database utenti
+
+Il database utenti è incluso nel backup del volume `app_state` (vedi sezione 4). Il file è `STATE_DIR/users.db`.
+
+```bash
+# Backup specifico del database utenti
+docker run --rm \
+  -v pseudonymization-tool_app_state:/data \
+  -v $(pwd)/backups:/backup \
+  alpine cp /data/users.db /backup/users_$(date +%Y%m%d_%H%M%S).db
+```

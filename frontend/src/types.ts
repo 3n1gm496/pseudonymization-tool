@@ -164,6 +164,30 @@ export interface LDAPTestResult {
   user_count?: number
 }
 
+/** User role in the system. */
+export type UserRole = 'admin' | 'operator'
+
+/** A local user account. */
+export interface User {
+  username: string
+  role: UserRole
+  created_at: string
+  updated_at: string
+  is_active: number
+}
+
+/** Response from GET /api/users */
+export interface UsersListResponse {
+  users: User[]
+  total: number
+}
+
+/** Currently authenticated user info from GET /api/users/me */
+export interface CurrentUser {
+  username: string
+  role: UserRole
+}
+
 /** Revert preview result. */
 export interface RevertPreview {
   files: Array<{

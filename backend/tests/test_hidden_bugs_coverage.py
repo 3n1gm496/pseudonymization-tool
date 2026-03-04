@@ -52,7 +52,8 @@ class TestSessionMemoryLeakFix:
 
         # Validate actual session (should work)
         result = validate_session(token)
-        assert result == "admin"
+        assert result is not None
+        assert result[0] == "admin"  # (username, role)
 
     def test_active_session_not_removed(self):
         """Test that active sessions are NOT removed when validated."""
@@ -66,7 +67,8 @@ class TestSessionMemoryLeakFix:
         result = validate_session(token)
 
         # Session should be accepted
-        assert result == "admin"
+        assert result is not None
+        assert result[0] == "admin"  # (username, role)
 
         # Session should STILL be in memory (not removed)
         with auth_lock:
@@ -335,7 +337,7 @@ class TestMemoryManagementIntegration:
 
         # Create session
         token, _, _ = create_session("admin")
-        assert validate_session(token) == "admin"
+        assert validate_session(token) is not None
 
         # Create batch
         batch = Batch(batch_id="lifecycle_test", config=BatchConfig(mode=BatchMode.LIGHT))
@@ -343,7 +345,7 @@ class TestMemoryManagementIntegration:
         set_batch_start_time(batch.batch_id)
 
         # Everything in memory
-        assert validate_session(token) == "admin"
+        assert validate_session(token) is not None
         assert get_batch_start_time(batch.batch_id) is not None
 
         # Cleanup batch
@@ -351,7 +353,7 @@ class TestMemoryManagementIntegration:
 
         # Batch gone, session still there
         assert get_batch_start_time(batch.batch_id) is None
-        assert validate_session(token) == "admin"  # Session still valid
+        assert validate_session(token) is not None  # Session still valid
 
         # Verify _batch_start_times is empty for this batch
         with _global_lock:
@@ -372,7 +374,8 @@ class TestNoRegressions:
         token, _, _ = create_session("admin")
         result = validate_session(token)
 
-        assert result == "admin"
+        assert result is not None
+        assert result[0] == "admin"  # (username, role)
 
     def test_batch_creation_still_tracks_activity(self):
         """Test that batch activity tracking still works."""
