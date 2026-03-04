@@ -24,7 +24,18 @@ services:
   redis:
     image: redis:7-alpine
     container_name: pseudonymization-redis
-    # Abilita autenticazione Redis con password da .env
+    # Abilita autenticazione Redis con password da .env.
+    # DECISIONE ARCHITETTURALE — Persistenza Redis (AOF/RDB):
+    #   Redis gestisce dati VOLATILI per scelta consapevole:
+    #   - Sessioni utente (TTL 8h, ricreate al login)
+    #   - Broker Celery (task transitori)
+    #   - Rate limiter (contatori a finestra mobile)
+    #   I batch sono persistiti su filesystem (STATE_DIR), non su Redis.
+    #   In caso di riavvio Redis, le sessioni vengono perse (re-login richiesto)
+    #   ma i dati applicativi rimangono intatti su volume Docker.
+    #   Per abilitare la durabilità AOF (ambienti con requisiti elevati):
+    #     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}",
+    #               "--appendonly", "yes", "--appendfsync", "everysec"]
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
     # Nessuna porta esposta sull'host: Redis è accessibile solo dai container
     # nella stessa rete Docker. Rimuove la superficie di attacco esterna.

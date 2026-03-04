@@ -98,7 +98,49 @@ In caso di deployment fallito, è possibile tornare alla versione precedente del
 
 ## 4. Backup e ripristino
 
-L'applicazione è stateless, ma Redis contiene dati di sessione e cache. Per il backup di Redis, fare riferimento alla documentazione ufficiale di Redis per le strategie di snapshotting (RDB) o AOF.
+### Decisione architetturale: Redis senza persistenza AOF
+
+Redis viene usato in questo progetto come **broker Celery, session store e rate limiter**. I dati che gestisce sono **volatili per scelta consapevole**:
+
+| Dato | Dove è persistito | Impatto riavvio Redis |
+|------|-------------------|-----------------------|
+| Sessioni utente | Redis (TTL 8h) | Utenti disconnessi, re-login richiesto |
+| Task Celery in coda | Redis (broker) | Task persi se non ancora avviati |
+| Contatori rate limiter | Redis (finestra mobile) | Reset contatori (comportamento sicuro) |
+| Dati batch (file, findings) | Filesystem `STATE_DIR` | **Nessun impatto** |
+| Mappings di cifratura | Filesystem `STATE_DIR` | **Nessun impatto** |
+
+**Conclusione:** un riavvio Redis causa solo la disconnessione degli utenti attivi. I dati applicativi (batch, file pseudonimizzati, chiavi di cifratura) sono persistiti sul volume Docker `app_state` e non vengono persi.
+
+La persistenza AOF (`--appendonly yes`) **non è abilitata di default** perché:
+- Aggiunge latenza I/O su ogni scrittura.
+- Non è necessaria per i dati transitori gestiti da questo tool.
+- Aumenta la complessità operativa (rotazione log AOF, `BGREWRITEAOF`).
+
+**Per abilitare AOF** in ambienti con requisiti di durabilità elevati (es. sessioni SSO di lunga durata), modificare il comando Redis in `docker-compose.yml`:
+
+```yaml
+command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}",
+          "--appendonly", "yes", "--appendfsync", "everysec"]
+```
+
+### Backup dei dati applicativi
+
+I dati critici risiedono nel volume Docker `app_state`. Per eseguire un backup:
+
+```bash
+# Backup del volume app_state (batch, mappings, chiavi)
+docker run --rm \
+  -v pseudonymization-tool_app_state:/data \
+  -v $(pwd)/backups:/backup \
+  alpine tar czf /backup/app_state_$(date +%Y%m%d_%H%M%S).tar.gz -C /data .
+
+# Ripristino
+docker run --rm \
+  -v pseudonymization-tool_app_state:/data \
+  -v $(pwd)/backups:/backup \
+  alpine tar xzf /backup/app_state_<timestamp>.tar.gz -C /data
+```
 
 ## 5. Aggiornamenti
 
