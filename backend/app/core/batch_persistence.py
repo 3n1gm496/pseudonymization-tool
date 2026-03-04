@@ -61,8 +61,6 @@ _UUID_RE = _re.compile(
 
 def get_batch_dir(batch_id: str) -> Path:
     """Restituisce la directory temporanea del batch."""
-    if not _UUID_RE.match(batch_id):
-        raise ValueError(f"Invalid batch_id format: {batch_id!r}")
     return TEMP_BASE_DIR / batch_id
 
 
@@ -160,10 +158,7 @@ def load_batch_from_disk(batch_id: str) -> Optional[Batch]:
     redis_loaded = load_batch_from_redis(batch_id)
     if redis_loaded is not None:
         return redis_loaded
-    try:
-        meta_path = batch_meta_path(batch_id)
-    except ValueError:
-        return None
+    meta_path = batch_meta_path(batch_id)
     if not meta_path.exists():
         return None
     try:
@@ -188,10 +183,7 @@ def load_decisions_from_disk(batch_id: str) -> Dict[str, Any]:
     redis_loaded = load_decisions_from_redis(batch_id)
     if redis_loaded is not None:
         return redis_loaded
-    try:
-        decisions_path = batch_decisions_path(batch_id)
-    except ValueError:
-        return {}
+    decisions_path = batch_decisions_path(batch_id)
     if not decisions_path.exists():
         return {}
     try:
@@ -223,10 +215,7 @@ def load_passphrase_from_disk(batch_id: str) -> Optional[str]:
     redis_loaded = load_passphrase_from_redis(batch_id)
     if redis_loaded is not None:
         return redis_loaded
-    try:
-        passphrase_path = batch_passphrase_path(batch_id)
-    except ValueError:
-        return None
+    passphrase_path = batch_passphrase_path(batch_id)
     if not passphrase_path.exists():
         return None
     try:
@@ -249,10 +238,7 @@ def load_start_time_from_disk(batch_id: str) -> Optional[str]:
     redis_loaded = load_start_time_from_redis(batch_id)
     if redis_loaded is not None:
         return redis_loaded
-    try:
-        start_path = batch_start_time_path(batch_id)
-    except ValueError:
-        return None
+    start_path = batch_start_time_path(batch_id)
     if not start_path.exists():
         return None
     try:
