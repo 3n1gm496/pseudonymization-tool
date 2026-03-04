@@ -66,7 +66,10 @@ class LDAPDNDetector(BaseDetector):
     """
 
     _PATTERN = re.compile(
-        r"\b(?:CN|OU|DC|O|L|ST|C|UID)=[^,\s][^,]*(?:,(?:CN|OU|DC|O|L|ST|C|UID)=[^,\s][^,]*)+", re.IGNORECASE
+        # Each component value is capped at 256 chars ({0,255} after the mandatory first char)
+        # to prevent pathological backtracking on adversarial input.
+        r"\b(?:CN|OU|DC|O|L|ST|C|UID)=[^,\s][^,]{0,255}(?:,(?:CN|OU|DC|O|L|ST|C|UID)=[^,\s][^,]{0,255})+",
+        re.IGNORECASE,
     )
 
     @property

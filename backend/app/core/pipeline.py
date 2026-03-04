@@ -5,6 +5,7 @@ Usa PseudonymEngine persistente per batch, canonical_value, policy hash, safety 
 """
 
 import logging
+import time
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,6 +13,7 @@ from typing import Dict, List, Optional
 
 from app.core.batch_manager import get_batch, get_batch_dir, get_or_create_engine, get_passphrase, update_batch
 from app.core.exceptions import BatchStateError, ParsingError, TransformError
+from app.core.metrics import TRANSFORMATION_DURATION
 from app.core.policies import get_confidence_threshold, get_enabled_entity_types, get_policy_hash
 from app.core.safety import compute_safety_label
 from app.detectors.engine import build_extra_detectors, detect_in_parse_result
@@ -224,6 +226,8 @@ def run_apply_pipeline(batch_id: str, started_at: str) -> Path:
                 file_findings = findings_by_file.get(file_rec.file_id, [])
                 parse_result = _get_parse_result(batch_id, file_rec.file_id)
 
+                _file_type = file_path.suffix.lower().lstrip(".") or "unknown"
+                _t = time.perf_counter()
                 try:
                     output_path, transform_warnings = transform_file(
                         original_path=file_path,
@@ -241,6 +245,8 @@ def run_apply_pipeline(batch_id: str, started_at: str) -> Path:
                     file_rec.status = FileStatus.FAILED
                     file_rec.error_message = f"Errore durante la trasformazione: {e}"
                     logger.error("Unexpected error transforming '%s': %s", file_rec.original_name, e)
+                finally:
+                    TRANSFORMATION_DURATION.labels(file_type=_file_type).observe(time.perf_counter() - _t)
 
         completed_at = datetime.now(timezone.utc).isoformat()
 

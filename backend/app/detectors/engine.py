@@ -4,9 +4,11 @@ con priorità per tipo di entità (SOC-grade).
 """
 
 import logging
+import time
 from typing import List, Optional
 
 from app.core.exceptions import DetectionError, DictionaryDetectionError, LDAPDetectionError
+from app.core.metrics import DETECTOR_DURATION
 from app.detectors.base import RawFinding
 from app.detectors.dictionary_detector import get_dictionary_detector
 from app.detectors.regex_detectors import ALL_REGEX_DETECTORS
@@ -104,34 +106,44 @@ def detect_in_chunk(
 
     # 1. Detector regex base
     for detector in ALL_REGEX_DETECTORS:
+        _t = time.perf_counter()
         try:
             all_findings.extend(detector.detect(chunk))
         except DetectionError as e:
             logger.warning("Regex detection error in '%s': %s", detector.name, e)
         except Exception as e:
             logger.error("Unexpected error in detector '%s': %s", detector.name, e)
+        finally:
+            DETECTOR_DURATION.labels(detector_name=detector.name).observe(time.perf_counter() - _t)
 
     # 2. Detector SOC-grade v2
     for detector in SOC_DETECTORS:
+        _t = time.perf_counter()
         try:
             all_findings.extend(detector.detect(chunk))
         except DetectionError as e:
             logger.warning("SOC detection error in '%s': %s", detector.name, e)
         except Exception as e:
             logger.error("Unexpected error in SOC detector '%s': %s", detector.name, e)
+        finally:
+            DETECTOR_DURATION.labels(detector_name=detector.name).observe(time.perf_counter() - _t)
 
     # 3. Detector dizionario custom
+    dict_detector = get_dictionary_detector()
+    _t = time.perf_counter()
     try:
-        dict_detector = get_dictionary_detector()
         all_findings.extend(dict_detector.detect(chunk))
     except DictionaryDetectionError as e:
         logger.warning("Dictionary detection error: %s", e)
     except Exception as e:
         logger.error("Unexpected error in DictionaryDetector: %s", e)
+    finally:
+        DETECTOR_DURATION.labels(detector_name=dict_detector.name).observe(time.perf_counter() - _t)
 
     # 4. Detector extra (LDAP, domain fragments, ecc.)
     if extra_detectors:
         for detector in extra_detectors:
+            _t = time.perf_counter()
             try:
                 all_findings.extend(detector.detect(chunk))
             except LDAPDetectionError as e:
@@ -140,6 +152,8 @@ def detect_in_chunk(
                 logger.warning("Detection error in extra detector '%s': %s", detector.name, e)
             except Exception as e:
                 logger.error("Unexpected error in extra detector '%s': %s", detector.name, e)
+            finally:
+                DETECTOR_DURATION.labels(detector_name=detector.name).observe(time.perf_counter() - _t)
 
     # 5. Risolvi le sovrapposizioni con priorità per tipo
     return _resolve_overlaps(all_findings)
