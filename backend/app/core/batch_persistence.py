@@ -160,7 +160,10 @@ def load_batch_from_disk(batch_id: str) -> Optional[Batch]:
     redis_loaded = load_batch_from_redis(batch_id)
     if redis_loaded is not None:
         return redis_loaded
-    meta_path = batch_meta_path(batch_id)
+    try:
+        meta_path = batch_meta_path(batch_id)
+    except ValueError:
+        return None
     if not meta_path.exists():
         return None
     try:
@@ -185,7 +188,10 @@ def load_decisions_from_disk(batch_id: str) -> Dict[str, Any]:
     redis_loaded = load_decisions_from_redis(batch_id)
     if redis_loaded is not None:
         return redis_loaded
-    decisions_path = batch_decisions_path(batch_id)
+    try:
+        decisions_path = batch_decisions_path(batch_id)
+    except ValueError:
+        return {}
     if not decisions_path.exists():
         return {}
     try:
@@ -217,7 +223,10 @@ def load_passphrase_from_disk(batch_id: str) -> Optional[str]:
     redis_loaded = load_passphrase_from_redis(batch_id)
     if redis_loaded is not None:
         return redis_loaded
-    passphrase_path = batch_passphrase_path(batch_id)
+    try:
+        passphrase_path = batch_passphrase_path(batch_id)
+    except ValueError:
+        return None
     if not passphrase_path.exists():
         return None
     try:
@@ -240,7 +249,10 @@ def load_start_time_from_disk(batch_id: str) -> Optional[str]:
     redis_loaded = load_start_time_from_redis(batch_id)
     if redis_loaded is not None:
         return redis_loaded
-    start_path = batch_start_time_path(batch_id)
+    try:
+        start_path = batch_start_time_path(batch_id)
+    except ValueError:
+        return None
     if not start_path.exists():
         return None
     try:
