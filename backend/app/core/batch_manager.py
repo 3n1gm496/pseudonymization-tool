@@ -23,9 +23,10 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from app.core.batch_persistence import get_batch_dir  # noqa: F401
-from app.core.batch_persistence import (
+from app.core.batch_persistence import (  # noqa: F401
+    _UUID_RE,
     batch_start_time_path,
+    get_batch_dir,
     load_batch_from_disk,
     load_decisions_from_disk,
     load_passphrase_from_disk,
@@ -223,6 +224,8 @@ def list_batches() -> List[Batch]:
             if not child.is_dir():
                 continue
             batch_id = child.name
+            if not _UUID_RE.match(batch_id):
+                continue
             if batch_id in _batches:
                 continue
             loaded = load_batch_from_disk(batch_id)
@@ -365,9 +368,7 @@ def cleanup_batch(batch_id: str) -> None:
             except Exception as e:
                 logger.error("Errore rimozione directory batch %s: %s", batch_id, e)
 
-        if batch_id in _passphrases:
-            _passphrases[batch_id] = ""
-            _passphrases.pop(batch_id, None)
+        _passphrases.pop(batch_id, None)
         try:
             from app.core.pipeline import _clear_parse_results
 
@@ -410,9 +411,7 @@ def cleanup_inactive_batches() -> int:
                     except Exception as e:
                         logger.error("Errore rimozione directory batch %s: %s", bid, e)
 
-                if bid in _passphrases:
-                    _passphrases[bid] = ""
-                    _passphrases.pop(bid, None)
+                _passphrases.pop(bid, None)
                 try:
                     from app.core.pipeline import _clear_parse_results
 

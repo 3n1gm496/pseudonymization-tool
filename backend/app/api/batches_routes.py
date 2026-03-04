@@ -344,7 +344,12 @@ async def create_new_batch(
     # Step 5: Enqueue async scan task (non-blocking)
     batch.status = BatchStatus.SCANNING
     update_batch(batch)
-    scan_task = scan_batch_task.delay(batch.batch_id)
+    try:
+        scan_task = scan_batch_task.delay(batch.batch_id)
+    except Exception as e:
+        batch.status = BatchStatus.PENDING
+        update_batch(batch)
+        raise HTTPException(status_code=503, detail=f"Impossibile accodare il task di scansione: {e}") from e
     batch.task_id = scan_task.id
     update_batch(batch)
 
@@ -568,7 +573,12 @@ async def apply_batch(batch_id: str, request: Request):
 
     batch.status = BatchStatus.APPLYING
     update_batch(batch)
-    apply_task = apply_batch_task.delay(batch_id, started_at)
+    try:
+        apply_task = apply_batch_task.delay(batch_id, started_at)
+    except Exception as e:
+        batch.status = BatchStatus.REVIEW
+        update_batch(batch)
+        raise HTTPException(status_code=503, detail=f"Impossibile accodare il task di applicazione: {e}") from e
     batch.task_id = apply_task.id
     update_batch(batch)
 
