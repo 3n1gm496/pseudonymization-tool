@@ -1,8 +1,7 @@
 # Architettura Tecnica — Local Pseudonymization Tool
 
-**Autore:** Team Engineering
-**Versione:** 5.0.0
-**Data:** 2026-03-02
+**Versione:** 5.2.1
+**Data:** 2026-03-05
 
 ---
 
@@ -161,23 +160,36 @@ Output: {
 ```
 
 #### 2. Detector Module (`detectors/`)
+
+I detector vengono eseguiti **in parallelo** tramite `ThreadPoolExecutor` (max 4 worker) nel `PseudonymizationEngine`. I detector lenti (LDAP, ML) non bloccano quelli veloci (regex, dizionario).
+
 ```
 Input: Parsed text
        ↓
-[Detector Pipeline]
-├─ regex_detectors.py
-│  ├─ Email: user@domain.it
-│  ├─ IP: 192.168.1.1
-│  ├─ CF: RSSMRA80A01H501T (16 char)
-│  ├─ P.IVA: 12345678901
-│  └─ URL: https://example.com
-│
-├─ dictionary_detector.py
-│  ├─ person_names.txt (1000+ nomi)
-│  ├─ project_codes.txt
-│  └─ hostnames.txt
-│
-└─ [Optional] engine.py (NER - reserved)
+[PseudonymizationEngine — ThreadPoolExecutor(max_workers=4)]
+├─ regex_detectors.py           ─┐
+│  ├─ Email: user@domain.it      │ eseguiti
+│  ├─ IP: 192.168.1.1            │ in
+│  ├─ CF: RSSMRA80A01H501T       │ parallelo
+│  ├─ P.IVA: 12345678901         │
+│  └─ URL: https://example.com  ─┤
+│                                │
+├─ dictionary_detector.py       ─┤
+│  ├─ person_names.txt           │
+│  ├─ project_codes.txt          │
+│  └─ hostnames.txt             ─┤
+│                                │
+├─ ml_ner_detector.py           ─┤  ← protetto da CircuitBreaker
+│  └─ spaCy NER (it/en)          │    (5 fail → 60s open)
+│     ├─ PER (nomi persona)       │
+│     ├─ ORG (organizzazioni)     │
+│     └─ LOC (luoghi)            ─┤
+│                                │
+└─ ldap_detector.py             ─┘  ← protetto da CircuitBreaker
+   └─ LdapCache (CN, mail,          (5 fail → 60s open)
+      sAMAccountName)
+       ↓
+[Aggregazione + Deduplicazione (overlap resolution)]
        ↓
 Output: [
   Finding(
@@ -271,6 +283,109 @@ Output: All files packaged in results_{batch_id}.zip
 - **Text Revert:** Single finding → Original value using passphrase
 - **Batch Revert:** Full ZIP reversal (recreate original using mapping.enc + passphrase)
 
+### 2.5. Multi-User Authentication
+
+Il sistema supporta un modello multi-utente con due ruoli:
+
+| Ruolo | Permessi |
+|---|---|
+| **admin** | Accesso completo: gestione utenti, impostazioni, audit log, tutte le operazioni batch. |
+| **operator** | Accesso operativo: crea/gestisce i propri batch, consultazione audit log in sola lettura. |
+
+**Implementazione:**
+- Utenti persistiti su SQLite (`users.db`) con password cifrate in bcrypt.
+- Sessioni JWT firmate con `AUTH_SECRET` (obbligatorio, nessun default hardcoded).
+- `POST /api/auth/login` accetta `auth_method: local | ldap` — la scelta è esplicita dell'utente.
+- Autenticazione LDAP gestita da `ldap_auth.py` (distinto da `ldap_detector.py` che è solo arricchimento dati).
+- In caso di fallimento LDAP **non** si fa fallback al login locale (fail-safe).
+- Audit log persistente su `audit.db`: tutte le azioni critiche (login, scan, apply, download).
+
+**Endpoint:**
+```
+GET  /api/auth/ldap-status     → LDAP abilitato (usato dal frontend per mostrare/nascondere l'opzione)
+POST /api/auth/login           → { username, password, auth_method }
+POST /api/auth/test-auth       → Test connettività LDAP (diagnostica, senza login completo)
+GET  /api/users/me             → Utente corrente + ruolo
+GET  /api/users                → Lista utenti (solo admin)
+POST /api/users                → Crea utente (solo admin)
+PUT  /api/users/{username}     → Aggiorna ruolo/password (solo admin o self)
+DELETE /api/users/{username}   → Elimina utente (solo admin)
+```
+
+### 2.6. Real-time Notifications (SSE)
+
+Per migliorare l'esperienza utente durante le operazioni asincrone di lunga durata, è stato implementato un sistema di notifiche push basato su Server-Sent Events (SSE).
+
+**Architettura:**
+
+```mermaid
+graph TD
+    subgraph Browser
+        ScannerUI["Scanner.tsx"]
+    end
+
+    subgraph Backend
+        BatchRoutes["batches_routes.py<br/>GET /api/batches/{id}/events"]
+        Redis["Redis Pub/Sub"]
+        CeleryWorker["Celery Worker"]
+    end
+
+    ScannerUI -- "new EventSource()" --> BatchRoutes
+    BatchRoutes -- "Subscribe to channel" --> Redis
+    CeleryWorker -- "Publish progress" --> Redis
+    Redis -- "Push event" --> BatchRoutes
+    BatchRoutes -- "yield event" --> ScannerUI
+```
+
+**Flusso:**
+
+1. Il frontend apre una connessione SSE all'endpoint `GET /api/batches/{id}/events`.
+2. Il backend sottoscrive un canale Redis Pub/Sub dedicato al batch (`batch:{id}:events`).
+3. Il Celery worker pubblica aggiornamenti di stato durante l'elaborazione.
+4. Il backend riceve gli eventi da Redis e li inoltra al frontend via SSE.
+5. Il frontend aggiorna la UI in tempo reale, senza polling.
+
+**Fallback:** in caso di disconnessione SSE, il frontend torna a fare polling su `GET /api/batches/{id}/status`.
+
+### 2.7. Contextual Data Enrichment (LDAP)
+
+Per aumentare l'accuratezza del rilevamento di entità (in particolare `PERSON` e `EMAIL`), il sistema può connettersi opzionalmente a un server LDAP (eDirectory, Active Directory) per costruire un dizionario dinamico di utenti aziendali.
+
+> **Importante:** Questa integrazione è utilizzata **esclusivamente per il rilevamento dei dati** e **non per l'autenticazione degli utenti** (quella è gestita da `ldap_auth.py`).
+
+**Architettura:**
+
+```mermaid
+graph TD
+    subgraph LDAP Server
+        eDirectory[eDirectory / Active Directory]
+    end
+
+    subgraph Backend
+        CircuitBreaker["CircuitBreaker<br/>(5 fail → 60s open)"]
+        LdapDetector["ldap_detector.py"]
+        LdapCache["LdapCache (in-memory TTL)"]
+        DetectorPipeline["Detector Pipeline (parallel)"]
+    end
+
+    eDirectory -- "LDAP Query (bind, search)" --> CircuitBreaker
+    CircuitBreaker -- "CLOSED: esegui" --> LdapDetector
+    CircuitBreaker -- "OPEN: skip silently" --> DetectorPipeline
+    LdapDetector -- "Populate" --> LdapCache
+    LdapCache -- "Provide names, emails" --> DetectorPipeline
+```
+
+**Flusso:**
+
+1. L'amministratore configura la connessione LDAP tramite le impostazioni (host, port, bind DN, search base).
+2. Un thread in background (`ldap-refresh`) si connette a intervalli regolari (default: 60 minuti).
+3. Scarica attributi degli utenti: `cn`, `mail`, `sAMAccountName`.
+4. I dati vengono memorizzati in `LdapCache` (strutture Set per lookup O(1)).
+5. Durante la scansione, il `DetectorPipeline` usa la `LdapCache` come dizionario ad alta priorità.
+6. Se il server LDAP non è raggiungibile, il **CircuitBreaker** (`app/core/circuit_breaker.py`) apre il circuito dopo 5 failure consecutive: il detector viene skippato silenziosamente per 60 secondi.
+
+**Sicurezza:** nessun dato LDAP scritto su disco, nessuna password/DN nei log.
+
 ---
 
 ## 3. Data Model
@@ -332,7 +447,7 @@ services:
 make build-docker     # Build multi-stage image
 make start            # Start docker-compose
 make dev              # Dev mode with hot reload
-make test             # Run pytest (348 tests, 71% coverage)
+make test             # Run pytest (850+ tests, 86% coverage)
 make clean            # Remove containers + temp data
 ```
 
@@ -365,7 +480,7 @@ python backend/app/main.py
 
 ---
 
-## 5.1. Phase 4: Async Architecture (Celery + Redis)
+### 5.1. Phase 4: Async Architecture (Celery + Redis)
 
 ### 🎯 Obiettivo
 
@@ -641,9 +756,9 @@ def mock_redis_for_tests():
 
 ## 6. Testing Strategy
 
-**Test Coverage: 71% (v5.0.0 Verified)**
+**Test Coverage: 86% (v5.2.1)**
 
-**v5.0.0 Test Suite (348 passing, 12 skipped):**
+**Test Suite (850+ passing):**
 - `test_api_contract.py`: 9/9 PASS — API contracts including 202 Accepted pattern
 - `test_additional_fixes.py`: 11/11 PASS — Cleanup, logging, lifecycle
 - `test_functional.py`: 44/44 PASS — Detectors, parsers, security, crypto
@@ -670,7 +785,7 @@ def mock_redis_for_tests():
 
 Run: `make test` or `pytest backend/tests/ -v --cov`
 
-**Test Results:** 348 passing, 12 skipped, 0 failed (CI verified)
+**Test Results:** 850+ passing, 0 failed (CI verified — Python 3.11 + 3.12 matrix)
 
 ---
 
@@ -692,91 +807,13 @@ Run: `make test` or `pytest backend/tests/ -v --cov`
 
 ---
 
-**Last Updated:** 2026-03-02  
-**Version History:**  
-- 1.0 (MVP, 2026-02-25): Initial release with sync processing
-- 5.0.0 (2026-03-03): Security hardening, CI hardening, code quality (PR #1-#10), dark mode, readiness API  
-- 4.1.0 (Phase 4): Async architecture with Celery + Redis, 202 Accepted pattern, scalable workers
-- 5.0.0 (2026-03-03): Security hardening (13 CVE fixed), Docker hardening, Redis auth, CI hardening, 72 unused imports removed
+**Last Updated:** 2026-03-05
+**Version History:**
+- v1.0 (2026-02-25): Initial release, sync processing
+- v4.0.x (2026-03-01/02): Async Celery+Redis, 202 Accepted, TOCTOU fixes, AI revert workflow
+- v5.0.0 (2026-03-03): Security hardening (13 CVE), Docker hardening, Redis auth, CI matrix
+- v5.1.0 (2026-03-03): SSE notifications, multi-user roles admin/operator
+- v5.1.1 (2026-03-04): TypeScript migration, audit log persistente
+- v5.2.0 (2026-03-04): Autenticazione ibrida LDAP + locale (eDirectory/AD)
+- v5.2.1 (2026-03-05): Circuit breaker, detector paralleli, X-Request-ID tracing, Prometheus histograms, 5 bugfix pipeline
 
-**v5.0.0 Release Date:** 2026-03-03  
-**v5.0.0 Test Verification:** 348 tests passing ✅
-
-
-### 2.6. Real-time Notifications (SSE)
-
-Per migliorare l'esperienza utente durante le operazioni asincrone di lunga durata (come la scansione di batch di grandi dimensioni), è stato implementato un sistema di notifiche push basato su Server-Sent Events (SSE).
-
-**Architettura:**
-
-```mermaid
-graph TD
-    subgraph Browser
-        ScannerUI["Scanner.tsx"]
-    end
-
-    subgraph Backend
-        BatchRoutes["batches_routes.py<br/>GET /api/batches/{id}/events"]
-        Redis["Redis Pub/Sub"]
-        CeleryWorker["Celery Worker"]
-    end
-
-    ScannerUI -- "new EventSource()" --> BatchRoutes
-    BatchRoutes -- "Subscribe to channel" --> Redis
-    CeleryWorker -- "Publish progress" --> Redis
-    Redis -- "Push event" --> BatchRoutes
-    BatchRoutes -- "yield event" --> ScannerUI
-```
-
-**Flusso:**
-
-1.  Il frontend, dopo aver avviato una scansione, apre una connessione SSE all'endpoint `GET /api/batches/{id}/events`.
-2.  Il backend sottoscrive la connessione a un canale Redis Pub/Sub specifico per quel batch (`batch:{id}:events`).
-3.  Il Celery worker, durante l'elaborazione, pubblica aggiornamenti di stato (es. `{"status": "processing", "progress": 25}`), sul canale Redis.
-4.  Il backend riceve l'evento da Redis e lo inoltra immediatamente al frontend attraverso la connessione SSE aperta.
-5.  Il frontend aggiorna l'interfaccia utente in tempo reale senza la necessità di polling.
-
-**Fallback:**
-
-- In caso di interruzione della connessione SSE (es. per timeout di rete), il frontend implementa un meccanismo di **fallback automatico**, riprendendo a interrogare l'endpoint di stato tradizionale (`GET /api/batches/{id}/status`) a intervalli regolari per garantire che l'utente non perda gli aggiornamenti.
-
-
-### 2.7. Contextual Data Enrichment (LDAP)
-
-Per aumentare l'accuratezza del rilevamento di entità (in particolare `PERSON` e `EMAIL`), il sistema può opzionalmente connettersi a un server LDAP (come Active Directory o eDirectory) per costruire un dizionario dinamico di utenti aziendali.
-
-**Importante:** Questa integrazione è utilizzata **esclusivamente per il rilevamento dei dati (data detection)** e **non per l'autenticazione degli utenti (login)**.
-
-**Architettura:**
-
-```mermaid
-graph TD
-    subgraph LDAP Server
-        eDirectory[eDirectory / Active Directory]
-    end
-
-    subgraph Backend
-        LdapDetector["ldap_detector.py"]
-        LdapCache["LdapCache (in-memory)"]
-        DetectorPipeline["Detector Pipeline"]
-    end
-
-    eDirectory -- "LDAP Query (bind, search)" --> LdapDetector
-    LdapDetector -- "Populate" --> LdapCache
-    LdapCache -- "Provide names, emails" --> DetectorPipeline
-```
-
-**Flusso:**
-
-1.  **Configurazione:** L'amministratore abilita e configura la connessione LDAP tramite le impostazioni dell'applicazione (host, port, bind DN, password, search base).
-2.  **Refresh Automatico:** Un thread in background (`ldap-refresh`) si avvia e, a intervalli regolari (es. ogni 60 minuti), si connette al server LDAP.
-3.  **Query:** Esegue una query per scaricare gli utenti, recuperando attributi come `cn`, `mail`, `sAMAccountName`.
-4.  **Caching:** I dati degli utenti vengono processati e memorizzati in una cache in-memoria (`LdapCache`) in formati ottimizzati per la ricerca veloce (es. `Set` di nomi e account).
-5.  **Rilevamento:** Durante la fase di scansione, il `DetectorPipeline` utilizza la `LdapCache` come un dizionario ad alta priorità per identificare nomi di persone e indirizzi email presenti nei documenti, aumentando significativamente l'accuratezza rispetto ai dizionari statici.
-
-**Sicurezza e Performance:**
-
-- **Isolamento:** La connessione è solo in uscita verso l'host LDAP configurato.
-- **No Log Sensibili:** Nessun nome utente, DN o password viene mai scritto nei log.
-- **Cache in Memoria:** I dati LDAP non vengono mai scritti su disco per minimizzare i rischi.
-- **Efficienza:** Le strutture dati in memoria sono ottimizzate per lookup O(1), garantendo un impatto minimo sulle performance di scansione.
