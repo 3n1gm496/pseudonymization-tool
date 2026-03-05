@@ -147,10 +147,7 @@ def detect_in_chunk(
     n_workers = min(len(all_detectors), _DETECTOR_MAX_WORKERS)
 
     with ThreadPoolExecutor(max_workers=n_workers) as executor:
-        future_to_detector = {
-            executor.submit(_run_detector, det, chunk): det
-            for det in all_detectors
-        }
+        future_to_detector = {executor.submit(_run_detector, det, chunk): det for det in all_detectors}
 
         for future in as_completed(future_to_detector):
             detector = future_to_detector[future]
