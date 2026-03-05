@@ -14,11 +14,17 @@ import re
 from typing import List, Optional
 
 from app.core import config
+from app.core.circuit_breaker import CircuitBreaker
 from app.detectors.base import BaseDetector, RawFinding
 from app.models.schemas import EntityType
 from app.parsers.base import TextChunk
 
 logger = logging.getLogger(__name__)
+
+# Open after 3 consecutive inference failures; half-open after 120 s.
+# Prevents the scan pipeline from repeatedly calling a broken spaCy model
+# (e.g., memory error, model file corruption) on every chunk.
+_ML_CIRCUIT_BREAKER = CircuitBreaker(failure_threshold=3, recovery_timeout=120.0, name="ml_ner")
 
 
 class MLNERDetector(BaseDetector):
@@ -69,6 +75,10 @@ class MLNERDetector(BaseDetector):
         if not self.enabled or not self.nlp or chunk.is_formula:
             return []
 
+        # Skip if circuit is open (repeated inference failures); allow trial on HALF-OPEN
+        if _ML_CIRCUIT_BREAKER.is_open:
+            return []
+
         findings: List[RawFinding] = []
         text = chunk.text
 
@@ -98,7 +108,10 @@ class MLNERDetector(BaseDetector):
             findings.extend(self._detect_emails(chunk))
             findings.extend(self._detect_phones(chunk))
 
+            _ML_CIRCUIT_BREAKER.record_success()
+
         except Exception as e:
+            _ML_CIRCUIT_BREAKER.record_failure()
             logger.error("ML NER detection error: %s", e)
 
         return findings

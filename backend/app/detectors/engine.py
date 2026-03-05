@@ -5,6 +5,7 @@ con priorità per tipo di entità (SOC-grade).
 
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Optional
 
 from app.core.exceptions import DetectionError, DictionaryDetectionError, LDAPDetectionError
@@ -17,6 +18,12 @@ from app.models.schemas import EntityType
 from app.parsers.base import ParseResult, TextChunk
 
 logger = logging.getLogger(__name__)
+
+# Max threads per detect_in_chunk call.
+# Python's re module releases the GIL during C-level matching, so
+# ThreadPoolExecutor gives real parallelism for regex-heavy detectors.
+# Capped to avoid thread overhead when the detector list is small.
+_DETECTOR_MAX_WORKERS = 8
 
 
 # ─── Priorità per tipo di entità (più alto = priorità maggiore in overlap) ────
@@ -91,71 +98,81 @@ def _resolve_overlaps(findings: List[RawFinding]) -> List[RawFinding]:
     return resolved
 
 
+def _run_detector(detector, chunk):
+    """
+    Execute a single detector on a chunk and return timing information.
+
+    Called inside a ThreadPoolExecutor thread. Never raises — exceptions are
+    returned as the third element so the caller can log them on the main thread
+    (avoids mixing log output from multiple threads) and still record timing.
+
+    Returns:
+        (findings, elapsed_seconds, exception_or_None)
+    """
+    t0 = time.perf_counter()
+    try:
+        return detector.detect(chunk), time.perf_counter() - t0, None
+    except Exception as exc:
+        return [], time.perf_counter() - t0, exc
+
+
 def detect_in_chunk(
     chunk: TextChunk,
     extra_detectors: Optional[List] = None,
 ) -> List[RawFinding]:
     """
     Esegue tutti i detector su un singolo TextChunk e restituisce i finding deduplicati.
+
+    Detectors are run in parallel via ThreadPoolExecutor.  Python's `re` module
+    releases the GIL during C-level pattern matching, so regex-heavy detectors
+    gain real CPU parallelism on multi-core workers.  IO-bound detectors (LDAP)
+    benefit even more.  The overlap resolver runs on the main thread after all
+    futures complete, preserving deterministic output.
+
     extra_detectors: detector aggiuntivi (es. LdapPersonDetector per il batch corrente).
     """
     if chunk.is_formula:
         return []
 
-    all_findings: List[RawFinding] = []
-
-    # 1. Detector regex base
-    for detector in ALL_REGEX_DETECTORS:
-        _t = time.perf_counter()
-        try:
-            all_findings.extend(detector.detect(chunk))
-        except DetectionError as e:
-            logger.warning("Regex detection error in '%s': %s", detector.name, e)
-        except Exception as e:
-            logger.error("Unexpected error in detector '%s': %s", detector.name, e)
-        finally:
-            DETECTOR_DURATION.labels(detector_name=detector.name).observe(time.perf_counter() - _t)
-
-    # 2. Detector SOC-grade v2
-    for detector in SOC_DETECTORS:
-        _t = time.perf_counter()
-        try:
-            all_findings.extend(detector.detect(chunk))
-        except DetectionError as e:
-            logger.warning("SOC detection error in '%s': %s", detector.name, e)
-        except Exception as e:
-            logger.error("Unexpected error in SOC detector '%s': %s", detector.name, e)
-        finally:
-            DETECTOR_DURATION.labels(detector_name=detector.name).observe(time.perf_counter() - _t)
-
-    # 3. Detector dizionario custom
+    # Build flat detector list once; pre-fetch dict_detector singleton.
     dict_detector = get_dictionary_detector()
-    _t = time.perf_counter()
-    try:
-        all_findings.extend(dict_detector.detect(chunk))
-    except DictionaryDetectionError as e:
-        logger.warning("Dictionary detection error: %s", e)
-    except Exception as e:
-        logger.error("Unexpected error in DictionaryDetector: %s", e)
-    finally:
-        DETECTOR_DURATION.labels(detector_name=dict_detector.name).observe(time.perf_counter() - _t)
+    all_detectors: List = [
+        *ALL_REGEX_DETECTORS,
+        *SOC_DETECTORS,
+        dict_detector,
+        *(extra_detectors or []),
+    ]
 
-    # 4. Detector extra (LDAP, domain fragments, ecc.)
-    if extra_detectors:
-        for detector in extra_detectors:
-            _t = time.perf_counter()
-            try:
-                all_findings.extend(detector.detect(chunk))
-            except LDAPDetectionError as e:
-                logger.warning("LDAP detection error: %s", e)
-            except DetectionError as e:
-                logger.warning("Detection error in extra detector '%s': %s", detector.name, e)
-            except Exception as e:
-                logger.error("Unexpected error in extra detector '%s': %s", detector.name, e)
-            finally:
-                DETECTOR_DURATION.labels(detector_name=detector.name).observe(time.perf_counter() - _t)
+    all_findings: List[RawFinding] = []
+    n_workers = min(len(all_detectors), _DETECTOR_MAX_WORKERS)
 
-    # 5. Risolvi le sovrapposizioni con priorità per tipo
+    with ThreadPoolExecutor(max_workers=n_workers) as executor:
+        future_to_detector = {
+            executor.submit(_run_detector, det, chunk): det
+            for det in all_detectors
+        }
+
+        for future in as_completed(future_to_detector):
+            detector = future_to_detector[future]
+            findings, elapsed, exc = future.result()
+
+            # Record timing regardless of success/failure
+            DETECTOR_DURATION.labels(detector_name=detector.name).observe(elapsed)
+
+            if exc is not None:
+                # Log with the appropriate severity based on exception type
+                if isinstance(exc, LDAPDetectionError):
+                    logger.warning("LDAP detection error in '%s': %s", detector.name, exc)
+                elif isinstance(exc, DictionaryDetectionError):
+                    logger.warning("Dictionary detection error in '%s': %s", detector.name, exc)
+                elif isinstance(exc, DetectionError):
+                    logger.warning("Detection error in '%s': %s", detector.name, exc)
+                else:
+                    logger.error("Unexpected error in detector '%s': %s", detector.name, exc)
+            else:
+                all_findings.extend(findings)
+
+    # Resolve overlaps on the main thread (deterministic, order-independent input)
     return _resolve_overlaps(all_findings)
 
 

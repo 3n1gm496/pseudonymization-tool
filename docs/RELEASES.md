@@ -1,5 +1,19 @@
 # Release Notes
 
+## v5.2.1 (2026-03-05)
+
+- **Added**: Distributed trace correlation X-Request-ID FastAPI → Celery → Worker
+- **Added**: Prometheus histograms per detector e per file-type (`detector_duration_seconds`, `file_processing_seconds`)
+- **Added**: Circuit breaker per LdapDetector e MLNERDetector (`app/core/circuit_breaker.py`)
+- **Added**: Esecuzione parallela dei detector tramite `ThreadPoolExecutor` nel `PseudonymizationEngine`
+- **Added**: Endpoint `POST /api/auth/test-auth` per diagnostica LDAP
+- **Changed**: LDAP DN regex hardening (componenti vuoti rigettati, cap 64 componenti)
+- **Changed**: Redazione campi `auth_admin_group_dn` / `auth_operator_group_dn` nelle risposte GET
+- **Fixed**: 5 bug nel pipeline (race condition cleanup, rollback Celery, UUID filter, ValueError guard, passphrase zeroization)
+- **Fixed**: Validazione campi LDAP auth in `settings_routes.py`
+- **Fixed**: Checksum Codice Fiscale (casi limite)
+- **Fixed**: CI/CD — flake8 strict, soglie coverage corrette, black
+
 ## v5.2.0 (2026-03-04)
 
 - **Added**: Autenticazione Ibrida (LDAP + Locale) (PR #61)

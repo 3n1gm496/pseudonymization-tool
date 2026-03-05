@@ -485,10 +485,13 @@ pseudonymization-tool/
 │   │   ├── core/              # Business logic
 │   │   │   ├── auth.py            # Autenticazione ibrida (locale + LDAP)
 │   │   │   ├── ldap_auth.py       # Autenticazione LDAP eDirectory
-│   │   │   ├── ldap_client.py     # LDAP detector data enrichment
+│   │   │   ├── circuit_breaker.py # Circuit breaker generico (LDAP, ML)
 │   │   │   ├── audit.py           # Audit log persistente SQLite
 │   │   │   └── user_manager.py    # Gestione utenti SQLite + bcrypt
 │   │   ├── detectors/         # Entity detection (regex, dict, NER, SOC)
+│   │   │   ├── ldap_client.py     # LDAP client helper per data enrichment
+│   │   │   ├── ldap_detector.py   # Detector LDAP (arricchimento dati)
+│   │   │   └── ml_detector.py     # Detector NER con spaCy (MLNERDetector)
 │   │   ├── parsers/           # Document parsers (PDF, DOCX, XLSX, IMG)
 │   │   ├── pseudonymizer/     # Transformation engine
 │   │   ├── mapping/           # Crypto (AES-256-GCM encryption)

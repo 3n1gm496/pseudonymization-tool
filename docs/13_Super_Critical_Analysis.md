@@ -1,8 +1,11 @@
 # Post-Stabilization Analysis (P0/P1/P2 + v5.0.0 Complete)
 
-**Status:** ✅ **PRODUCTION READY** (March 2026)  
-**Test Suite:** 348 tests passing, 12 skipped | 71% coverage  
-**Stability Phase:** Complete (P0 + P1 + P2 + v5.0.0 security hardening)
+> **Nota:** Questo documento è un'analisi punto-nel-tempo relativa alla fase di stabilizzazione fino a v5.0.0.
+> Le metriche aggiornate alla versione corrente sono riportate nel §5.
+
+**Status:** ✅ **PRODUCTION READY** (March 2026)
+**Test Suite (v5.2.1):** 850+ tests passing | 86% coverage
+**Stability Phase:** Complete (P0 + P1 + P2 + v5.0.0 + v5.1.x + v5.2.x)
 
 ---
 
@@ -44,15 +47,24 @@ This project evolved from **fragile but functional** (5.5/10) → **production-g
 
 ## Code Metrics
 
-| Metric | P2 Baseline | v5.0.0 Current |
-|--------|-------------|----------------|
-| **Tests** | 157 passing | **348 passing, 12 skipped** |
-| **Coverage** | 58.8% | **71%** |
-| **CVE** | unknown | **0** |
-| **Bandit HIGH/MEDIUM** | unknown | **0** |
-| **Unused imports** | 72 | **0** |
-| **Silent exceptions** | 7 | **0** |
-| **Documentation** | 17 docs | **18 docs** |
+| Metric | P2 Baseline | v5.0.0 | v5.2.1 Current |
+|--------|-------------|--------|----------------|
+| **Tests** | 157 passing | 348 passing, 12 skipped | **850+ passing** |
+| **Coverage** | 58.8% | 71% | **86%** |
+| **CVE** | unknown | 0 | **0** |
+| **Bandit HIGH/MEDIUM** | unknown | 0 | **0** |
+| **Unused imports** | 72 | 0 | **0** |
+| **Silent exceptions** | 7 | 0 | **0** |
+| **Documentation** | 17 docs | 18 docs | **20 docs** |
+
+## Funzionalità Aggiunte Post-v5.0.0
+
+| Versione | Feature |
+|----------|---------|
+| v5.1.0 | Notifiche SSE real-time, multi-user con ruoli admin/operator |
+| v5.1.1 | Migrazione TypeScript completa, audit log persistente |
+| v5.2.0 | Autenticazione ibrida LDAP + locale (eDirectory/AD) |
+| v5.2.1 | Circuit breaker, detector paralleli, X-Request-ID tracing, Prometheus histograms |
 
 ---
 
@@ -90,4 +102,4 @@ For detailed analysis of specific areas:
 
 ---
 
-**Version:** 3.0 | **Phase:** P0+P1+P2+v5.0.0 Complete | **Updated:** 2026-03-03
+**Version:** 4.0 | **Phase:** P0+P1+P2+v5.0.0+v5.1.x+v5.2.x Complete | **Updated:** 2026-03-05

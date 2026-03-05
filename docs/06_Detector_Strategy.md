@@ -1,53 +1,95 @@
 # Strategia dei Detector
 
-**Autore:** Manus AI
-**Versione:** 5.0.0
-**Data:** 2026-03-02
+**Versione:** 5.2.1
+**Data:** 2026-03-05
 
 ---
 
 ## 1. Filosofia di Rilevamento
 
-La strategia di rilevamento per l'MVP si basa su un approccio **multi-livello, trasparente e configurabile**, privilegiando l'alta precisione e la chiarezza rispetto a un richiamo potenzialmente rumoroso. L'obiettivo è ridurre i falsi positivi, dando comunque all'utente il pieno controllo nella fase di review per correggere eventuali falsi negativi.
+La strategia di rilevamento si basa su un approccio **multi-livello, trasparente e configurabile**, privilegiando l'alta precisione e la chiarezza rispetto a un richiamo potenzialmente rumoroso. L'obiettivo è ridurre i falsi positivi, dando comunque all'utente il pieno controllo nella fase di review per correggere eventuali falsi negativi.
 
-Il motore di rilevamento funzionerà come una catena, dove ogni detector viene eseguito in sequenza sul testo estratto. I risultati di tutti i detector vengono aggregati prima di essere presentati all'utente.
+Il motore di rilevamento (`PseudonymizationEngine`) esegue tutti i detector **in parallelo** tramite `ThreadPoolExecutor` (max 4 worker). I risultati vengono aggregati e deduplicati prima di essere presentati all'utente. I detector lenti (LDAP, ML/NER) non bloccano l'esecuzione di quelli veloci (regex, dizionario).
 
-## 2. Tipi di Detector (MVP)
+---
 
-Per l'MVP verranno implementate due categorie principali di detector.
+## 2. Tipi di Detector
 
 ### 2.1. Detector Basati su Regex (Rule-Based)
 
-Questi detector utilizzano espressioni regolari per identificare entità che seguono un pattern strutturale ben definito. Sono veloci, efficienti e hanno un'alta precisione quando il pattern è robusto.
+Identificano entità che seguono un pattern strutturale definito. Veloci, con alta precisione.
 
-| Entità | Regex (Concettuale) | Confidenza di Default | Note |
-|---|---|---|---|
-| **Email** | `[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}` | 0.95 | Regex standard, molto affidabile. |
-| **IPv4** | `\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b` | 1.00 | Verrà aggiunto un controllo per validare che ogni ottetto sia <= 255. |
-| **IPv6** | Pattern complesso per le varie forme di IPv6. | 0.90 | La complessità della sintassi IPv6 può portare a falsi positivi/negativi. Sarà documentato. |
-| **URL** | `https?://[\S]+` | 0.90 | Regex generica per catturare la maggior parte degli URL. |
-| **Codice Fiscale** | Pattern specifico per la struttura del CF italiano. | 1.00 | La struttura è rigida e include un carattere di controllo, rendendo la regex molto precisa. |
-| **Partita IVA** | `\b[0-9]{11}\b` | 0.85 | Un numero di 11 cifre potrebbe essere altro, ma nel contesto PA è probabile sia una P.IVA. La confidenza è leggermente più bassa. |
-| **Numero Telefono** | Pattern che considera prefissi internazionali (es. `+39`), spazi e formati comuni. | 0.80 | Meno preciso a causa della varietà di formattazione. |
+| Entità | Confidenza di Default | Note |
+|---|---|---|
+| **Email** | 0.95 | Regex standard RFC 5322 semplificata. |
+| **IPv4** | 1.00 | Validazione ottetti (0-255) inclusa. |
+| **IPv6** | 0.90 | Pattern multi-forma; documentati i casi limite. |
+| **URL** | 0.90 | `https?://` e `ftp://`; regex generica. |
+| **Codice Fiscale** | 1.00 | Pattern rigido + checksum di controllo (algoritmo ministeriale). |
+| **Partita IVA** | 0.85 | 11 cifre + validazione modulo 10. |
+| **Numero Telefono** | 0.80 | Prefissi internazionali (`+39`), spazi, formati comuni. |
 
 ### 2.2. Detector Basati su Dizionario (Dictionary-Based)
 
-Questi detector cercano corrispondenze esatte (case-insensitive) da liste di termini fornite dall'utente. Sono fondamentali per identificare dati sensibili specifici del contesto organizzativo.
+Cercano corrispondenze esatte (case-insensitive) da liste di termini configurate dall'utente. Fondamentali per dati sensibili specifici del contesto organizzativo.
 
-- **Implementazione:** Il sistema leggerà i termini da file di testo semplici (un termine per riga) situati in una directory `config/dictionaries/`.
-- **Struttura:**
-    - `config/dictionaries/person_names.txt` (per nomi e cognomi comuni)
-    - `config/dictionaries/internal_hostnames.txt` (per server interni)
-    - `config/dictionaries/project_codes.txt` (per sigle di progetti)
-    - etc.
-- **Logica:** Per ogni parola nel testo, il sistema verificherà se appare in uno dei dizionari attivi. La ricerca sarà case-insensitive.
-- **Confidenza:** La confidenza per i match da dizionario sarà configurabile, ma di default alta (es. 0.98), poiché si tratta di corrispondenze esplicite.
+- **Directory:** `config/dictionaries/` (file di testo, un termine per riga)
+- **Esempi:** `person_names.txt`, `internal_hostnames.txt`, `project_codes.txt`
+- **Confidenza:** configurabile per dizionario, default 0.98.
+
+### 2.3. Detector NER/ML (`MLNERDetector`)
+
+Utilizza un modello spaCy (`it_core_news_sm` / `en_core_web_sm`) per il riconoscimento di entità contestuali: nomi di persona (`PER`), organizzazioni (`ORG`), luoghi (`LOC`). Compensano i falsi negativi dei detector basati su regole per entità non strutturate.
+
+- **Confidenza:** variabile in base al punteggio spaCy, minimo 0.70.
+- **Protezione:** circuit breaker (vedi §4).
+
+### 2.4. Detector LDAP (`LdapDetector`)
+
+Arricchisce il rilevamento interrogando la directory aziendale (LDAP/eDirectory/AD) per identificare nomi utente, CN, DN e attributi correlati presenti nel testo.
+
+- **Distinto** da `ldap_auth.py` (autenticazione): `ldap_detector.py` è esclusivamente per l'arricchimento dei dati.
+- **Protezione:** circuit breaker (vedi §4).
+
+---
 
 ## 3. Gestione delle Sovrapposizioni (Overlaps)
 
-Può accadere che più detector identifichino la stessa porzione di testo o porzioni sovrapposte. Esempio: `server-01.ente.gov.it` potrebbe essere matchato come `HOSTNAME` e come `URL` (se parte di un URL completo).
+Più detector possono identificare la stessa porzione di testo o porzioni sovrapposte.
 
-**Strategia di risoluzione (MVP):**
-1.  **Priorità alla specificità:** Il finding più specifico (solitamente quello con la stringa matchata più lunga) vince. Nell'esempio sopra, l'URL completo avrebbe la priorità sull'hostname.
-2.  **Confidenza:** A parità di specificità, vince il detector con la confidenza più alta.
-3.  **Nessuna fusione:** Per l'MVP, non si tenterà di fondere i finding. Verrà scelto il 
+**Strategia di risoluzione:**
+1. **Specificità:** il finding con la stringa matchata più lunga vince.
+2. **Confidenza:** a parità di lunghezza, vince il detector con confidenza più alta.
+3. **Nessuna fusione:** viene scelto un singolo finding per ogni span; gli altri vengono scartati silenziosamente.
+
+---
+
+## 4. Resilienza: Circuit Breaker
+
+I detector che dipendono da risorse esterne (LDAP server, modello ML) sono protetti da un `CircuitBreaker` generico (`app/core/circuit_breaker.py`).
+
+| Parametro | Valore di Default |
+|---|---|
+| Soglia di apertura | 5 failure consecutive |
+| Timeout riapertura | 60 secondi |
+| Stato HALF-OPEN | 1 probe di test prima di chiudere |
+
+**Comportamento:**
+- **CLOSED:** detector attivo, tutte le chiamate vengono eseguite.
+- **OPEN:** il detector viene skippato silenziosamente; il finding viene omesso (fail-safe). Lo stato è loggato a livello `WARNING`.
+- **HALF-OPEN:** una singola chiamata di prova; se ha successo il circuito si richiude, altrimenti rimane aperto.
+
+Il circuit breaker evita che un LDAP server irraggiungibile o un modello ML guasto causino timeout a cascata sull'intero pipeline.
+
+---
+
+## 5. Osservabilità
+
+Ogni invocazione di detector produce metriche Prometheus:
+
+- `detector_duration_seconds{detector="<nome>"}` — histogram della latenza.
+- `file_processing_seconds{file_type="<tipo>"}` — histogram del tempo totale per tipo di file.
+
+Le metriche sono visibili su `GET /api/metrics`.
+
+Ogni operazione è correlata tramite `X-Request-ID`, propagato FastAPI → Celery → Worker per il tracing distribuito nei log strutturati.

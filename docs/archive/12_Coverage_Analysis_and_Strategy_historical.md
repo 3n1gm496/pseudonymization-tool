@@ -1,6 +1,9 @@
-# Coverage Analysis & Strategic Path Forward
+> **ARCHIVIATO (2026-03-05):** Documento storico di analisi della copertura, valido al momento della fase P1 (~86 test, 45% coverage).
+> La copertura attuale (v5.2.1) è **86%** con 850+ test. Vedere `docs/13_Super_Critical_Analysis.md` per le metriche correnti.
 
-**Current State:** 86 tests passing | 45% coverage (3239 statements, 1782 missing)
+# Coverage Analysis & Strategic Path Forward (STORICO — Pre-v5.0.0)
+
+**Current State at time of writing:** 86 tests passing | 45% coverage (3239 statements, 1782 missing)
 
 ## Coverage Reality Check
 

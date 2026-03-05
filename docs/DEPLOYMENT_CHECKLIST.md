@@ -17,26 +17,30 @@ Questa checklist deve essere seguita prima di ogni deployment in produzione per 
 - [ ] **Aggiornare il file `.env`**: Modificare il file `.env` con le nuove variabili, se presenti.
 - [ ] **Eseguire il deployment con Docker Compose**:
   ```bash
-  docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+  docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
   ```
 
 ## Fase 3: Verifica post-deployment
 
 - [ ] **Controllare i log dei container**: Verificare che non ci siano errori all'avvio.
   ```bash
-  docker-compose logs -f backend frontend
+  docker compose logs -f backend frontend
   ```
 - [ ] **Verificare l'endpoint di readiness**: Assicurarsi che l'applicazione sia pronta a ricevere traffico.
   ```bash
   curl http://localhost:8000/api/ready
   ```
   L'endpoint deve restituire 200 OK.
+- [ ] **Verificare le metriche Prometheus**: Controllare che le metriche siano esposte correttamente.
+  ```bash
+  curl http://localhost:8000/api/metrics | head -20
+  ```
 - [ ] **Testare le funzionalità principali**: Eseguire un test manuale delle funzionalità critiche dell'applicazione (es. login, upload file, scansione).
-- [ ] **Monitorare le metriche**: Controllare i dashboard di monitoraggio (se presenti) per verificare che l'applicazione si comporti come previsto (CPU, memoria, latenza).
+- [ ] **Monitorare le metriche**: Controllare i dashboard di monitoraggio (Prometheus/Grafana) per CPU, memoria, latenza e `detector_duration_seconds`.
 
 ## Fase 4: Rollback (se necessario)
 
 - [ ] **Identificare il commit di rollback**: Trovare l'hash del commit stabile precedente.
 - [ ] **Eseguire il checkout del commit**: `git checkout <commit_hash>`.
-- [ ] **Rieseguire il deployment**: `docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build`.
+- [ ] **Rieseguire il deployment**: `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build`.
 - [ ] **Verificare nuovamente**: Ripetere la Fase 3.
