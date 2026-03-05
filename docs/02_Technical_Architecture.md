@@ -7,7 +7,7 @@
 
 ## 1. Panoramica dell'Architettura
 
-L'applicazione è una **single-page web application (SPA)** con architettura completamenz locale e offline. Sistema client-server con separazione chiara tra:
+L'applicazione è una **single-page web application (SPA)** con architettura completamente locale e offline. Sistema client-server con separazione chiara tra:
 
 - **Frontend:** React 18 + Vite (SPA)
 - **Backend:** FastAPI (Python 3.12) con Uvicorn
@@ -738,7 +738,7 @@ def mock_redis_for_tests():
     os.environ.pop("REDIS_URL", None)
 ```
 
-**Test Results (Phase 4):**
+**Test Results (Async Architecture):**
 - 64 critical tests verified ✅
 - 0 regressions ✅
 - API contract tests updated for 202 Accepted pattern ✅
@@ -789,14 +789,14 @@ Run: `make test` or `pytest backend/tests/ -v --cov`
 
 ---
 
-## 7. Infrastructure (Container + Phase 4)
+## 7. Infrastructure
 
 **Base Image:** `python:3.12.3-slim`
 **Frontend Build:** Multi-stage (Node 18 → Vite build → nginx static serve)
 **Backend:** Uvicorn on port 8000
 **Storage:** /tmp/pseudonymizer (ephemeral)
 
-**Phase 4 Components:**
+**Componenti Async:**
 - **Redis**: `redis:7-alpine` (message broker + result backend)
 - **Celery Worker**: Python 3.12 + Celery 5.3+
 - **Networking**: Internal Docker network, no external exposure
