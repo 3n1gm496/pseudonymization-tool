@@ -1,11 +1,72 @@
-> Questo file è stato aggiornato automaticamente da Manus per riflettere lo stato finale del progetto dopo 6 pull request.
-
 # Changelog
 
 Tutte le modifiche notevoli a questo progetto sono documentate in questo file.
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 e questo progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+---
+
+## [5.2.1] - 2026-03-05
+
+### Added
+
+- **Distributed Trace Correlation via X-Request-ID**
+  - Aggiunto middleware FastAPI che genera o propaga l'header `X-Request-ID` su ogni request.
+  - Il `task_id` di Celery viene impostato al valore dell'`X-Request-ID` ricevuto, garantendo la correlazione end-to-end FastAPI → Celery → Worker.
+  - Tutti i log strutturati includono il campo `request_id` per il tracing distribuito.
+
+- **Prometheus Histograms per Detector e File-Type**
+  - Aggiunto `detector_duration_seconds` (histogram) per misurare la latenza di ogni detector.
+  - Aggiunto `file_processing_seconds` (histogram) per misurare il tempo di elaborazione per tipo di file.
+  - Le metriche sono esposte sull'endpoint `/api/metrics` in formato Prometheus.
+
+- **Circuit Breaker per LDAP e ML Detector**
+  - Implementato `CircuitBreaker` generico in `app/core/circuit_breaker.py`.
+  - `LdapDetector` e `MLNERDetector` sono ora protetti da circuit breaker con soglie configurabili: 5 failure consecutive aprono il circuito per 60 secondi.
+  - Lo stato del circuit breaker (CLOSED/OPEN/HALF-OPEN) è visibile nei log strutturati.
+
+- **Esecuzione Parallela dei Detector**
+  - I detector nel `PseudonymizationEngine` ora vengono eseguiti in parallelo tramite `ThreadPoolExecutor` con `max_workers=4`.
+  - I detector lenti (LDAP, ML) non bloccano più l'esecuzione dei detector veloci (regex, dizionario).
+  - Riduzione attesa stimata del 40-60% su testi che attivano detector multipli.
+
+- **Endpoint `POST /api/auth/test-auth`**
+  - Nuovo endpoint per testare la connettività LDAP senza eseguire un login completo.
+  - Utile per diagnosticare problemi di configurazione LDAP in fase di setup.
+
+### Changed
+
+- **LDAP DN Regex Hardening**
+  - Il parser dei DN LDAP ora rigetta DN con componenti vuoti (es. `cn=,dc=example`).
+  - Aggiunto cap a 64 componenti massimi per prevenire ReDoS su input malformati.
+
+- **Redazione Campi Sensibili LDAP nell'API**
+  - I campi `auth_admin_group_dn` e `auth_operator_group_dn` vengono redatti (sostituiti con `***`) nelle risposte GET delle impostazioni, per evitare l'esposizione di struttura LDAP interna.
+
+### Fixed
+
+- **5 Bug nel Pipeline di Pseudonimizzazione**
+  - `batch_manager.py`: corretta la race condition nel cleanup che poteva eliminare batch ancora attivi.
+  - `tasks.py`: aggiunto rollback Celery in caso di eccezione durante l'apply, evitando stato inconsistente.
+  - `batches_routes.py`: UUID filter in `list_batches` per ignorare entry non-UUID nella directory di stato.
+  - `revert_routes.py`: `ValueError` da `get_batch_dir` ora catturato correttamente in tutti i loader su disco.
+  - `batch_manager.py`: rimossa la guardia ridondante `ValueError` da `get_batch_dir` (la validazione avviene a monte).
+
+- **Pulizia Passphrase in Memoria**
+  - La passphrase viene azzerata dalla memoria (`\x00 * len`) immediatamente dopo l'uso nel processo di cifratura del mapping.
+
+- **Validazione Campi LDAP Auth**
+  - `auth_user_base_dn`, `auth_admin_group_dn`, `auth_operator_group_dn` sono ora validati come DN non-vuoti prima del salvataggio in `settings_routes.py`.
+
+- **Correttezza Checksum Codice Fiscale**
+  - Il validatore del CF ora calcola correttamente il carattere di controllo per tutti i casi limite.
+
+- **CI/CD**
+  - Aggiunta configurazione `flake8` strict in `setup.cfg` (E501 con line-length=120, W503 ignorato).
+  - Soglia di copertura per `ldap_auth.py` corretta in `pyproject.toml` al valore misurato reale.
+  - Riformattazione `black` su tutti i file modificati.
+  - Corretto `# nosec` annotation su `B108` (uso di `/tmp` intenzionale e documentato).
 
 ---
 

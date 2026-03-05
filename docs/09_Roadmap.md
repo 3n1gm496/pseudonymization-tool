@@ -1,8 +1,7 @@
 # Roadmap — Local Pseudonymization Tool
 
-**Autore:** Manus AI
-**Versione:** 5.0.0
-**Data:** 2026-03-02
+**Versione:** 5.2.1
+**Data:** 2026-03-05
 
 ---
 
@@ -24,13 +23,15 @@ La versione iniziale si concentra sulla fornitura di un tool funzionale, sicuro 
 
 Questa fase si concentra sul miglioramento della robustezza, dell'usabilità e della copertura del tool.
 
-| Funzionalità | Descrizione | Obiettivo Principale |
-|---|---|---|
-| **OCR su PDF Scansionati** | Integrare una pipeline che estrae le immagini dai PDF e applica l'OCR su di esse. | Estendere il supporto a una vasta categoria di documenti comuni in ambito PA e legale. |
-| **NER Locale (CPU-Friendly)** | Integrare un modello di Natural Language Processing (es. `spaCy`) per migliorare il rilevamento di entità come nomi di persona e organizzazioni, riducendo i falsi negativi. | Aumentare l'accuratezza del rilevamento per i dati non strutturati. |
-| **Pseudonimizzazione Format-Preserving Avanzata** | Implementare tecniche di pseudonimizzazione che preservano il formato originale in modo più realistico (es. un indirizzo IP viene sostituito con un altro IP valido ma fittizio). | Migliorare l'utilità dei dati pseudonimizzati per gli strumenti di analisi che si aspettano formati specifici. |
-| **Installer Windows Nativo** | Creare un installer `.msi` (usando WiX Toolset) o `.exe` (usando Inno Setup/NSIS) per semplificare drasticamente il processo di installazione per gli utenti Windows. | Ridurre la barriera all'adozione e i ticket di supporto legati all'installazione. |
-| **Profili di Configurazione Custom** | Permettere agli utenti di salvare e caricare set di configurazioni (modalità, dizionari attivi, etc.) per diversi casi d'uso. | Migliorare l'efficienza per gli utenti che eseguono compiti ripetitivi. |
+| Funzionalità | Stato | Descrizione | Obiettivo Principale |
+|---|---|---|---|
+| **OCR su PDF Scansionati** | ✅ Implementato | Pipeline che estrae le immagini dai PDF e applica l'OCR su di esse (`image_parser.py`). | Estendere il supporto a una vasta categoria di documenti comuni in ambito PA e legale. |
+| **NER Locale (CPU-Friendly)** | ✅ Implementato (v5.2.x) | Modello spaCy (`MLNERDetector`) per rilevare nomi di persona, organizzazioni e luoghi. Protetto da circuit breaker. | Aumentare l'accuratezza del rilevamento per i dati non strutturati. |
+| **Detector Paralleli** | ✅ Implementato (v5.2.1) | `ThreadPoolExecutor` nel `PseudonymizationEngine` — detector lenti non bloccano quelli veloci. | Riduzione latenza stimata 40-60% su testi multi-detector. |
+| **Circuit Breaker Detector Esterni** | ✅ Implementato (v5.2.1) | LDAP e ML protetti da circuit breaker; fallback graceful in caso di indisponibilità. | Alta disponibilità del pipeline indipendentemente dai servizi esterni. |
+| **Pseudonimizzazione Format-Preserving Avanzata** | 📋 Backlog | Tecniche che preservano il formato originale (es. IP→IP fittizio valido). | Migliorare l'utilità dei dati pseudonimizzati per strumenti di analisi. |
+| **Installer Windows Nativo** | 📋 Backlog | Installer `.msi` / `.exe` per ambienti Windows restrittivi. | Ridurre la barriera all'adozione. |
+| **Profili di Configurazione Custom** | 📋 Backlog | Salvataggio e caricamento di preset di configurazione per casi d'uso ricorrenti. | Migliorare l'efficienza per compiti ripetitivi. |
 
 ## 4. Fase Futura: Funzionalità Avanzate e Integrazioni
 
