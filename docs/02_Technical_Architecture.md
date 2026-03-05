@@ -480,7 +480,7 @@ python backend/app/main.py
 
 ---
 
-### 5.1. Phase 4: Async Architecture (Celery + Redis)
+## 5.1. Async Architecture (Celery + Redis)
 
 ### 🎯 Obiettivo
 
