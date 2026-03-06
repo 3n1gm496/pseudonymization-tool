@@ -38,7 +38,7 @@ from app.core.batch_persistence import (  # noqa: F401
 )
 from app.core.batch_redis import delete_batch_from_redis, list_batch_ids_from_redis, load_batch_from_redis
 from app.core.config import TEMP_BASE_DIR
-from app.models.schemas import Batch, BatchMode
+from app.models.schemas import Batch, BatchMode, BatchStatus
 
 logger = logging.getLogger(__name__)
 
@@ -185,16 +185,39 @@ def create_batch(batch: Batch) -> Batch:
     return batch
 
 
+# Stati transitori in cui il batch può essere aggiornato da un processo esterno
+# (Celery worker). In questi stati la cache in-memory non è affidabile e
+# occorre rileggere sempre da Redis/disco per ottenere lo stato aggiornato.
+_TRANSIENT_STATUSES = frozenset({
+    BatchStatus.PENDING,
+    BatchStatus.SCANNING,
+    BatchStatus.APPLYING,
+})
+
+
 def get_batch(batch_id: str) -> Optional[Batch]:
-    """Recupera un batch per ID e aggiorna il timestamp di attività."""
+    """Recupera un batch per ID e aggiorna il timestamp di attività.
+
+    Per i batch in stato transitorio (pending/scanning/applying) rilegge sempre
+    da Redis/disco, perché il Celery worker (processo separato) potrebbe aver
+    aggiornato lo stato senza che la cache in-memory del processo FastAPI ne
+    sia a conoscenza.
+    """
     with _global_lock:
-        batch = _batches.get(batch_id)
-        if not batch:
-            batch = load_batch_from_disk(batch_id)
-            if batch:
-                _batches[batch_id] = batch
-        if batch:
+        cached = _batches.get(batch_id)
+        if cached and cached.status not in _TRANSIENT_STATUSES:
+            # Stato stabile: la cache è affidabile
             _last_activity[batch_id] = time.time()
+            return cached
+        # Stato transitorio o batch non in cache: rileggi da Redis/disco
+        batch = load_batch_from_disk(batch_id)
+        if batch:
+            _batches[batch_id] = batch
+            _last_activity[batch_id] = time.time()
+        elif cached:
+            # Fallback alla cache se il disco non risponde
+            _last_activity[batch_id] = time.time()
+            return cached
         return batch
 
 

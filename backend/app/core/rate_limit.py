@@ -44,6 +44,8 @@ from typing import Dict, Optional
 
 from fastapi import HTTPException, Request
 
+from app.core.redis_utils import safe_redis_url
+
 logger = logging.getLogger(__name__)
 
 # Configuration for rate limiter v3
@@ -84,10 +86,11 @@ def _get_redis_client():
             return None
 
         _redis_last_check = now
-        redis_url = os.environ.get("REDIS_URL")
-        if not redis_url:
+        raw_redis_url = os.environ.get("REDIS_URL")
+        if not raw_redis_url:
             # No REDIS_URL configured — use in-memory fallback silently
             return None
+        redis_url = safe_redis_url(raw_redis_url)
 
         try:
             from redis import Redis
@@ -103,7 +106,7 @@ def _get_redis_client():
             _redis_client_cached = client
             logger.info(
                 "rate_limit: Redis connection established (%s)",
-                redis_url.split("@")[-1],
+                raw_redis_url.split("@")[-1],
             )
             return client
         except Exception as exc:

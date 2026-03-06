@@ -1,4 +1,12 @@
-import { memo, useState, useRef, type JSX, type FormEvent, type DragEvent, type KeyboardEvent } from 'react'
+import {
+  DragEvent,
+  FormEvent,
+  KeyboardEvent,
+  memo,
+  useCallback,
+  useRef,
+  useState,
+} from 'react'
 import axios from '../utils/axios'
 import { useToast } from '../hooks/useToast'
 import type { Batch } from '../types'
@@ -14,8 +22,27 @@ const Scanner = ({ onScan, isLoading }: ScannerProps): JSX.Element => {
   const [text, setText] = useState('')
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const [scanLoading, setScanLoading] = useState(false)
+  const [scanStatus, setScanStatus] = useState<string>('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
+  const eventSourceRef = useRef<EventSource | null>(null)
   const { showToast } = useToast()
+
+  const cancelScan = useCallback((): void => {
+    // Chiude la connessione SSE se attiva
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close()
+      eventSourceRef.current = null
+    }
+    // Annulla la richiesta HTTP se in corso
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
+    }
+    setScanLoading(false)
+    setScanStatus('')
+    showToast('Scansione annullata', 'info')
+  }, [showToast])
 
   const waitForScanCompletion = async (
     batchId: string,
@@ -30,10 +57,12 @@ const Scanner = ({ onScan, isLoading }: ScannerProps): JSX.Element => {
         const result = await new Promise<Batch>((resolve, reject) => {
           const timeoutId = setTimeout(() => {
             es.close()
+            eventSourceRef.current = null
             reject(new Error('Timeout SSE attesa scansione batch'))
           }, timeoutMs)
 
           const es = new EventSource(`/api/batches/${batchId}/events`, { withCredentials: true })
+          eventSourceRef.current = es
 
           es.onmessage = (event: MessageEvent<string>) => {
             try {
@@ -45,9 +74,16 @@ const Scanner = ({ onScan, isLoading }: ScannerProps): JSX.Element => {
               }
               if (data.type === 'status') {
                 const status = (data.status ?? '').toLowerCase()
+                // Aggiorna il messaggio di stato visibile all'utente
+                if (status === 'processing') {
+                  setScanStatus('Analisi in corso...')
+                } else if (status === 'review' || status === 'done') {
+                  setScanStatus('Completato, carico i risultati...')
+                }
                 if (SCAN_TERMINAL.has(status)) {
                   clearTimeout(timeoutId)
                   es.close()
+                  eventSourceRef.current = null
                   if (status === 'error') {
                     reject(new Error(data.error_message ?? 'Errore durante la scansione del batch'))
                   } else {
@@ -60,6 +96,7 @@ const Scanner = ({ onScan, isLoading }: ScannerProps): JSX.Element => {
               } else if (data.type === 'timeout' || data.type === 'error') {
                 clearTimeout(timeoutId)
                 es.close()
+                eventSourceRef.current = null
                 reject(new Error(data.message ?? 'Errore SSE scansione'))
               }
             } catch {
@@ -70,6 +107,7 @@ const Scanner = ({ onScan, isLoading }: ScannerProps): JSX.Element => {
           es.onerror = () => {
             clearTimeout(timeoutId)
             es.close()
+            eventSourceRef.current = null
             reject(new Error('SSE_FALLBACK'))
           }
         })
@@ -84,12 +122,14 @@ const Scanner = ({ onScan, isLoading }: ScannerProps): JSX.Element => {
     }
 
     // Fallback: polling classico
+    setScanStatus('Analisi in corso (polling)...')
     const startedAt = Date.now()
     while (Date.now() - startedAt < timeoutMs) {
       const statusResponse = await axios.get<Batch>(`/api/batches/${batchId}/status`)
       const currentBatch = statusResponse.data
       const status = String(currentBatch?.status ?? '').toLowerCase()
       if (status === 'review' || status === 'done' || status === 'done_with_errors') {
+        setScanStatus('Completato, carico i risultati...')
         const fullBatchResponse = await axios.get<Batch>(`/api/batches/${batchId}`)
         return fullBatchResponse.data
       }
@@ -109,8 +149,10 @@ const Scanner = ({ onScan, isLoading }: ScannerProps): JSX.Element => {
       return
     }
     const controller = new AbortController()
+    abortControllerRef.current = controller
     const timeoutId = setTimeout(() => controller.abort(), 30000)
     setScanLoading(true)
+    setScanStatus('Scansione in corso...')
     try {
       const response = await axios.post<Batch>(
         '/api/console/scan',
@@ -125,14 +167,16 @@ const Scanner = ({ onScan, isLoading }: ScannerProps): JSX.Element => {
         response?: { data?: { detail?: string } }
         message?: string
       }
-      if (axiosError.code === 'ECONNABORTED') {
-        showToast('Timeout dello scan dopo 30 secondi', 'error')
+      if (axiosError.code === 'ECONNABORTED' || axiosError.code === 'ERR_CANCELED') {
+        // Annullato dall'utente — nessun toast di errore
       } else {
         showToast(axiosError.response?.data?.detail ?? 'Errore durante lo scan', 'error')
       }
     } finally {
       clearTimeout(timeoutId)
+      abortControllerRef.current = null
       setScanLoading(false)
+      setScanStatus('')
     }
   }
 
@@ -147,15 +191,20 @@ const Scanner = ({ onScan, isLoading }: ScannerProps): JSX.Element => {
       showToast(`File troppo grande: ${fileSizeMB}MB (massimo ${maxSizeMB}MB)`, 'error')
       return
     }
+    const controller = new AbortController()
+    abortControllerRef.current = controller
     setScanLoading(true)
+    setScanStatus('Caricamento file...')
     try {
       const formData = new FormData()
       formData.append('files', uploadedFile)
       const response = await axios.post<Batch & { passphrase?: string }>('/api/batches', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
+        signal: controller.signal,
       })
       let batchPayload: Batch = { ...response.data }
       if (response.status === 202 && response.data?.batch_id) {
+        setScanStatus('File caricato, attendo analisi...')
         showToast('Scansione accodata, attendo completamento...', 'info')
         const completedBatch = await waitForScanCompletion(response.data.batch_id)
         batchPayload = {
@@ -168,15 +217,22 @@ const Scanner = ({ onScan, isLoading }: ScannerProps): JSX.Element => {
       setUploadedFile(null)
     } catch (error: unknown) {
       const axiosError = error as {
+        code?: string
         response?: { data?: { detail?: string } }
         message?: string
       }
-      showToast(
-        axiosError.response?.data?.detail ?? axiosError.message ?? 'Errore durante lo scan',
-        'error',
-      )
+      if (axiosError.code === 'ERR_CANCELED') {
+        // Annullato dall'utente — nessun toast di errore
+      } else {
+        showToast(
+          axiosError.response?.data?.detail ?? axiosError.message ?? 'Errore durante lo scan',
+          'error',
+        )
+      }
     } finally {
+      abortControllerRef.current = null
       setScanLoading(false)
+      setScanStatus('')
     }
   }
 
@@ -207,6 +263,45 @@ const Scanner = ({ onScan, isLoading }: ScannerProps): JSX.Element => {
 
   return (
     <div className="w-full mx-auto p-6 space-y-6">
+      {/* Barra di stato globale durante la scansione */}
+      {scanLoading && (
+        <div className="flex items-center justify-between gap-3 px-4 py-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 rounded-lg">
+          <div className="flex items-center gap-3">
+            <svg
+              className="animate-spin h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+              />
+            </svg>
+            <span className="text-sm font-medium text-blue-800 dark:text-blue-200">
+              {scanStatus || 'Scansione in corso...'}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={cancelScan}
+            className="px-3 py-1 text-sm bg-white dark:bg-slate-700 border border-blue-300 dark:border-blue-600 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors"
+          >
+            Annulla
+          </button>
+        </div>
+      )}
+
       {/* Text Input */}
       <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-6">
         <h2 className="text-lg font-semibold mb-4">Testo Diretto</h2>
@@ -239,6 +334,7 @@ const Scanner = ({ onScan, isLoading }: ScannerProps): JSX.Element => {
           </div>
         </form>
       </div>
+
       {/* File Upload */}
       <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-6">
         <h2 className="text-lg font-semibold mb-4">Carica File</h2>
@@ -246,9 +342,13 @@ const Scanner = ({ onScan, isLoading }: ScannerProps): JSX.Element => {
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => !scanLoading && fileInputRef.current?.click()}
           onKeyDown={handleDropzoneKeyDown}
-          className="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg p-8 text-center cursor-pointer hover:border-blue-500 transition-colors"
+          className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+            scanLoading
+              ? 'border-slate-200 dark:border-slate-700 cursor-not-allowed opacity-50'
+              : 'border-slate-300 dark:border-slate-600 cursor-pointer hover:border-blue-500'
+          }`}
           role="button"
           tabIndex={0}
           aria-label="Area caricamento file"

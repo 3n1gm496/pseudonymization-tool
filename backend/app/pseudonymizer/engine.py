@@ -36,19 +36,32 @@ class PseudonymEngine:
         """Formatta il contatore con zero-padding a 3 cifre."""
         return f"{n:03d}"
 
-    def get_or_create_pseudonym(self, entity_type: EntityType, original_value: str) -> str:
+    def get_or_create_pseudonym(
+        self, entity_type: EntityType, original_value: str, canonical_value: str = ""
+    ) -> str:
         """
         Restituisce lo pseudonimo per un valore, creandolo se non esiste ancora.
-        Normalizza gli email a lowercase per garantire consistenza.
-        """
-        # Normalize email: lowercase only the domain part (local part is case-sensitive per RFC 5321)
-        if entity_type == EntityType.EMAIL:
-            local, _, domain = original_value.partition("@")
-            original_value = f"{local}@{domain.lower()}" if domain else original_value.lower()
 
-        key = (entity_type, original_value)
+        Se ``canonical_value`` è fornito (es. email normalizzata in lowercase dal
+        detector), viene usato come chiave di mapping in modo che varianti con case
+        diverso (es. ``User@DOMAIN.com`` e ``user@domain.com``) ricevano lo stesso
+        pseudonimo. ``original_value`` viene invece preservato intatto per la
+        sostituzione nel testo sorgente (case-sensitive).
+        """
+        # Usa canonical_value come chiave se disponibile, altrimenti normalizza
+        # internamente (retrocompatibilità con detector che non impostano canonical).
+        if canonical_value:
+            key_value = canonical_value
+        elif entity_type == EntityType.EMAIL:
+            # Fallback legacy: normalizza solo il dominio
+            local, _, domain = original_value.partition("@")
+            key_value = f"{local}@{domain.lower()}" if domain else original_value.lower()
+        else:
+            key_value = original_value
+
+        key = (entity_type, key_value)
         if key not in self._mapping:
-            pseudonym = self._generate_pseudonym(entity_type, original_value)
+            pseudonym = self._generate_pseudonym(entity_type, key_value)
             self._mapping[key] = pseudonym
         return self._mapping[key]
 
@@ -156,7 +169,9 @@ class PseudonymEngine:
         """
         findings = []
         for raw in raw_findings:
-            pseudonym = self.get_or_create_pseudonym(raw.entity_type, raw.original_value)
+            pseudonym = self.get_or_create_pseudonym(
+                raw.entity_type, raw.original_value, raw.canonical_value
+            )
 
             # Costruisci la location
             location = FindingLocation(
