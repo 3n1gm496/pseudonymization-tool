@@ -42,9 +42,8 @@ import time
 from collections import OrderedDict
 from typing import Dict, Optional
 
-from fastapi import HTTPException, Request
-
 from app.core.redis_utils import safe_redis_url
+from fastapi import HTTPException, Request
 
 logger = logging.getLogger(__name__)
 
