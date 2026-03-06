@@ -6,6 +6,7 @@ import {
   useCallback,
   useRef,
   useState,
+  type JSX,
 } from 'react'
 import axios from '../utils/axios'
 import { useToast } from '../hooks/useToast'

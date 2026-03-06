@@ -309,10 +309,12 @@ async def download_console_zip(batch_id: str, request: Request):
             detail="Testo pseudonimizzato non disponibile. Completa prima l'apply della pseudonimizzazione.",
         )
 
-    # Genera ZIP in memoria
+    # Genera ZIP in memoria con struttura compatibile con il revert batch:
+    # - files/<nome>.txt  → file pseudonimizzato (dentro 'files/' come il flusso file)
+    # - mapping.enc       → mapping cifrato nella root
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.write(str(txt_path), f"pseudonymized_{batch_id[:8]}.txt")
+        zf.write(str(txt_path), f"files/pseudonymized_{batch_id[:8]}.txt")
         zf.write(str(mapping_path), "mapping.enc")
     zip_buffer.seek(0)
 

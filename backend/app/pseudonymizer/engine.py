@@ -186,6 +186,7 @@ class PseudonymEngine:
                 file_id=file_id,
                 entity_type=raw.entity_type,
                 original_value=raw.original_value,
+                canonical_value=raw.canonical_value,  # Preserva il valore normalizzato per il mapping
                 proposed_pseudonym=pseudonym,
                 location=location,
                 confidence_score=raw.confidence_score,
