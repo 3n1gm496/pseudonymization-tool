@@ -674,6 +674,38 @@ async def download_batch(batch_id: str, background_tasks: BackgroundTasks, reque
     return FileResponse(path=str(zip_path), media_type="application/zip", filename=zip_path.name)
 
 
+@router.get("/batches/{batch_id}/mapping.enc")
+async def download_batch_mapping(batch_id: str, request: Request):
+    """
+    Scarica il file mapping.enc cifrato da un batch di file.
+    Permette di scaricare il mapping separatamente dallo ZIP completo.
+    """
+    batch = get_batch(batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail=f"Batch non trovato: {batch_id}")
+    if batch.status not in (BatchStatus.DONE, BatchStatus.DONE_WITH_ERRORS):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Batch non completato (stato: {batch.status.value}). Completa prima la pseudonimizzazione.",
+        )
+
+    batch_dir = get_batch_dir(batch_id)
+    mapping_path = batch_dir / "mapping.enc"
+
+    if not mapping_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="File di mapping non disponibile. Potrebbe essere stato già eliminato o non generato.",
+        )
+
+    audit_event(request, "batch_mapping_download", batch_id=batch_id)
+    return FileResponse(
+        path=str(mapping_path),
+        media_type="application/octet-stream",
+        filename=f"mapping_{batch_id[:8]}.enc",
+    )
+
+
 @router.delete("/batches/{batch_id}")
 async def delete_batch(batch_id: str):
     batch = get_batch(batch_id)

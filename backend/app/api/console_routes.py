@@ -230,6 +230,16 @@ async def console_apply(req: dict, request: Request):
     except Exception as e:
         logger.error("Errore salvataggio mapping per console batch %s: %s", batch_id, e)
 
+    # Step 6: Salva testo pseudonimizzato su disco (per download ZIP)
+    try:
+        from app.core.batch_persistence import atomic_write_text
+
+        batch_dir = get_batch_dir(batch_id)
+        txt_path = batch_dir / "pseudonymized_text.txt"
+        atomic_write_text(txt_path, pseudo_text)
+    except Exception as e:
+        logger.error("Errore salvataggio testo pseudonimizzato per console batch %s: %s", batch_id, e)
+
     return {
         "batch_id": batch_id,
         "file_id": file_id,
@@ -265,4 +275,54 @@ async def download_console_mapping(batch_id: str, request: Request):
         path=str(mapping_path),
         media_type="application/octet-stream",
         filename=f"mapping_{batch_id[:8]}.enc",
+    )
+
+
+@router.get("/console/{batch_id}/download")
+async def download_console_zip(batch_id: str, request: Request):
+    """
+    Genera e scarica uno ZIP contenente il testo pseudonimizzato e il mapping.enc
+    per il flusso console (testo inline).
+
+    Lo ZIP generato è compatibile con il revert batch ZIP:
+    contiene il file TXT pseudonimizzato e il mapping.enc cifrato.
+    """
+    import io
+    import zipfile
+
+    batch = get_batch(batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail=f"Batch non trovato: {batch_id}")
+
+    batch_dir = get_batch_dir(batch_id)
+    mapping_path = batch_dir / "mapping.enc"
+    txt_path = batch_dir / "pseudonymized_text.txt"
+
+    if not mapping_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="File di mapping non disponibile. Completa prima l'apply della pseudonimizzazione.",
+        )
+    if not txt_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Testo pseudonimizzato non disponibile. Completa prima l'apply della pseudonimizzazione.",
+        )
+
+    # Genera ZIP in memoria con struttura compatibile con il revert batch:
+    # - files/<nome>.txt  → file pseudonimizzato (dentro 'files/' come il flusso file)
+    # - mapping.enc       → mapping cifrato nella root
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.write(str(txt_path), f"files/pseudonymized_{batch_id[:8]}.txt")
+        zf.write(str(mapping_path), "mapping.enc")
+    zip_buffer.seek(0)
+
+    from fastapi.responses import StreamingResponse
+
+    audit_event(request, "console_zip_download", batch_id=batch_id)
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="pseudonymized_console_{batch_id[:8]}.zip"'},
     )

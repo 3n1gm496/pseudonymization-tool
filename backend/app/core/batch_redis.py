@@ -13,6 +13,7 @@ import os
 import time
 from typing import Any, Dict, Optional
 
+from app.core.redis_utils import safe_redis_url
 from app.models.schemas import Batch
 
 logger = logging.getLogger(__name__)
@@ -34,7 +35,7 @@ def _get_redis_client():
         return None
 
     _redis_last_check = now
-    redis_url = os.environ.get("REDIS_URL", "redis://redis:6379/0")
+    redis_url = safe_redis_url(os.environ.get("REDIS_URL", "redis://redis:6379/0"))
     try:
         from redis import Redis
 

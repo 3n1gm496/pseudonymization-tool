@@ -56,14 +56,18 @@ class RegexDetector(BaseDetector):
             if self._validator and not self._validator(value):
                 continue
 
-            # Applica il normalizer se presente (es. lowercase per email)
-            if self._normalizer:
-                value = self._normalizer(value)
+            # Applica il normalizer se presente (es. lowercase per email).
+            # original_value preserva il case originale del match per la sostituzione
+            # nel testo; canonical_value è il valore normalizzato usato come chiave
+            # di mapping deterministico (garantisce che EMAIL@DOMAIN e email@domain
+            # ricevano lo stesso pseudonimo).
+            canonical = self._normalizer(value) if self._normalizer else ""
 
             findings.append(
                 RawFinding(
                     entity_type=self._entity_type,
                     original_value=value,
+                    canonical_value=canonical,
                     source_chunk=chunk,
                     confidence_score=self._confidence,
                     detector_name=self._detector_name,

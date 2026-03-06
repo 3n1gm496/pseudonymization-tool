@@ -84,9 +84,10 @@ const RevertBatchZip = ({ isLoading, setIsLoading, showToast }: RevertBatchZipPr
       <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg p-4">
         <h3 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">ℹ️ Revert batch ZIP</h3>
         <p className="text-sm text-blue-800 dark:text-blue-200">
-          Seleziona lo ZIP prodotto dal tool (contiene i file pseudonimizzati e il{' '}
-          <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">mapping.enc</code>), carica
-          la passphrase e ottieni lo ZIP con i file reverted (dati originali).
+          Carica lo <strong>ZIP scaricato al termine della pseudonimizzazione</strong> — sia dal flusso
+          file che dal flusso testo. Lo ZIP contiene i file pseudonimizzati (o il TXT) e il{' '}
+          <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">mapping.enc</code>.
+          Inserisci la passphrase e scarica lo ZIP con i dati originali ripristinati.
         </p>
       </div>
       <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-6">
@@ -103,7 +104,8 @@ const RevertBatchZip = ({ isLoading, setIsLoading, showToast }: RevertBatchZipPr
               disabled={isLoading}
             />
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Es: pseudonymized_batch_abc123.zip
+              Es: <code>pseudonymized-batch-abc123.zip</code> (flusso file) o{' '}
+              <code>pseudonymized-console-abc123.zip</code> (flusso testo)
             </p>
           </div>
           <div>

@@ -28,7 +28,10 @@ def _chunk(text: str, is_formula: bool = False) -> TextChunk:
 def test_regex_email_normalization_lowercase():
     findings = EMAIL_DETECTOR.detect(_chunk("Contact: Mario.Rossi@Example.COM"))
     assert len(findings) == 1
-    assert findings[0].original_value == "mario.rossi@example.com"
+    # original_value preserva il case originale (usato per la sostituzione nel testo)
+    assert findings[0].original_value == "Mario.Rossi@Example.COM"
+    # canonical_value è normalizzato lowercase (usato come chiave di mapping deterministico)
+    assert findings[0].canonical_value == "mario.rossi@example.com"
     assert findings[0].entity_type == EntityType.EMAIL
 
 
