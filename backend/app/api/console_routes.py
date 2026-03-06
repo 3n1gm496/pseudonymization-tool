@@ -324,7 +324,5 @@ async def download_console_zip(batch_id: str, request: Request):
     return StreamingResponse(
         zip_buffer,
         media_type="application/zip",
-        headers={
-            "Content-Disposition": f'attachment; filename="pseudonymized_console_{batch_id[:8]}.zip"'
-        },
+        headers={"Content-Disposition": f'attachment; filename="pseudonymized_console_{batch_id[:8]}.zip"'},
     )

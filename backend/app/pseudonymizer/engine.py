@@ -36,9 +36,7 @@ class PseudonymEngine:
         """Formatta il contatore con zero-padding a 3 cifre."""
         return f"{n:03d}"
 
-    def get_or_create_pseudonym(
-        self, entity_type: EntityType, original_value: str, canonical_value: str = ""
-    ) -> str:
+    def get_or_create_pseudonym(self, entity_type: EntityType, original_value: str, canonical_value: str = "") -> str:
         """
         Restituisce lo pseudonimo per un valore, creandolo se non esiste ancora.
 
@@ -169,9 +167,7 @@ class PseudonymEngine:
         """
         findings = []
         for raw in raw_findings:
-            pseudonym = self.get_or_create_pseudonym(
-                raw.entity_type, raw.original_value, raw.canonical_value
-            )
+            pseudonym = self.get_or_create_pseudonym(raw.entity_type, raw.original_value, raw.canonical_value)
 
             # Costruisci la location
             location = FindingLocation(

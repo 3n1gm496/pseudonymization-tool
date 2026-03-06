@@ -30,8 +30,8 @@ logger = logging.getLogger(__name__)
 _REDIS_URL_RE = re.compile(
     r"^(?P<scheme>redis(?:s)?|rediss?)://"
     r"(?:(?P<userinfo>[^@]*)@)?"  # userinfo opzionale (tutto prima dell'ultimo @)
-    r"(?P<hostport>[^/]*)"        # host:port
-    r"(?P<path>/.*)?$",           # /db opzionale
+    r"(?P<hostport>[^/]*)"  # host:port
+    r"(?P<path>/.*)?$",  # /db opzionale
     re.IGNORECASE,
 )
 
@@ -54,7 +54,7 @@ def _parse_redis_url_robust(redis_url: str) -> dict:
         return {}
 
     scheme = redis_url[:scheme_end].lower()
-    rest = redis_url[scheme_end + 3:]  # Tutto dopo "://"
+    rest = redis_url[scheme_end + 3 :]  # Tutto dopo "://"
 
     last_at = rest.rfind("@")
     if last_at == -1:
@@ -64,7 +64,7 @@ def _parse_redis_url_robust(redis_url: str) -> dict:
         password = None
     else:
         userinfo = rest[:last_at]
-        hostport_db = rest[last_at + 1:]
+        hostport_db = rest[last_at + 1 :]
         # Separa username:password (la prima ':' è il separatore)
         colon_pos = userinfo.find(":")
         if colon_pos == -1:
@@ -72,7 +72,7 @@ def _parse_redis_url_robust(redis_url: str) -> dict:
             password = None
         else:
             username = userinfo[:colon_pos] or None
-            password = userinfo[colon_pos + 1:] or None
+            password = userinfo[colon_pos + 1 :] or None
 
     # Separa host:port da /db
     slash_pos = hostport_db.find("/")
@@ -87,7 +87,7 @@ def _parse_redis_url_robust(redis_url: str) -> dict:
     colon_pos = hostport.rfind(":")
     if colon_pos != -1:
         host = hostport[:colon_pos]
-        port_str = hostport[colon_pos + 1:]
+        port_str = hostport[colon_pos + 1 :]
         try:
             port = int(port_str)
         except ValueError:

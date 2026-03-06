@@ -188,11 +188,13 @@ def create_batch(batch: Batch) -> Batch:
 # Stati transitori in cui il batch può essere aggiornato da un processo esterno
 # (Celery worker). In questi stati la cache in-memory non è affidabile e
 # occorre rileggere sempre da Redis/disco per ottenere lo stato aggiornato.
-_TRANSIENT_STATUSES = frozenset({
-    BatchStatus.PENDING,
-    BatchStatus.SCANNING,
-    BatchStatus.APPLYING,
-})
+_TRANSIENT_STATUSES = frozenset(
+    {
+        BatchStatus.PENDING,
+        BatchStatus.SCANNING,
+        BatchStatus.APPLYING,
+    }
+)
 
 
 def get_batch(batch_id: str) -> Optional[Batch]:
