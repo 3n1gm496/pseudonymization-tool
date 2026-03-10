@@ -6,16 +6,16 @@ import type { Batch, ToastType } from '../types'
 type RevertMode = 'zip' | 'text' | null
 
 interface RevertPanelProps {
-  batch: Batch | null
-  pseudonymizedText: string | null
+  batch?: Batch | null
+  pseudonymizedText?: string | null
   isLoading: boolean
   setIsLoading: (loading: boolean) => void
   showToast: (message: string, type?: ToastType) => void
 }
 
 const RevertPanel = ({
-  batch,
-  pseudonymizedText,
+  batch: _batch,
+  pseudonymizedText: _pseudonymizedText,
   isLoading,
   setIsLoading,
   showToast,
