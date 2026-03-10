@@ -141,8 +141,10 @@ def run_scan_pipeline(batch_id: str) -> Batch:
                     files_total=files_total,
                     current_file=file_rec.original_name,
                 )
-            except Exception:
-                pass  # Il progresso è best-effort: non blocca la pipeline
+            except (
+                Exception
+            ):  # noqa: BLE001 — best-effort: Redis unavailable or any transient error must not block the scan pipeline
+                pass
 
     # Mantieni i finding di testo inline già presenti
     existing_text_findings = [f for f in batch.findings if f.is_text_input]
