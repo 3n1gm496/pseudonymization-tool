@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from app.core.batch_manager import get_batch, get_batch_dir, get_or_create_engine, get_passphrase, update_batch
+from app.core.batch_redis import publish_progress
 from app.core.exceptions import BatchStateError, ParsingError, TransformError
 from app.core.metrics import TRANSFORMATION_DURATION
 from app.core.policies import get_confidence_threshold, get_enabled_entity_types, get_policy_hash
@@ -81,6 +82,11 @@ def run_scan_pipeline(batch_id: str) -> Batch:
     all_findings: List[Finding] = []
     _clear_parse_results(batch_id)
 
+    # File non-testo da processare (esclude file di testo inline)
+    files_to_scan = [f for f in batch.files if not f.is_text_input]
+    files_total = len(files_to_scan)
+    files_done = 0
+
     for file_rec in batch.files:
         if file_rec.is_text_input:
             continue  # I file di testo inline sono gestiti da run_text_scan
@@ -124,6 +130,19 @@ def run_scan_pipeline(batch_id: str) -> Batch:
             file_rec.status = FileStatus.FAILED
             file_rec.error_message = f"Errore durante il processing: {e}"
             logger.error("Unexpected error processing '%s': %s", file_rec.original_name, e)
+
+        finally:
+            # Pubblica progresso granulare su Redis (non-blocking, fallisce silenziosamente)
+            files_done += 1
+            try:
+                publish_progress(
+                    batch_id,
+                    files_done=files_done,
+                    files_total=files_total,
+                    current_file=file_rec.original_name,
+                )
+            except Exception:
+                pass  # Il progresso è best-effort: non blocca la pipeline
 
     # Mantieni i finding di testo inline già presenti
     existing_text_findings = [f for f in batch.findings if f.is_text_input]

@@ -226,7 +226,7 @@ La configurazione avviene tramite **variabili d'ambiente**, definite nel file `.
 | `AUTH_PASSWORD` | Password legacy per il fallback admin. | **Obbligatoria** |
 | `AUTH_SECRET` | Chiave segreta per la firma dei token di sessione (HMAC). | **Obbligatoria** |
 | `REDIS_PASSWORD` | Password per l'accesso a Redis. | **Obbligatoria** |
-| `WEB_CONCURRENCY` | Numero di worker Uvicorn. Aumentare solo con Redis abilitato. | `1` |
+| `WEB_CONCURRENCY` | Numero di worker Uvicorn. **Aumentare solo se Redis è attivo**: senza Redis il rate limiter è in-memory e non condiviso tra i worker, moltiplicando il rate limit per il numero di worker. Con Redis attivo è sicuro impostare fino a `4`. | `1` |
 | `PROD_FRONTEND_URL` | URL pubblico del frontend (per CORS in produzione). | `""` |
 
 La configurazione LDAP (sia per l'arricchimento dati che per l'autenticazione) avviene tramite l'interfaccia web in **Impostazioni → LDAP** ed è salvata nel database persistente. Vedi [docs/RUNBOOK.md](docs/RUNBOOK.md) per la guida alla configurazione LDAP.

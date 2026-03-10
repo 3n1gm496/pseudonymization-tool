@@ -24,6 +24,7 @@ const Scanner = ({ onScan, isLoading }: ScannerProps): JSX.Element => {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const [scanLoading, setScanLoading] = useState(false)
   const [scanStatus, setScanStatus] = useState<string>('')
+  const [scanProgress, setScanProgress] = useState<{ done: number; total: number; currentFile: string } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const eventSourceRef = useRef<EventSource | null>(null)
@@ -42,6 +43,7 @@ const Scanner = ({ onScan, isLoading }: ScannerProps): JSX.Element => {
     }
     setScanLoading(false)
     setScanStatus('')
+    setScanProgress(null)
     showToast('Scansione annullata', 'info')
   }, [showToast])
 
@@ -72,6 +74,9 @@ const Scanner = ({ onScan, isLoading }: ScannerProps): JSX.Element => {
                 status?: string
                 error_message?: string
                 message?: string
+                files_done?: number
+                files_total?: number
+                current_file?: string
               }
               if (data.type === 'status') {
                 const status = (data.status ?? '').toLowerCase()
@@ -80,6 +85,7 @@ const Scanner = ({ onScan, isLoading }: ScannerProps): JSX.Element => {
                   setScanStatus('Analisi in corso...')
                 } else if (status === 'review' || status === 'done') {
                   setScanStatus('Completato, carico i risultati...')
+                  setScanProgress(null)
                 }
                 if (SCAN_TERMINAL.has(status)) {
                   clearTimeout(timeoutId)
@@ -93,6 +99,22 @@ const Scanner = ({ onScan, isLoading }: ScannerProps): JSX.Element => {
                       .then((r) => resolve(r.data))
                       .catch(reject)
                   }
+                }
+              } else if (data.type === 'progress') {
+                // Aggiorna la barra di progresso per-file
+                if (
+                  data.files_done !== undefined &&
+                  data.files_total !== undefined &&
+                  data.files_total > 0
+                ) {
+                  setScanProgress({
+                    done: data.files_done,
+                    total: data.files_total,
+                    currentFile: data.current_file ?? '',
+                  })
+                  setScanStatus(
+                    `Scansione file ${data.files_done}/${data.files_total}...`,
+                  )
                 }
               } else if (data.type === 'timeout' || data.type === 'error') {
                 clearTimeout(timeoutId)
@@ -266,40 +288,63 @@ const Scanner = ({ onScan, isLoading }: ScannerProps): JSX.Element => {
     <div className="w-full mx-auto p-6 space-y-6">
       {/* Barra di stato globale durante la scansione */}
       {scanLoading && (
-        <div className="flex items-center justify-between gap-3 px-4 py-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 rounded-lg">
-          <div className="flex items-center gap-3">
-            <svg
-              className="animate-spin h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0"
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
+        <div className="space-y-2 px-4 py-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 rounded-lg">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <svg
+                className="animate-spin h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+              </svg>
+              <span className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                {scanStatus || 'Scansione in corso...'}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={cancelScan}
+              className="px-3 py-1 text-sm bg-white dark:bg-slate-700 border border-blue-300 dark:border-blue-600 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors"
             >
-              <circle
-                className="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="4"
-              />
-              <path
-                className="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-              />
-            </svg>
-            <span className="text-sm font-medium text-blue-800 dark:text-blue-200">
-              {scanStatus || 'Scansione in corso...'}
-            </span>
+              Annulla
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={cancelScan}
-            className="px-3 py-1 text-sm bg-white dark:bg-slate-700 border border-blue-300 dark:border-blue-600 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors"
-          >
-            Annulla
-          </button>
+          {/* Barra di progresso per-file (visibile solo con batch multi-file) */}
+          {scanProgress && scanProgress.total > 1 && (
+            <div className="space-y-1">
+              <div className="w-full bg-blue-200 dark:bg-blue-800 rounded-full h-2">
+                <div
+                  className="bg-blue-600 dark:bg-blue-400 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${Math.round((scanProgress.done / scanProgress.total) * 100)}%` }}
+                  role="progressbar"
+                  aria-valuenow={scanProgress.done}
+                  aria-valuemin={0}
+                  aria-valuemax={scanProgress.total}
+                  aria-label={`Progresso scansione: ${scanProgress.done} di ${scanProgress.total} file`}
+                />
+              </div>
+              {scanProgress.currentFile && (
+                <p className="text-xs text-blue-600 dark:text-blue-300 truncate" title={scanProgress.currentFile}>
+                  {scanProgress.currentFile}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
 
