@@ -740,14 +740,40 @@ async def _sse_batch_event_generator(
     Invia un evento ogni poll_interval secondi finché il batch non raggiunge
     uno stato terminale (done, done_with_errors, error) o scade il timeout.
     Il formato SSE è: 'data: <json>\\n\\n'
+
+    Tipi di eventi emessi:
+    - {type: 'connected', batch_id} — connessione stabilita
+    - {type: 'status', batch_id, status, task_state, error_message} — cambio stato
+    - {type: 'progress', batch_id, files_done, files_total, current_file} — progresso per-file
+    - {type: 'timeout', batch_id} — timeout (30 min)
+    - {type: 'error', batch_id, message} — batch non trovato
     """
+    from app.core.batch_redis import get_progress_snapshot
+
     TERMINAL_STATUSES = {"done", "done_with_errors", "error"}
     started_at = asyncio.get_event_loop().time()
     last_status: str | None = None
+    last_progress: dict | None = None
     task_info: dict = {}
 
     # Heartbeat iniziale
     yield "data: " + json.dumps({"type": "connected", "batch_id": batch_id}) + "\n\n"
+
+    # Invia snapshot di progresso se già disponibile (client che si connette in ritardo)
+    snapshot = get_progress_snapshot(batch_id)
+    if snapshot:
+        yield (
+            "data: "
+            + json.dumps(
+                {
+                    "type": "progress",
+                    "batch_id": batch_id,
+                    **snapshot,
+                }
+            )
+            + "\n\n"
+        )
+        last_progress = snapshot
 
     while True:
         elapsed = asyncio.get_event_loop().time() - started_at
@@ -789,6 +815,23 @@ async def _sse_batch_event_generator(
             }
             yield "data: " + json.dumps(event_data) + "\n\n"
             last_status = current_status
+
+        # Controlla aggiornamenti di progresso granulare (solo durante scanning)
+        if current_status in {"running", "scanning"}:
+            progress = get_progress_snapshot(batch_id)
+            if progress and progress != last_progress:
+                yield (
+                    "data: "
+                    + json.dumps(
+                        {
+                            "type": "progress",
+                            "batch_id": batch_id,
+                            **progress,
+                        }
+                    )
+                    + "\n\n"
+                )
+                last_progress = progress
 
         # Stato terminale: chiudi lo stream
         if current_status in TERMINAL_STATUSES:

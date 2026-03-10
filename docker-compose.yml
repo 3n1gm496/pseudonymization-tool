@@ -86,7 +86,12 @@ services:
       # OBBLIGATORIO in PROD: es. https://pseudonymizer.example.com
       PROD_FRONTEND_URL: "${PROD_FRONTEND_URL:-}"
       # Numero di worker uvicorn. Default 1 (sicuro con rate limiter in-memory).
-      # Aumentare a 4 solo dopo aver abilitato il rate limiter Redis-backed (PR #36).
+      # ATTENZIONE: WEB_CONCURRENCY > 1 è sicuro SOLO se Redis è attivo e raggiungibile.
+      # Con Redis attivo: il rate limiter usa Redis (condiviso tra tutti i worker).
+      # Senza Redis (fallback in-memory): ogni worker ha il suo contatore separato,
+      # moltiplicando di fatto il rate limit per il numero di worker e rendendolo inefficace.
+      # Esempio sicuro: WEB_CONCURRENCY=4 con Redis attivo.
+      # Esempio INSICURO: WEB_CONCURRENCY=4 senza Redis (rate limit 4x più permissivo).
       WEB_CONCURRENCY: "${WEB_CONCURRENCY:-1}"
       # Redis con autenticazione
       REDIS_URL: "redis://:${REDIS_PASSWORD}@redis:6379/0"

@@ -155,6 +155,57 @@ def load_start_time_from_redis(batch_id: str) -> Optional[str]:
     return redis_client.get(_redis_key(batch_id, "started_at"))
 
 
+# ─── Progress (granular per-file feedback) ───────────────────────────────────
+
+
+def publish_progress(batch_id: str, files_done: int, files_total: int, current_file: str) -> None:
+    """
+    Pubblica un messaggio di progresso granulare su Redis.
+
+    Usato dal Celery worker (pipeline.py) per notificare il FastAPI SSE
+    del progresso file-per-file durante la scansione.
+
+    Salva anche uno snapshot dell'ultimo progresso come chiave Redis
+    (TTL 10 minuti) per i client che si connettono dopo l'inizio della scansione.
+    """
+    redis_client = _get_redis_client()
+    if not redis_client:
+        return
+    try:
+        payload = json.dumps(
+            {
+                "files_done": files_done,
+                "files_total": files_total,
+                "current_file": current_file,
+            },
+            ensure_ascii=False,
+        )
+        # Pub/Sub per notifica real-time
+        redis_client.publish(_redis_key(batch_id, "progress"), payload)
+        # Snapshot per client che si connettono in ritardo
+        redis_client.set(_redis_key(batch_id, "progress_snapshot"), payload, ex=600)
+    except Exception as e:
+        logger.debug("publish_progress: impossibile pubblicare progresso per batch %s: %s", batch_id, e)
+
+
+def get_progress_snapshot(batch_id: str) -> Optional[dict]:
+    """
+    Restituisce l'ultimo snapshot di progresso salvato su Redis.
+    Usato dal generatore SSE per inviare lo stato corrente ai client che si connettono
+    dopo l'inizio della scansione.
+    """
+    redis_client = _get_redis_client()
+    if not redis_client:
+        return None
+    try:
+        raw = redis_client.get(_redis_key(batch_id, "progress_snapshot"))
+        if raw:
+            return json.loads(raw)
+    except Exception as e:
+        logger.debug("get_progress_snapshot: errore per batch %s: %s", batch_id, e)
+    return None
+
+
 # ─── Delete ───────────────────────────────────────────────────────────────────
 
 
@@ -167,6 +218,7 @@ def delete_batch_from_redis(batch_id: str) -> None:
         _redis_key(batch_id, "decisions"),
         _redis_key(batch_id, "passphrase"),
         _redis_key(batch_id, "started_at"),
+        _redis_key(batch_id, "progress_snapshot"),
     )
     redis_client.srem(_redis_batch_ids_key(), batch_id)
 
