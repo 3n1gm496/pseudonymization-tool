@@ -95,6 +95,7 @@ services:
       WEB_CONCURRENCY: "${WEB_CONCURRENCY:-1}"
       # Redis con autenticazione
       REDIS_URL: "redis://:${REDIS_PASSWORD}@redis:6379/0"
+      REDIS_PASSWORD: "${REDIS_PASSWORD}" 
       CELERY_BROKER_URL: "redis://:${REDIS_PASSWORD}@redis:6379/1"
       CELERY_RESULT_BACKEND: "redis://:${REDIS_PASSWORD}@redis:6379/2"
       CELERY_WORKER_CONCURRENCY: "1"
@@ -139,6 +140,7 @@ services:
       CELERY_WORKER_CONCURRENCY: "1"
       MAX_UPLOAD_FILES_PER_BATCH: "20"
       MAX_CONSOLE_TEXT_CHARS: "200000"
+      REDIS_PASSWORD: "${REDIS_PASSWORD}"
 
     volumes:
       - ./backend/config:/app/backend/config:ro
